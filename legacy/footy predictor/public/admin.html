@@ -1,0 +1,482 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Admin Dashboard • Footy Picker</title>
+  <meta name="api-sports-key" content="053bc3ed82f451e04159426e80a34c64" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="stylesheet" href="/style.css" />
+  <link rel="stylesheet" href="/admin.css" />
+</head>
+<body>
+  <!-- AUTH MODAL -->
+  <dialog id="modal-auth" class="modal">
+    <form class="modal-box" id="auth-form">
+      <h2 class="modal-title" id="auth-title">Log in</h2>
+      <label class="field">
+        <span>Email</span>
+        <input id="auth-email" type="email" placeholder="you@email.com" required />
+      </label>
+      <label class="field">
+        <span>Password</span>
+        <input id="auth-pass" type="password" placeholder="••••••••" required />
+      </label>
+      <div class="modal-actions">
+        <button type="submit" class="btn primary" id="auth-submit">Continue</button>
+        <button type="button" class="btn ghost" id="auth-cancel">Cancel</button>
+      </div>
+      <p class="helper" id="auth-helper"></p>
+    </form>
+  </dialog>
+
+  <!-- Week Form Modal -->
+  <dialog id="modal-week-form" class="modal">
+    <form class="modal-box" id="week-form">
+      <h2 class="modal-title" id="week-form-title">Add New Week</h2>
+      <label class="field">
+        <span>Week Name</span>
+        <input type="text" id="week-name" required placeholder="e.g., Premier League Week 1">
+      </label>
+      <div class="form-row">
+        <label class="field">
+          <span>From Date</span>
+          <input type="date" id="week-from-date" required>
+        </label>
+        <label class="field">
+          <span>To Date</span>
+          <input type="date" id="week-to-date" required>
+        </label>
+      </div>
+      <label class="field">
+        <span>Status</span>
+        <select id="week-status" required>
+          <option value="draft">Draft</option>
+          <option value="active">Active</option>
+          <option value="completed">Completed</option>
+          <option value="archived">Archived</option>
+        </select>
+      </label>
+      <label class="field">
+        <span>Description (Optional)</span>
+        <textarea id="week-description" rows="2" placeholder="Brief description of this week"></textarea>
+      </label>
+      <div class="modal-actions">
+        <button type="submit" class="btn primary" id="week-form-submit">Save Week</button>
+        <button type="button" class="btn ghost" id="week-form-cancel">Cancel</button>
+      </div>
+      <p class="helper" id="week-form-helper"></p>
+    </form>
+  </dialog>
+
+  <!-- Delete Confirmation Modal -->
+  <dialog id="modal-delete-confirm" class="modal">
+    <div class="modal-box">
+      <h2 class="modal-title">Delete Week</h2>
+      <p>Are you sure you want to delete "<span id="delete-week-name"></span>"?</p>
+      <p class="helper">This action cannot be undone.</p>
+      <div class="modal-actions">
+        <button type="button" class="btn danger" id="confirm-delete">Delete</button>
+        <button type="button" class="btn ghost" id="cancel-delete">Cancel</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Week Selection Modal -->
+  <dialog id="modal-week-select" class="modal">
+    <div class="modal-box">
+      <h2 class="modal-title">Select Current Week</h2>
+      <div class="week-selection-list" id="week-selection-list">
+        <!-- Populated by JavaScript -->
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn ghost" id="cancel-week-select">Cancel</button>
+      </div>
+    </div>
+  </dialog>
+
+  <div class="admin-layout">
+    <!-- Sidebar -->
+    <aside class="admin-sidebar" id="admin-sidebar" aria-label="Admin navigation" aria-hidden="true">
+      <div class="sidebar-header">
+        <div class="brand">
+          <span class="logo">⚽</span>
+          <h1>Admin</h1>
+        </div>
+        <button id="sidebar-close" class="sidebar-close" aria-label="Close navigation menu">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+        <div class="user-panel" id="user-panel">
+          <!-- Populated by auth.js -->
+        </div>
+      </div>
+      
+      <nav class="sidebar-nav">
+        <a href="#weeks" class="nav-item active" data-section="weeks">
+          <span class="nav-icon">📅</span>
+          <span class="nav-label">Week Management</span>
+        </a>
+        <a href="#fixtures" class="nav-item" data-section="fixtures">
+          <span class="nav-icon">⚽</span>
+          <span class="nav-label">Manage Fixtures</span>
+        </a>
+        <a href="#leagues" class="nav-item" data-section="leagues">
+          <span class="nav-icon">🏆</span>
+          <span class="nav-label">Manage Leagues</span>
+        </a>
+        <a href="#tournaments" class="nav-item" data-section="tournaments">
+          <span class="nav-icon">🎯</span>
+          <span class="nav-label">Manage Tournaments</span>
+        </a>
+        <a href="/admin-scoring.html" class="nav-item">
+          <span class="nav-icon">🎯</span>
+          <span class="nav-label">Auto Scoring</span>
+        </a>
+        <a href="/leaderboard.html" class="nav-item">
+          <span class="nav-icon">🏆</span>
+          <span class="nav-label">Leaderboard</span>
+        </a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <a href="/" class="btn ghost small">← Back to App</a>
+      </div>
+    </aside>
+
+    <!-- Mobile Backdrop -->
+    <div id="mobile-backdrop" class="mobile-backdrop"></div>
+
+    <!-- Main Content -->
+    <main class="admin-main">
+      <!-- Mobile Menu Toggle -->
+      <button id="mobile-menu-toggle" class="mobile-menu-toggle" aria-label="Toggle navigation menu" aria-expanded="false" aria-controls="admin-sidebar">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="3" y1="6" x2="21" y2="6"></line>
+          <line x1="3" y1="12" x2="21" y2="12"></line>
+          <line x1="3" y1="18" x2="21" y2="18"></line>
+        </svg>
+      </button>
+
+      <!-- Week Management Section -->
+      <section id="weeks" class="admin-section active">
+        <div class="section-header">
+          <h2>Week Management</h2>
+          <p class="section-subtitle">Create, edit, and manage prediction weeks</p>
+          <button id="btn-add-week" class="btn primary">+ Add New Week</button>
+        </div>
+
+        <!-- Current Week Status -->
+        <div class="admin-card">
+          <div class="card-header">
+            <h3>Current Active Week</h3>
+          </div>
+          <div class="card-content">
+            <div class="current-week-display">
+              <span id="current-week-display">No active week set</span>
+              <button id="btn-set-current" class="btn secondary small">Set Current Week</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Weeks List -->
+        <div class="admin-card">
+          <div class="card-header">
+            <h3>All Weeks</h3>
+            <div class="header-actions">
+              <button id="btn-refresh-weeks" class="btn ghost small">Refresh</button>
+            </div>
+          </div>
+          <div class="card-content">
+            <!-- Filter Tabs -->
+            <div class="week-filters">
+              <div class="filter-tabs">
+                <button class="filter-tab active" data-filter="all">All</button>
+                <button class="filter-tab" data-filter="active">Active</button>
+                <button class="filter-tab" data-filter="draft">Draft</button>
+                <button class="filter-tab" data-filter="completed">Completed</button>
+              </div>
+            </div>
+
+            <!-- Loading and Empty States -->
+            <div id="weeks-loading" class="loading-state">
+              <p>Loading weeks...</p>
+            </div>
+            <div id="weeks-empty" class="loading-state hidden">
+              <p>No weeks found. Create your first week above.</p>
+            </div>
+
+            <!-- Weeks List Container -->
+            <div id="weeks-list" class="weeks-list hidden"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Fixtures Section -->
+      <section id="fixtures" class="admin-section">
+        <div class="section-header">
+          <h2>Manage Fixtures</h2>
+          <p class="section-subtitle">Select fixtures for the current week</p>
+        </div>
+
+        <!-- Current Week Indicator -->
+        <div class="admin-card" id="current-week-indicator">
+          <div class="card-content">
+            <div class="current-week-info">
+              <span id="fixtures-week-display">No current week set</span>
+              <button id="btn-change-week" class="btn secondary small">Change Week</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="admin-card">
+          <div class="card-header">
+            <h3>Search Fixtures</h3>
+          </div>
+          <div class="card-content">
+            <div class="form-note">
+              <p><strong>💡 New Feature:</strong> Just select dates and we'll automatically search all major leagues (Premier League, La Liga, Bundesliga, Serie A, Ligue 1, and more) for fixtures in that period.</p>
+            </div>
+            <form id="admin-form" class="fixture-form">
+              <div class="form-row">
+                <label class="field">
+                  <span>From Date</span>
+                  <input id="from-date" type="date" required />
+                </label>
+                <label class="field">
+                  <span>To Date</span>
+                  <input id="to-date" type="date" required />
+                </label>
+              </div>
+              <div class="form-row">
+                <label class="field">
+                  <span>Country</span>
+                  <select id="country-select">
+                    <option value="">All Countries (Optional)</option>
+                    <option value="all">All Countries</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>League</span>
+                  <select id="league-select">
+                    <option value="">All Leagues (Optional)</option>
+                    <option value="all">All Leagues</option>
+                  </select>
+                </label>
+              </div>
+              <div class="form-row">
+                <button type="submit" class="btn primary">Search All Major Leagues</button>
+                <button type="button" id="btn-refresh-leagues" class="btn secondary">Refresh Leagues</button>
+                <button type="button" id="btn-test-country-change" class="btn ghost small">Test Country Change</button>
+                <button type="button" id="btn-test-2024-fixtures" class="btn ghost small">Test 2025 Fixtures</button>
+                <button type="button" id="btn-find-available-seasons" class="btn ghost small">Find Available Seasons</button>
+              </div>
+            </form>
+            <div class="fixture-actions-row">
+              <button id="btn-load-existing" class="btn secondary">Load Existing Fixtures</button>
+              <button id="btn-clear-selection" class="btn ghost">Clear Selection</button>
+              <button id="btn-sync-weekly-selections" class="btn secondary">Sync Dashboard Data</button>
+            </div>
+            <p class="helper" style="margin-top: 10px;">
+              <strong>💡 Dashboard Sync:</strong> The "Sync Dashboard Data" button creates the necessary data structure for the main dashboard to display fixtures. 
+              Use this if the dashboard shows "No fixtures found" even when fixtures exist in the current week.
+            </p>
+            <p id="admin-status" class="status-text"></p>
+          </div>
+        </div>
+
+        <div class="fixtures-container">
+          <div class="fixtures-section">
+            <div class="fixtures-header">
+              <h3>Available Fixtures</h3>
+              <div class="fixtures-controls">
+                <button type="button" id="btn-collapse-all" class="btn ghost small">Collapse All</button>
+                <button type="button" id="btn-expand-all" class="btn ghost small">Expand All</button>
+              </div>
+            </div>
+            <ul id="fixtures-list" class="fixtures-list"></ul>
+          </div>
+          
+          <div class="fixtures-section">
+            <h3>Selected Fixtures <span class="selection-count" id="selected-count-display">(0)</span></h3>
+            <ul id="selected-list" class="fixtures-list selected"></ul>
+          </div>
+        </div>
+
+        <div class="section-actions">
+          <button id="btn-save" class="btn primary">Save Selection</button>
+        </div>
+      </section>
+
+      <!-- Leagues Section -->
+      <section id="leagues" class="admin-section">
+        <div class="section-header">
+          <h2>Manage Leagues</h2>
+          <p class="section-subtitle">Create and manage football leagues</p>
+        </div>
+
+        <div class="admin-card">
+          <div class="card-header">
+            <h3>Create New League</h3>
+          </div>
+          <div class="card-content">
+            <form id="league-form" class="league-form">
+              <div class="form-row">
+                <label class="field">
+                  <span>League Name</span>
+                  <input id="admin-league-name" type="text" required placeholder="e.g., Premier League" />
+                </label>
+                <label class="field">
+                  <span>Country</span>
+                  <input id="admin-league-country" type="text" required placeholder="e.g., England" />
+                </label>
+              </div>
+              <div class="form-row">
+                <label class="field">
+                  <span>League Type</span>
+                  <select id="admin-league-type" required>
+                    <option value="domestic">Domestic</option>
+                    <option value="continental">Continental</option>
+                    <option value="international">International</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>Season</span>
+                  <input id="admin-league-season" type="text" value="2024/25" required />
+                </label>
+              </div>
+              <div class="form-row">
+                <label class="field">
+                  <span>API-Football League ID (Optional)</span>
+                  <input id="admin-league-api-id" type="number" placeholder="e.g., 39 for Premier League" />
+                </label>
+                <label class="field">
+                  <span>Max Participants</span>
+                  <input id="admin-league-max-participants" type="number" min="0" value="0" placeholder="0 = unlimited" />
+                </label>
+              </div>
+              <div class="form-row">
+                <label class="field checkbox">
+                  <input id="admin-league-is-public" type="checkbox" checked />
+                  <span>Make League Public</span>
+                </label>
+              </div>
+              <div class="form-row">
+                <button type="submit" class="btn primary">Create League</button>
+                <button type="button" id="btn-refresh-leagues-list" class="btn secondary">Refresh List</button>
+              </div>
+            </form>
+            <p id="league-status" class="status-text"></p>
+          </div>
+        </div>
+
+        <div class="admin-card">
+          <div class="card-header">
+            <h3>Existing Leagues</h3>
+          </div>
+          <div class="card-content">
+            <div id="leagues-list" class="leagues-list">
+              <div class="loading">Loading leagues...</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Tournaments Section -->
+      <section id="tournaments" class="admin-section">
+        <div class="section-header">
+          <h2>Manage Tournaments</h2>
+          <p class="section-subtitle">Create and manage tournaments</p>
+        </div>
+
+        <div class="admin-card">
+          <div class="card-header">
+            <h3>Create New Tournament</h3>
+          </div>
+          <div class="card-content">
+            <form id="tournament-form" class="tournament-form">
+              <div class="form-row">
+                <label class="field">
+                  <span>Tournament Name</span>
+                  <input id="admin-tournament-name" type="text" required placeholder="e.g., Weekend Warriors" />
+                </label>
+                <label class="field">
+                  <span>League</span>
+                  <select id="admin-tournament-league" required>
+                    <option value="">Select a league</option>
+                    <!-- League options will be populated -->
+                  </select>
+                </label>
+              </div>
+              <div class="form-row">
+                <label class="field">
+                  <span>Start Date</span>
+                  <input id="admin-tournament-start-date" type="date" required />
+                </label>
+                <label class="field">
+                  <span>End Date</span>
+                  <input id="admin-tournament-end-date" type="date" required />
+                </label>
+              </div>
+              <div class="form-row">
+                <label class="field">
+                  <span>Tournament Type</span>
+                  <select id="admin-tournament-type" required>
+                    <option value="weekly">Weekly</option>
+                    <option value="monthly">Monthly</option>
+                    <option value="season-long">Season Long</option>
+                    <option value="custom">Custom</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>Max Participants</span>
+                  <input id="admin-tournament-max-participants" type="number" min="0" value="0" placeholder="0 = unlimited" />
+                </label>
+              </div>
+              <div class="form-row">
+                <label class="field">
+                  <span>Entry Fee</span>
+                  <input id="admin-tournament-entry-fee" type="number" min="0" value="0" step="0.01" placeholder="0 = free" />
+                </label>
+                <label class="field">
+                  <span>Prize Pool</span>
+                  <input id="admin-tournament-prize-pool" type="number" min="0" value="0" step="0.01" placeholder="0 = no prizes" />
+                </label>
+              </div>
+              <div class="form-row">
+                <label class="field checkbox">
+                  <input id="admin-tournament-is-public" type="checkbox" checked />
+                  <span>Make Tournament Public</span>
+                </label>
+              </div>
+              <div class="form-row">
+                <button type="submit" class="btn primary">Create Tournament</button>
+                <button type="button" id="btn-refresh-tournaments-list" class="btn secondary">Refresh List</button>
+              </div>
+            </form>
+            <p id="tournament-status" class="status-text"></p>
+          </div>
+        </div>
+
+        <div class="admin-card">
+          <div class="card-header">
+            <h3>Existing Tournaments</h3>
+          </div>
+          <div class="card-content">
+            <div id="tournaments-list" class="tournaments-list">
+              <div class="loading">Loading tournaments...</div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script type="module" src="/js/nav.js"></script>
+  <script type="module" src="/js/admin.js"></script>
+</body>
+</html>
+
+

@@ -1,0 +1,6 @@
+Banger Picks Colors
+Primary Color: #daff00 (lime-yellow) #win
+Secondary Color: #240830 (midnight-violet)
+Tertiary Color: #fdfff0 (ivory)
+Quarternary Color: #ff9b00 (amber-glow) #draw
+Quinary Color: #ee4136 (cinnabar) #loss

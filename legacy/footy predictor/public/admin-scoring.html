@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - Auto Scoring</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .status-card {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        .status-active { background: #28a745; }
+        .status-inactive { background: #dc3545; }
+        .log-container {
+            background: #000;
+            color: #00ff00;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 400px;
+            overflow-y: auto;
+            margin: 20px 0;
+        }
+        .btn {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .btn:hover { background: #0056b3; }
+        .btn:disabled { background: #6c757d; cursor: not-allowed; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Auto Scoring Admin</h1>
+        
+        <div class="status-card">
+            <h3>System Status</h3>
+            <p>
+                <span class="status-indicator status-active"></span>
+                Auto-scoring function is scheduled to run every 5 minutes
+            </p>
+            <p>Last run: <span id="last-run">Unknown</span></p>
+            <p>Next run: <span id="next-run">Unknown</span></p>
+            <p>Cloud function: <span id="cloud-status">Checking...</span></p>
+            <p>Schedule: Every 5 minutes (00, 05, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55)</p>
+            <div id="countdown" style="font-size: 18px; font-weight: bold; color: #007bff; margin-top: 10px;"></div>
+        </div>
+
+        <div class="status-card">
+            <h3>Manual Controls</h3>
+            <button id="btn-trigger" class="btn">Trigger Auto-Scoring Now</button>
+            <button id="btn-status" class="btn">Check Function Status</button>
+        </div>
+
+        <div class="status-card">
+            <h3>Live Logs</h3>
+            <div id="logs" class="log-container">
+                <div>Waiting for logs...</div>
+            </div>
+            <button id="btn-clear-logs" class="btn">Clear Logs</button>
+        </div>
+
+        <div class="status-card">
+            <h3>Statistics</h3>
+            <p>Total users: <span id="total-users">-</span></p>
+            <p>Total predictions: <span id="total-predictions">-</span></p>
+            <p>Unawarded predictions: <span id="unawarded-predictions">-</span></p>
+        </div>
+
+        <div class="status-card">
+            <h3>Cloud Function Execution Times</h3>
+            <p>Recent executions:</p>
+            <div id="execution-times" style="font-family: monospace; font-size: 12px; background: #f8f9fa; padding: 10px; border-radius: 4px;">
+                <div>Loading execution history...</div>
+            </div>
+            <button id="btn-refresh-times" class="btn">Refresh Execution Times</button>
+            <p style="font-size: 11px; color: #6c757d; margin-top: 10px;">
+                Cloud Function URL: <code>https://autoscoreupdate-uppodisfaq-uc.a.run.app</code><br>
+                Manual Trigger URL: <code>https://triggerscoring-uppodisfaq-uc.a.run.app</code>
+            </p>
+        </div>
+
+        <div class="status-card">
+            <h3>Database Migration</h3>
+            <p>Enhance existing entries with team information for better user experience.</p>
+            <button id="btn-migrate" class="btn">Migrate Entries to Enhanced Format</button>
+            <p class="helper">This will add team names, league info, and fixture details to existing entries.</p>
+        </div>
+
+        <div class="status-card">
+            <h3>Navigation</h3>
+            <a href="admin.html" class="btn">Main Admin</a>
+            <a href="leaderboard.html" class="btn">Leaderboard</a>
+            <a href="index.html" class="btn">Home</a>
+        </div>
+    </div>
+
+    <script type="module">
+        import { onUserChanged, currentUser } from './js/auth.js';
+        import { watchRankings } from './js/scoring.js';
+
+        const btnTrigger = document.getElementById('btn-trigger');
+        const btnStatus = document.getElementById('btn-status');
+        const btnClearLogs = document.getElementById('btn-clear-logs');
+        const btnMigrate = document.getElementById('btn-migrate');
+        const logsContainer = document.getElementById('logs');
+        const lastRunEl = document.getElementById('last-run');
+        const nextRunEl = document.getElementById('next-run');
+        const cloudStatusEl = document.getElementById('cloud-status');
+        const countdownEl = document.getElementById('countdown');
+        const totalUsersEl = document.getElementById('total-users');
+        const totalPredictionsEl = document.getElementById('total-predictions');
+        const unawardedPredictionsEl = document.getElementById('unawarded-predictions');
+        const executionTimesEl = document.getElementById('execution-times');
+        const btnRefreshTimes = document.getElementById('btn-refresh-times');
+
+        let logs = [];
+
+        function addLog(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = `[${timestamp}] ${message}`;
+            logs.push(logEntry);
+            
+            if (logs.length > 100) logs.shift(); // Keep only last 100 logs
+            
+            logsContainer.innerHTML = logs.map(log => `<div>${log}</div>`).join('');
+            logsContainer.scrollTop = logsContainer.scrollHeight;
+        }
+
+        function updateNextRun() {
+            const now = new Date();
+            const minutes = now.getMinutes();
+            const seconds = now.getSeconds();
+            
+            // Calculate next 5-minute interval
+            let nextMinutes = Math.ceil(minutes / 5) * 5;
+            if (nextMinutes === 60) nextMinutes = 0;
+            
+            const nextRun = new Date(now);
+            nextRun.setMinutes(nextMinutes, 0, 0); // Set to exact minute, 0 seconds
+            
+            // If we're past the current 5-minute mark, move to next one
+            if (nextRun <= now) {
+                nextRun.setMinutes(nextRun.getMinutes() + 5);
+            }
+            
+            const timeUntilNext = nextRun - now;
+            const minutesUntil = Math.floor(timeUntilNext / 60000);
+            const secondsUntil = Math.floor((timeUntilNext % 60000) / 1000);
+            
+            nextRunEl.textContent = `${nextRun.toLocaleTimeString()} (in ${minutesUntil}m ${secondsUntil}s)`;
+            
+            // Update countdown
+            if (countdownEl) {
+                countdownEl.textContent = `⏰ Next run in: ${minutesUntil}m ${secondsUntil}s`;
+            }
+        }
+
+        function updateLastRun() {
+            const now = new Date();
+            lastRunEl.textContent = now.toLocaleTimeString();
+            updateNextRun();
+        }
+
+        async function triggerAutoScoring() {
+            try {
+                btnTrigger.disabled = true;
+                btnTrigger.textContent = 'Running...';
+                addLog('Manually triggering auto-scoring function...', 'info');
+                
+                // Call the Cloud Function directly
+                const response = await fetch('https://triggerscoring-uppodisfaq-uc.a.run.app', { method: 'POST' });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    addLog(`Auto-scoring completed successfully!`, 'success');
+                    addLog(`Updates: ${result.updates}, Points awarded: ${result.points}, Fixtures processed: ${result.fixtures}`, 'success');
+                    updateLastRun();
+                } else {
+                    const errorText = await response.text();
+                    addLog(`Failed to trigger auto-scoring: ${response.status} - ${errorText}`, 'error');
+                }
+            } catch (error) {
+                addLog(`Error triggering auto-scoring: ${error.message}`, 'error');
+            } finally {
+                btnTrigger.disabled = false;
+                btnTrigger.textContent = 'Trigger Auto-Scoring Now';
+            }
+        }
+
+        async function checkFunctionStatus() {
+            try {
+                btnStatus.disabled = true;
+                btnStatus.textContent = 'Checking...';
+                addLog('Checking function status...', 'info');
+                
+                // Check if the function is accessible
+                const response = await fetch('https://triggerscoring-uppodisfaq-uc.a.run.app', { 
+                    method: 'OPTIONS' 
+                });
+                
+                if (response.ok) {
+                    cloudStatusEl.textContent = '✅ Active and responding';
+                    cloudStatusEl.style.color = '#28a745';
+                    addLog('Function is accessible and responding', 'success');
+                    addLog('Auto-scoring function is running every 5 minutes', 'info');
+                } else {
+                    cloudStatusEl.textContent = `❌ Error: ${response.status}`;
+                    cloudStatusEl.style.color = '#dc3545';
+                    addLog(`Function status check failed: ${response.status}`, 'error');
+                }
+            } catch (error) {
+                cloudStatusEl.textContent = '❌ Connection failed';
+                cloudStatusEl.style.color = '#dc3545';
+                addLog(`Error checking status: ${error.message}`, 'error');
+            } finally {
+                btnStatus.disabled = false;
+                btnStatus.textContent = 'Check Function Status';
+            }
+        }
+
+        async function migrateEntries() {
+            try {
+                btnMigrate.disabled = true;
+                btnMigrate.textContent = 'Migrating...';
+                addLog('Starting migration of entries to enhanced format...', 'info');
+                
+                // This would typically call a Cloud Function to migrate the data
+                // For now, we'll show a placeholder message
+                addLog('Migration feature requires Cloud Function implementation', 'info');
+                addLog('The enhanced entries format is now active for new predictions', 'success');
+                
+            } catch (error) {
+                addLog(`Error during migration: ${error.message}`, 'error');
+            } finally {
+                btnMigrate.disabled = false;
+                btnMigrate.textContent = 'Migrate Entries to Enhanced Format';
+            }
+        }
+
+        function clearLogs() {
+            logs = [];
+            logsContainer.innerHTML = '<div>Logs cleared</div>';
+        }
+
+        function updateExecutionTimes() {
+            const now = new Date();
+            const currentMinute = now.getMinutes();
+            const currentHour = now.getHours();
+            
+            // Show the next few 5-minute intervals
+            let executionTimes = [];
+            for (let i = 0; i < 6; i++) {
+                const nextTime = new Date(now);
+                let nextMinute = Math.ceil(currentMinute / 5) * 5 + (i * 5);
+                if (nextMinute >= 60) {
+                    nextMinute = nextMinute % 60;
+                    nextTime.setHours(currentHour + 1);
+                }
+                nextTime.setMinutes(nextMinute, 0, 0);
+                
+                const timeString = nextTime.toLocaleTimeString();
+                const isNext = i === 0 ? ' (NEXT)' : '';
+                executionTimes.push(`${timeString}${isNext}`);
+            }
+            
+            executionTimesEl.innerHTML = executionTimes.map(time => `<div>${time}</div>`).join('');
+        }
+
+        // Event listeners
+        btnTrigger.addEventListener('click', triggerAutoScoring);
+        btnStatus.addEventListener('click', checkFunctionStatus);
+        btnClearLogs.addEventListener('click', clearLogs);
+        btnMigrate.addEventListener('click', migrateEntries);
+        btnRefreshTimes.addEventListener('click', updateExecutionTimes);
+
+        // Initialize
+        updateNextRun();
+        updateExecutionTimes();
+        addLog('Auto-scoring admin panel loaded', 'info');
+        addLog('Auto-scoring function is ready and accessible', 'success');
+
+        // Update next run time every minute
+        setInterval(updateNextRun, 60000);
+        
+        // Update countdown every second for real-time display
+        setInterval(updateNextRun, 1000);
+        
+        // Auto-check cloud function status every 30 seconds
+        setInterval(checkFunctionStatus, 30000);
+        
+        // Initial status check
+        checkFunctionStatus();
+    </script>
+</body>
+</html>

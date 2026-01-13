@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Profile • Footy Picker</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="stylesheet" href="/style.css" />
+  <meta name="api-sports-key" content="053bc3ed82f451e04159426e80a34c64" />
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand">
+      <span class="logo">⚽</span>
+      <h1>Profile</h1>
+    </div>
+    <div class="user-panel" id="user-panel">
+      <!-- Populated by auth.js -->
+    </div>
+  </header>
+  <!-- AUTH MODAL -->
+  <dialog id="modal-auth" class="modal">
+    <form class="modal-box" id="auth-form">
+      <h2 class="modal-title" id="auth-title">Log in</h2>
+      <label class="field">
+        <span>Email</span>
+        <input id="auth-email" type="email" placeholder="you@email.com" required />
+      </label>
+      <label class="field">
+        <span>Password</span>
+        <input id="auth-pass" type="password" placeholder="••••••••" required />
+      </label>
+      <div class="modal-actions">
+        <button type="submit" class="btn primary" id="auth-submit">Continue</button>
+<button type="button" class="btn ghost" id="auth-cancel">Cancel</button>
+      </div>
+      <p class="helper" id="auth-helper"></p>
+    </form>
+  </dialog>
+
+  <main class="container">
+    <section class="section">
+      <div class="section-head">
+        <h2>Your Profile</h2>
+        <p class="section-subtitle">Customize your experience and show your football passion</p>
+      </div>
+      <div id="profile-content"></div>
+      <div class="actions" style="gap:.5rem">
+        <button class="btn" id="btn-signout" type="button">Sign out</button>
+        <a class="btn ghost" href="/">Back to Dashboard</a>
+      </div>
+    </section>
+  </main>
+  <footer class="app-footer">
+    <small><a class="link" href="/">Back to Dashboard</a></small>
+  </footer>
+  <script type="module" src="/js/nav.js"></script>
+  <script type="module" src="/js/profile.js"></script>
+</body>
+</html>
+
+

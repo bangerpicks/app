@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Weekly Leaderboard • Footy Picker</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="stylesheet" href="/style.css" />
+  <meta name="api-sports-key" content="053bc3ed82f451e04159426e80a34c64" />
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand">
+      <span class="logo">⚽</span>
+      <h1>Weekly Leaderboard</h1>
+    </div>
+    <div class="user-panel" id="user-panel">
+      <!-- Populated by auth.js -->
+    </div>
+  </header>
+  
+  <!-- AUTH MODAL -->
+  <dialog id="modal-auth" class="modal">
+    <form class="modal-box" id="auth-form">
+      <h2 class="modal-title" id="auth-title">Log in</h2>
+      <label class="field">
+        <span>Email</span>
+        <input id="auth-email" type="email" placeholder="you@email.com" required />
+      </label>
+      <label class="field">
+        <span>Password</span>
+        <input id="auth-pass" type="password" placeholder="••••••••" required />
+      </label>
+      <div class="modal-actions">
+        <button type="submit" class="btn primary" id="auth-submit">Continue</button>
+        <button type="button" class="btn ghost" id="auth-cancel">Cancel</button>
+      </div>
+      <p class="helper" id="auth-helper"></p>
+    </form>
+  </dialog>
+
+  <main class="container">
+    <!-- Week Selection -->
+    <section class="section week-selector-section">
+      <div class="week-selector">
+        <button class="btn small ghost" id="btn-prev-week" title="Previous Week">
+          <span class="btn-icon">←</span>
+        </button>
+        
+        <div class="current-week-display">
+          <h2 id="current-week-display">Select Week</h2>
+          <div class="week-date-range" id="week-date-range"></div>
+        </div>
+        
+        <button class="btn small ghost" id="btn-next-week" title="Next Week">
+          <span class="btn-icon">→</span>
+        </button>
+      </div>
+      
+      <div class="week-actions">
+        <button class="btn small primary" id="btn-current-week">Current Week</button>
+        <button class="btn small" id="btn-refresh" title="Refresh Data">🔄</button>
+        <button class="btn small secondary" id="btn-manual-scoring" title="Trigger Manual Scoring">⚡</button>
+        <button class="btn small ghost" id="btn-debug" title="Debug Prediction Status">🐛</button>
+      </div>
+
+      <!-- View Toggle -->
+      <div class="view-toggle-section">
+        <div class="view-toggle">
+          <button class="btn small" id="btn-compact-view" data-view="compact">
+            <span class="btn-icon">📊</span>
+            Compact
+          </button>
+          <button class="btn small ghost" id="btn-detailed-view" data-view="detailed">
+            <span class="btn-icon">🔍</span>
+            Detailed Predictions
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Leaderboard -->
+    <section class="section leaderboard-section">
+      <div class="section-head">
+        <h2 id="lb-title">🏆 Weekly Standings</h2>
+      </div>
+      
+      <!-- Compact Table View -->
+      <div class="table-wrap" id="compact-view">
+        <table class="table leaderboard-table" id="lb-table">
+          <thead>
+            <tr>
+              <th class="pos">#</th>
+              <th>Player</th>
+              <th class="pts">Points</th>
+            </tr>
+          </thead>
+          <tbody id="lb-body"></tbody>
+        </table>
+      </div>
+
+      <!-- Detailed Predictions View -->
+      <div class="table-wrap hidden" id="detailed-view">
+        <div class="predictions-table-container">
+          <table class="table predictions-table" id="predictions-table">
+            <thead id="predictions-header">
+              <!-- Populated by JavaScript -->
+            </thead>
+            <tbody id="predictions-body">
+              <!-- Populated by JavaScript -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="lb-empty" class="empty hidden">
+        <div class="empty-icon">📊</div>
+        <h3>No predictions this week</h3>
+        <p>Players haven't made any predictions for this week yet.</p>
+      </div>
+    </section>
+    
+    <!-- Bottom spacer to prevent overlap with fixed bottom navigation -->
+    <div class="bottom-spacer"></div>
+  </main>
+
+  <!-- User Predictions Modal -->
+  <dialog id="modal-predictions" class="modal predictions-modal">
+    <div class="modal-box predictions-modal-box">
+      <div class="modal-header">
+        <h2 class="modal-title">Player Predictions</h2>
+        <button type="button" class="btn ghost close-btn" id="predictions-close">×</button>
+      </div>
+      <div class="predictions-content" id="predictions-content">
+        <!-- Populated by JavaScript -->
+      </div>
+    </div>
+  </dialog>
+
+  <footer class="app-footer">
+    <small><a class="link" href="/">Back to Dashboard</a></small>
+  </footer>
+  
+  <script type="module" src="/js/nav.js"></script>
+  <script type="module" src="/js/leaderboard.js"></script>
+</body>
+</html>
+
+

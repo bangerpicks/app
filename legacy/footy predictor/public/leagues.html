@@ -1,0 +1,699 @@
+<!--
+  Leagues Page — leagues.html
+  Displays available leagues and allows users to create/join leagues
+-->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Leagues — Footy Picker</title>
+  <meta name="api-sports-key" content="053bc3ed82f451e04159426e80a34c64" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <!-- ========================= HEADER ========================= -->
+  <header class="app-header">
+    <div class="brand">
+      <span class="logo">⚽</span>
+      <h1>Footy Picker</h1>
+    </div>
+    <div class="user-panel" id="user-panel">
+      <!-- Populated by auth.js -->
+    </div>
+  </header>
+
+  <!-- ========================= AUTH MODALS ========================= -->
+  <dialog id="modal-auth" class="modal">
+    <form class="modal-box" id="auth-form">
+      <h2 class="modal-title" id="auth-title">Log in</h2>
+      <label class="field">
+        <span>Email</span>
+        <input id="auth-email" type="email" placeholder="you@email.com" required />
+      </label>
+      <label class="field">
+        <span>Password</span>
+        <input id="auth-pass" type="password" placeholder="••••••••" required />
+      </label>
+      <div class="modal-actions">
+        <button type="submit" class="btn primary" id="auth-submit">Continue</button>
+        <button type="button" class="btn ghost" id="auth-cancel">Cancel</button>
+      </div>
+      <p class="helper" id="auth-helper"></p>
+    </form>
+  </dialog>
+
+  <!-- ========================= CREATE LEAGUE MODAL ========================= -->
+  <dialog id="modal-create-league" class="modal">
+    <form class="modal-box" id="create-league-form">
+      <h2 class="modal-title">Create New League</h2>
+      
+      <label class="field">
+        <span>League Name</span>
+        <input id="league-name" type="text" placeholder="e.g., Premier League" required />
+      </label>
+      
+      <label class="field">
+        <span>Country</span>
+        <input id="league-country" type="text" placeholder="e.g., England" required />
+      </label>
+      
+      <label class="field">
+        <span>League Type</span>
+        <select id="league-type" required>
+          <option value="domestic">Domestic</option>
+          <option value="continental">Continental</option>
+          <option value="international">International</option>
+        </select>
+      </label>
+      
+      <label class="field">
+        <span>Season</span>
+        <input id="league-season" type="text" placeholder="2024/25" value="2024/25" required />
+      </label>
+      
+      <label class="field">
+        <span>Max Participants</span>
+        <input id="league-max-participants" type="number" placeholder="0 = unlimited" min="0" value="0" />
+      </label>
+      
+      <label class="field checkbox">
+        <input id="league-is-public" type="checkbox" />
+        <span>Make League Public</span>
+      </label>
+      
+      <label class="field">
+        <span>Description</span>
+        <textarea id="league-description" rows="3" placeholder="Describe your league..."></textarea>
+      </label>
+      
+      <label class="field">
+        <span>League Template</span>
+        <select id="league-template">
+          <option value="">No template (custom)</option>
+          <!-- Template options will be populated -->
+        </select>
+      </label>
+      
+      <div class="modal-actions">
+        <button type="submit" class="btn primary">Create League</button>
+        <button type="button" class="btn ghost" id="create-league-cancel">Cancel</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- ========================= INVITE USERS MODAL ========================= -->
+  <dialog id="modal-invite-users" class="modal">
+    <form class="modal-box" id="invite-users-form">
+      <h2 class="modal-title">Invite Users to League</h2>
+      
+      <div class="league-info-display">
+        <h3 id="invite-league-name"></h3>
+        <p id="invite-league-country"></p>
+      </div>
+      
+      <label class="field">
+        <span>Email Address</span>
+        <input id="invite-email" type="email" placeholder="user@example.com" required />
+      </label>
+      
+      <div class="modal-actions">
+        <button type="submit" class="btn primary">Send Invitation</button>
+        <button type="button" class="btn ghost" id="invite-users-cancel">Cancel</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- ========================= MAIN ========================= -->
+  <main class="container">
+    <!-- -------- Hero -------- -->
+    <section class="hero" aria-label="Overview">
+      <h2>Football Leagues</h2>
+      <p>Join existing leagues or create your own to compete with friends and other players.</p>
+    </section>
+
+    <!-- -------- League Categories -------- -->
+    <section class="section" aria-labelledby="categories-title">
+      <div class="section-head">
+        <h2 id="categories-title">League Categories</h2>
+      </div>
+      <div class="league-categories">
+        <button class="category-btn active" data-category="all">All Leagues</button>
+        <button class="category-btn" data-category="domestic">Domestic</button>
+        <button class="category-btn" data-category="continental">Continental</button>
+        <button class="category-btn" data-category="international">International</button>
+      </div>
+    </section>
+
+    <!-- -------- My Leagues -------- -->
+    <section class="section" aria-labelledby="my-leagues-title">
+      <div class="section-head">
+        <h2 id="my-leagues-title">My Leagues</h2>
+      </div>
+      <div id="my-leagues" class="leagues-grid">
+        <!-- User's leagues will be populated here -->
+      </div>
+      <div id="my-leagues-empty" class="empty hidden">You haven't joined any leagues yet.</div>
+      <div id="my-leagues-loading" class="loading">Loading your leagues…</div>
+    </section>
+
+    <!-- -------- League Invitations -------- -->
+    <section class="section" aria-labelledby="invitations-title">
+      <div class="section-head">
+        <h2 id="invitations-title">League Invitations</h2>
+      </div>
+      <div id="league-invitations" class="invitations-list">
+        <!-- League invitations will be populated here -->
+      </div>
+      <div id="invitations-empty" class="empty hidden">No pending invitations.</div>
+      <div id="invitations-loading" class="loading">Loading invitations…</div>
+    </section>
+
+    <!-- -------- Available Leagues -------- -->
+    <section class="section" aria-labelledby="available-leagues-title">
+      <div class="section-head">
+        <h2 id="available-leagues-title">Available Leagues</h2>
+      </div>
+      <div id="available-leagues" class="leagues-grid">
+        <!-- Available leagues will be populated here -->
+      </div>
+      <div id="available-leagues-empty" class="empty hidden">No leagues available to join.</div>
+      <div id="available-leagues-loading" class="loading">Loading available leagues…</div>
+    </section>
+
+    <!-- -------- Actions -------- -->
+    <section class="section">
+      <div class="actions">
+        <button id="create-league-btn" class="btn primary">Create New League</button>
+      </div>
+    </section>
+  </main>
+
+  <!-- ========================= FOOTER ========================= -->
+  <footer class="app-footer">
+    <small><a href="/admin.html" class="link">Admin</a></small>
+  </footer>
+
+  <!-- ========================= TEMPLATES ========================= -->
+  <template id="league-card-template">
+    <div class="league-card">
+      <div class="league-header">
+        <div class="league-logo">
+          <span class="league-icon">🏆</span>
+        </div>
+        <div class="league-info">
+          <h3 class="league-name"></h3>
+          <p class="league-country"></p>
+          <p class="league-type"></p>
+        </div>
+        <div class="league-status">
+          <span class="status-badge"></span>
+        </div>
+      </div>
+      <div class="league-details">
+        <p class="league-season"></p>
+        <p class="league-participants"></p>
+        <p class="league-creator"></p>
+      </div>
+      <div class="league-actions">
+        <button class="btn primary join-league-btn">Join League</button>
+        <button class="btn ghost view-league-btn">View Details</button>
+        <button class="btn secondary invite-users-btn hidden">Invite Users</button>
+      </div>
+    </div>
+  </template>
+
+  <!-- ========================= SCRIPTS ========================= -->
+  <script type="module" src="/js/auth.js"></script>
+  <script type="module" src="/js/leagues.js"></script>
+  <script type="module" src="/js/nav.js"></script>
+  <script type="module">
+    import { onUserChanged, currentUser, isFirestoreReady } from './js/auth.js';
+    import { 
+      getLeagues, 
+      getUserLeagues, 
+      createLeague, 
+      joinLeague,
+      setCurrentLeague,
+      getLeagueTemplates,
+      getLeagueInvitations,
+      acceptLeagueInvitation,
+      declineLeagueInvitation
+    } from './js/leagues.js';
+
+    // DOM elements
+    const myLeaguesEl = document.getElementById('my-leagues');
+    const myLeaguesEmptyEl = document.getElementById('my-leagues-empty');
+    const myLeaguesLoadingEl = document.getElementById('my-leagues-loading');
+    const availableLeaguesEl = document.getElementById('available-leagues');
+    const availableLeaguesEmptyEl = document.getElementById('available-leagues-empty');
+    const availableLeaguesLoadingEl = document.getElementById('available-leagues-loading');
+    const createLeagueBtn = document.getElementById('create-league-btn');
+    const createLeagueModal = document.getElementById('modal-create-league');
+    const createLeagueForm = document.getElementById('create-league-form');
+    const createLeagueCancelBtn = document.getElementById('create-league-cancel');
+    const categoryBtns = document.querySelectorAll('.category-btn');
+    const leagueTemplateSelect = document.getElementById('league-template');
+    const leagueInvitationsEl = document.getElementById('league-invitations');
+    const leagueInvitationsEmptyEl = document.getElementById('invitations-empty');
+    const leagueInvitationsLoadingEl = document.getElementById('invitations-loading');
+    const inviteUsersModal = document.getElementById('modal-invite-users');
+    const inviteUsersForm = document.getElementById('invite-users-form');
+    const inviteUsersCancelBtn = document.getElementById('invite-users-cancel');
+    const inviteEmailInput = document.getElementById('invite-email');
+    const inviteLeagueNameEl = document.getElementById('invite-league-name');
+    const inviteLeagueCountryEl = document.getElementById('invite-league-country');
+
+    let currentCategory = 'all';
+    let allLeagues = [];
+    let userLeagues = [];
+    let leagueTemplates = [];
+    let currentInviteLeague = null;
+
+    // Initialize page
+    async function initPage() {
+      if (await isFirestoreReady) {
+        await loadTemplates();
+        loadLeagues();
+        loadLeagueInvitations();
+      } else {
+        // Wait for Firestore to be ready
+        const unsubscribe = onUserChanged(() => {
+          if (isFirestoreReady) {
+            unsubscribe();
+            initPage();
+          }
+        });
+      }
+    }
+
+    // Load league templates
+    async function loadTemplates() {
+      try {
+        leagueTemplates = await getLeagueTemplates();
+        populateTemplateSelect();
+      } catch (error) {
+        console.error('Error loading templates:', error);
+      }
+    }
+
+    // Populate template select dropdown
+    function populateTemplateSelect() {
+      if (!leagueTemplateSelect) return;
+      
+      // Clear existing options except the first one
+      leagueTemplateSelect.innerHTML = '<option value="">No template (custom)</option>';
+      
+      leagueTemplates.forEach(template => {
+        const option = document.createElement('option');
+        option.value = template.id;
+        option.textContent = template.name;
+        leagueTemplateSelect.appendChild(option);
+      });
+    }
+
+    // Load league invitations
+    async function loadLeagueInvitations() {
+      try {
+        leagueInvitationsLoadingEl.classList.remove('hidden');
+        leagueInvitationsEmptyEl.classList.add('hidden');
+        
+        const user = currentUser();
+        if (!user) {
+          leagueInvitationsLoadingEl.classList.add('hidden');
+          return;
+        }
+
+        const invitations = await getLeagueInvitations();
+        renderLeagueInvitations(invitations);
+        
+      } catch (error) {
+        console.error('Error loading invitations:', error);
+      } finally {
+        leagueInvitationsLoadingEl.classList.add('hidden');
+      }
+    }
+
+    // Render league invitations
+    function renderLeagueInvitations(invitations) {
+      if (!invitations || invitations.length === 0) {
+        leagueInvitationsEmptyEl.classList.remove('hidden');
+        leagueInvitationsEl.innerHTML = '';
+        return;
+      }
+
+      leagueInvitationsEmptyEl.classList.add('hidden');
+      leagueInvitationsEl.innerHTML = '';
+
+      invitations.forEach(invitation => {
+        const invitationEl = createInvitationElement(invitation);
+        leagueInvitationsEl.appendChild(invitationEl);
+      });
+    }
+
+    // Create invitation element
+    function createInvitationElement(invitation) {
+      const div = document.createElement('div');
+      div.className = 'invitation-item';
+      div.innerHTML = `
+        <div class="invitation-info">
+          <h4>${invitation.leagueName}</h4>
+          <p>Invited by: ${invitation.invitedBy}</p>
+          <p>Status: ${invitation.status}</p>
+        </div>
+        <div class="invitation-actions">
+          ${invitation.status === 'pending' ? `
+            <button class="btn primary btn-accept" data-invitation-id="${invitation.id}">Accept</button>
+            <button class="btn ghost btn-decline" data-invitation-id="${invitation.id}">Decline</button>
+          ` : ''}
+        </div>
+      `;
+
+      // Add event listeners for accept/decline buttons
+      if (invitation.status === 'pending') {
+        const acceptBtn = div.querySelector('.btn-accept');
+        const declineBtn = div.querySelector('.btn-decline');
+        
+        acceptBtn.addEventListener('click', () => handleAcceptInvitation(invitation.id));
+        declineBtn.addEventListener('click', () => handleDeclineInvitation(invitation.id));
+      }
+
+      return div;
+    }
+
+    // Handle accepting invitation
+    async function handleAcceptInvitation(invitationId) {
+      try {
+        await acceptLeagueInvitation(invitationId);
+        showSuccess('Invitation accepted! You are now a member of the league.');
+        await loadLeagueInvitations();
+        await loadLeagues(); // Refresh leagues to show the new membership
+      } catch (error) {
+        console.error('Error accepting invitation:', error);
+        showError(error.message || 'Failed to accept invitation.');
+      }
+    }
+
+    // Handle declining invitation
+    async function handleDeclineInvitation(invitationId) {
+      try {
+        await declineLeagueInvitation(invitationId);
+        showSuccess('Invitation declined.');
+        await loadLeagueInvitations();
+      } catch (error) {
+        console.error('Error declining invitation:', error);
+        showError(error.message || 'Failed to decline invitation.');
+      }
+    }
+
+    // Load leagues data
+    async function loadLeagues() {
+      try {
+        // Show loading states
+        myLeaguesLoadingEl.classList.remove('hidden');
+        availableLeaguesLoadingEl.classList.remove('hidden');
+        myLeaguesEmptyEl.classList.add('hidden');
+        availableLeaguesEmptyEl.classList.add('hidden');
+
+        // Load user leagues
+        const user = currentUser();
+        if (user) {
+          userLeagues = await getUserLeagues();
+          renderMyLeagues();
+        }
+
+        // Load all available leagues
+        allLeagues = await getLeagues({ status: 'active' });
+        renderAvailableLeagues();
+
+      } catch (error) {
+        console.error('Error loading leagues:', error);
+        showError('Failed to load leagues. Please try again.');
+      } finally {
+        myLeaguesLoadingEl.classList.add('hidden');
+        availableLeaguesLoadingEl.classList.add('hidden');
+      }
+    }
+
+    // Render user's leagues
+    function renderMyLeagues() {
+      if (!userLeagues.length) {
+        myLeaguesEmptyEl.classList.remove('hidden');
+        return;
+      }
+
+      myLeaguesEmptyEl.classList.add('hidden');
+      myLeaguesEl.innerHTML = '';
+
+      userLeagues.forEach(league => {
+        const card = createLeagueCard(league, true);
+        myLeaguesEl.appendChild(card);
+      });
+    }
+
+    // Render available leagues
+    function renderAvailableLeagues() {
+      const filteredLeagues = filterLeaguesByCategory(allLeagues);
+      const availableLeagues = filteredLeagues.filter(league => 
+        !userLeagues.some(userLeague => userLeague.id === league.id)
+      );
+
+      if (!availableLeagues.length) {
+        availableLeaguesEmptyEl.classList.remove('hidden');
+        return;
+      }
+
+      availableLeaguesEmptyEl.classList.add('hidden');
+      availableLeaguesEl.innerHTML = '';
+
+      availableLeagues.forEach(league => {
+        const card = createLeagueCard(league, false);
+        availableLeaguesEl.appendChild(card);
+      });
+    }
+
+    // Filter leagues by category
+    function filterLeaguesByCategory(leagues) {
+      if (currentCategory === 'all') return leagues;
+      return leagues.filter(league => league.type === currentCategory);
+    }
+
+    // Create league card element
+    function createLeagueCard(league, isUserLeague) {
+      const template = document.getElementById('league-card-template');
+      const card = template.content.firstElementChild.cloneNode(true);
+      
+      // Set league data
+      card.querySelector('.league-name').textContent = league.name;
+      card.querySelector('.league-country').textContent = league.country;
+      card.querySelector('.league-type').textContent = league.type.charAt(0).toUpperCase() + league.type.slice(1);
+      card.querySelector('.league-season').textContent = `Season: ${league.season}`;
+      
+      const participantsText = league.maxParticipants > 0 
+        ? `${league.participants?.length || 0}/${league.maxParticipants} participants`
+        : `${league.participants?.length || 0} participants`;
+      card.querySelector('.league-participants').textContent = participantsText;
+      
+      // Add creator information
+      if (league.creatorName) {
+        card.querySelector('.league-creator').textContent = `Created by: ${league.creatorName}`;
+      }
+      
+      // Set status badge
+      const statusBadge = card.querySelector('.status-badge');
+      statusBadge.textContent = league.status;
+      statusBadge.className = `status-badge ${league.status}`;
+
+      // Handle actions
+      if (isUserLeague) {
+        // User is already in this league
+        const joinBtn = card.querySelector('.join-league-btn');
+        joinBtn.textContent = 'Current League';
+        joinBtn.disabled = true;
+        joinBtn.classList.remove('primary');
+        joinBtn.classList.add('secondary');
+        
+        // Show invite button for league creator
+        const user = currentUser();
+        if (user && league.createdBy === user.uid) {
+          const inviteBtn = card.querySelector('.invite-users-btn');
+          inviteBtn.classList.remove('hidden');
+          inviteBtn.addEventListener('click', () => handleInviteUsers(league));
+        }
+      } else {
+        // User can join this league
+        const joinBtn = card.querySelector('.join-league-btn');
+        joinBtn.addEventListener('click', () => handleJoinLeague(league.id));
+      }
+
+      // View details button
+      const viewBtn = card.querySelector('.view-league-btn');
+      viewBtn.addEventListener('click', () => handleViewLeague(league));
+
+      return card;
+    }
+
+    // Handle inviting users to a league
+    function handleInviteUsers(league) {
+      currentInviteLeague = league;
+      inviteLeagueNameEl.textContent = league.name;
+      inviteLeagueCountryEl.textContent = league.country;
+      inviteEmailInput.value = '';
+      inviteUsersModal.showModal();
+    }
+
+    // Handle sending invitation
+    async function handleSendInvitation(event) {
+      event.preventDefault();
+      
+      try {
+        const email = inviteEmailInput.value.trim();
+        if (!email) {
+          throw new Error('Please enter an email address');
+        }
+
+        if (!currentInviteLeague) {
+          throw new Error('No league selected for invitation');
+        }
+
+        // Import the invite function
+        const { inviteUserToLeague } = await import('./js/leagues.js');
+        await inviteUserToLeague(currentInviteLeague.id, email);
+        
+        // Close modal and show success
+        inviteUsersModal.close();
+        showSuccess(`Invitation sent to ${email} successfully!`);
+        
+      } catch (error) {
+        console.error('Error sending invitation:', error);
+        showError(error.message || 'Failed to send invitation. Please try again.');
+      }
+    }
+
+    // Handle joining a league
+    async function handleJoinLeague(leagueId) {
+      try {
+        const user = currentUser();
+        if (!user) {
+          showError('Please log in to join a league.');
+          return;
+        }
+
+        await joinLeague(leagueId);
+        
+        // Refresh leagues
+        await loadLeagues();
+        
+        showSuccess('Successfully joined the league!');
+        
+      } catch (error) {
+        console.error('Error joining league:', error);
+        showError(error.message || 'Failed to join league. Please try again.');
+      }
+    }
+
+    // Handle viewing league details
+    function handleViewLeague(league) {
+      // For now, just set as current league and redirect to main page
+      setCurrentLeague(league);
+      window.location.href = '/';
+    }
+
+    // Handle creating a new league
+    async function handleCreateLeague(event) {
+      event.preventDefault();
+      
+      try {
+        const formData = new FormData(event.target);
+        const leagueData = {
+          name: formData.get('league-name') || document.getElementById('league-name').value,
+          country: formData.get('league-country') || document.getElementById('league-country').value,
+          type: document.getElementById('league-type').value,
+          season: document.getElementById('league-season').value,
+          maxParticipants: parseInt(document.getElementById('league-max-participants').value) || 0,
+          isPublic: document.getElementById('league-is-public').checked,
+          description: document.getElementById('league-description').value,
+          template: document.getElementById('league-template').value
+        };
+
+        // If template is selected, apply template settings
+        if (leagueData.template) {
+          const selectedTemplate = leagueTemplates.find(t => t.id === leagueData.template);
+          if (selectedTemplate) {
+            leagueData.type = selectedTemplate.type;
+            leagueData.maxParticipants = selectedTemplate.maxParticipants;
+            leagueData.rules = selectedTemplate.rules;
+          }
+        }
+
+        await createLeague(leagueData);
+        
+        // Close modal and refresh
+        createLeagueModal.close();
+        createLeagueForm.reset();
+        await loadLeagues();
+        
+        showSuccess('League created successfully!');
+        
+      } catch (error) {
+        console.error('Error creating league:', error);
+        showError(error.message || 'Failed to create league. Please try again.');
+      }
+    }
+
+    // Show success message
+    function showSuccess(message) {
+      // Simple success notification - you can enhance this
+      alert(message);
+    }
+
+    // Show error message
+    function showError(message) {
+      // Simple error notification - you can enhance this
+      alert('Error: ' + message);
+    }
+
+    // Event listeners
+    createLeagueBtn.addEventListener('click', () => {
+      createLeagueModal.showModal();
+    });
+
+    createLeagueCancelBtn.addEventListener('click', () => {
+      createLeagueModal.close();
+    });
+
+    createLeagueForm.addEventListener('submit', handleCreateLeague);
+
+    // Invitation modal event listeners
+    inviteUsersCancelBtn.addEventListener('click', () => {
+      inviteUsersModal.close();
+    });
+
+    inviteUsersForm.addEventListener('submit', handleSendInvitation);
+
+    // Category filter buttons
+    categoryBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        // Update active state
+        categoryBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        
+        // Update current category and re-render
+        currentCategory = btn.dataset.category;
+        renderAvailableLeagues();
+      });
+    });
+
+    // Initialize page when DOM is ready
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initPage);
+    } else {
+      initPage();
+    }
+  </script>
+</body>
+</html>

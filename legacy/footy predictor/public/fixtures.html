@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Fixtures • Footy Picker</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="stylesheet" href="/style.css" />
+  <meta name="api-sports-key" content="053bc3ed82f451e04159426e80a34c64" />
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand">
+      <span class="logo">⚽</span>
+      <h1>Fixtures</h1>
+    </div>
+    <div class="user-panel" id="user-panel">
+      <!-- Populated by auth.js -->
+    </div>
+  </header>
+  <!-- AUTH MODAL -->
+  <dialog id="modal-auth" class="modal">
+    <form class="modal-box" id="auth-form">
+      <h2 class="modal-title" id="auth-title">Log in</h2>
+      <label class="field">
+        <span>Email</span>
+        <input id="auth-email" type="email" placeholder="you@email.com" required />
+      </label>
+      <label class="field">
+        <span>Password</span>
+        <input id="auth-pass" type="password" placeholder="••••••••" required />
+      </label>
+      <div class="modal-actions">
+        <button type="submit" class="btn primary" id="auth-submit">Continue</button>
+<button type="button" class="btn ghost" id="auth-cancel">Cancel</button>
+      </div>
+      <p class="helper" id="auth-helper"></p>
+    </form>
+  </dialog>
+
+  <main class="container">
+    <section class="section" aria-labelledby="lx-title">
+      <div class="section-head">
+        <h2 id="lx-title">Curated Competitions</h2>
+      </div>
+      <div class="filters">
+        <label>
+          <select id="season-select"></select>
+        </label>
+        <label>
+          <select id="window-select">
+            <option value="today">Today</option>
+            <option value="weekend">This weekend</option>
+            <option value="3">Next 3 days</option>
+            <option value="7" selected>Next 7 days</option>
+          </select>
+        </label>
+        <button class="btn small" id="btn-view-standings" type="button">View Standings</button>
+      </div>
+      <div class="chips" id="chips-leagues"></div>
+      <div class="chips" id="chips-cups" style="margin-top:.25rem;"></div>
+      <small id="league-status" class="loading"></small>
+      <ul id="league-fixtures" class="fixtures-list"></ul>
+      <div id="league-empty" class="empty hidden">Select a competition to see fixtures.</div>
+      <div id="league-loading" class="loading hidden">Loading fixtures…</div>
+    </section>
+  </main>
+
+  <!-- Standings Modal -->
+  <dialog id="modal-standings" class="modal">
+    <form method="dialog" class="modal-box" id="standings-form">
+      <h2 class="modal-title">Standings</h2>
+      <div id="standings-tabs" class="chips" style="margin-bottom:.5rem;"></div>
+      <div id="standings-content" class="table-wrap"></div>
+      <div class="modal-actions">
+        <button class="btn" value="close">Close</button>
+      </div>
+      <p class="helper" id="standings-helper"></p>
+    </form>
+  </dialog>
+  <footer class="app-footer">
+    <small><a class="link" href="/">Back to Dashboard</a></small>
+  </footer>
+  <script type="module" src="/js/nav.js"></script>
+  <script type="module" src="/js/fixtures.js"></script>
+</body>
+</html>
+
+

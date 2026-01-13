@@ -1,0 +1,23 @@
+{
+  "name": "Banger Picks",
+  "short_name": "Banger Picks",
+  "description": "Predict football matches and compete for the top spot",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#daff00",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/app-logo.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

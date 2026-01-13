@@ -1,0 +1,160 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap');
+
+:root {
+  --midnight-violet: #240830;
+  --lime-yellow: #daff00;
+  --ivory: #fdfff0;
+  --cinnabar: #ee4136;
+  --amber-glow: #ff9b00;
+  /* Safe area insets for notched devices */
+  --safe-area-inset-top: env(safe-area-inset-top, 0px);
+  --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-inset-left: env(safe-area-inset-left, 0px);
+  --safe-area-inset-right: env(safe-area-inset-right, 0px);
+  /* Header height for sticky table positioning */
+  --header-height: 80px;
+}
+
+html {
+  /* Don't constrain height - let content determine height */
+  /* Prevent elastic/bounce scrolling on iOS */
+  overscroll-behavior-y: none;
+  overscroll-behavior: none;
+  /* Enable momentum scrolling */
+  -webkit-overflow-scrolling: touch;
+}
+
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  background-color: #240830;
+  color: #fdfff0;
+  /* Prevent horizontal scrolling on mobile */
+  overflow-x: hidden;
+  /* Enable momentum scrolling on iOS */
+  -webkit-overflow-scrolling: touch;
+  /* Completely prevent bounce/elastic scrolling */
+  overscroll-behavior-y: none;
+  overscroll-behavior: none;
+  /* Allow native touch gestures - only vertical pan */
+  touch-action: pan-y;
+  /* Use dynamic viewport height for min-height */
+  min-height: 100dvh;
+  min-height: 100vh; /* Fallback for older browsers */
+  /* Prevent layout shifts */
+  position: relative;
+}
+
+/* Ensure inputs don't zoom on iOS */
+@supports (-webkit-touch-callout: none) {
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* Fix sticky positioning for iOS */
+header[class*="sticky"],
+nav[class*="sticky"],
+thead[class*="sticky"] {
+  /* Force hardware acceleration for smooth scrolling */
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+  /* Prevent hiding during fast scroll */
+  will-change: transform;
+  /* Ensure proper stacking */
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+/* Sticky table header styles */
+thead[class*="sticky"] {
+  /* Ensure proper sticky behavior on iOS */
+  position: -webkit-sticky;
+  position: sticky;
+  /* Force hardware acceleration */
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+  /* Improve rendering performance */
+  will-change: transform;
+  /* Prevent flickering during scroll */
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+/* Sticky table cells (columns) */
+th[class*="sticky"],
+td[class*="sticky"] {
+  /* Force hardware acceleration for smooth scrolling */
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+  /* Improve rendering performance */
+  will-change: transform;
+  /* Prevent flickering */
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+/* Improve scroll performance on iOS */
+main {
+  /* Don't create nested scroll containers */
+  overflow: visible;
+  /* Allow native touch gestures */
+  touch-action: pan-y;
+}
+
+/* iOS-specific fixes to prevent bounce */
+@supports (-webkit-touch-callout: none) {
+  html {
+    /* Completely disable elastic scrolling */
+    overscroll-behavior-y: none;
+    overscroll-behavior: none;
+    /* Prevent pull-to-refresh */
+    touch-action: none;
+  }
+  
+  body {
+    /* Completely disable bounce effect */
+    overscroll-behavior-y: none;
+    overscroll-behavior: none;
+    /* Ensure proper touch handling - only vertical pan */
+    touch-action: pan-y;
+    /* Prevent momentum scrolling issues */
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  /* Prevent any child elements from causing bounce */
+  * {
+    overscroll-behavior: none;
+  }
+}
+
+/* Page transition animations for smoother navigation */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Apply smooth fade-in to page content */
+body > * {
+  animation: fadeIn 0.2s ease-in-out;
+}
+
+/* Ensure smooth transitions for interactive elements */
+a,
+button {
+  transition: opacity 0.15s ease-in-out;
+}
+
+/* Smooth opacity transitions for navigation items */
+nav a {
+  transition: opacity 0.2s ease-in-out;
+}

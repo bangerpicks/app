@@ -1,0 +1,59 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAdmin() {
+      return request.auth != null &&
+        get(/databases/$(database)/documents/settings/app).data.adminUids.hasAny([request.auth.uid]);
+    }
+
+    // Allow creation of prediction parent docs so users can write their own sub-doc
+    match /predictions/{fixtureId} {
+      allow read: if true;
+      allow create: if request.auth != null;
+      allow update: if false;
+    }
+
+    match /users/{uid} {
+      allow read: if true;
+      allow create: if request.auth != null && request.auth.uid == uid;
+      allow update: if request.auth != null && request.auth.uid == uid;
+    }
+
+    match /predictions/{fixtureId}/entries/{uid} {
+      allow read: if true;
+      allow create, update: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // Weekly curated selections — readable by all, writable only by admins
+    match /weeklySelections/{weekId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+
+      match /fixtures/{fixtureId} {
+        allow read: if true;
+        allow create, update, delete: if isAdmin();
+      }
+    }
+
+    // Weeks collection for admin management — readable by all, writable only by admins
+    match /weeks/{weekId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+      
+      // Fixtures subcollection under weeks — readable by all, writable only by admins
+      match /fixtures/{fixtureId} {
+        allow read: if true;
+        allow create, update, delete: if isAdmin();
+      }
+    }
+
+    // Settings document that holds adminUids array — restrict writes to admins
+    match /settings/{doc} {
+      allow read: if true;
+      // Bootstrap: allow first-time creation of settings/app by any authenticated user
+      allow create: if request.auth != null && doc == 'app' &&
+        !exists(/databases/$(database)/documents/settings/app);
+      allow update, delete: if isAdmin();
+    }
+  }
+}

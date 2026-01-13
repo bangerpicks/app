@@ -1,0 +1,595 @@
+<!--
+  Tournaments Page — tournaments.html
+  Displays available tournaments and allows users to create/join tournaments
+-->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Tournaments — Footy Picker</title>
+  <meta name="api-sports-key" content="053bc3ed82f451e04159426e80a34c64" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <!-- ========================= HEADER ========================= -->
+  <header class="app-header">
+    <div class="brand">
+      <span class="logo">⚽</span>
+      <h1>Footy Picker</h1>
+    </div>
+    <div class="user-panel" id="user-panel">
+      <!-- Populated by auth.js -->
+    </div>
+  </header>
+
+  <!-- ========================= AUTH MODALS ========================= -->
+  <dialog id="modal-auth" class="modal">
+    <form class="modal-box" id="auth-form">
+      <h2 class="modal-title" id="auth-title">Log in</h2>
+      <label class="field">
+        <span>Email</span>
+        <input id="auth-email" type="email" placeholder="you@email.com" required />
+      </label>
+      <label class="field">
+        <span>Password</span>
+        <input id="auth-pass" type="password" placeholder="••••••••" required />
+      </label>
+      <div class="modal-actions">
+        <button type="submit" class="btn primary" id="auth-submit">Continue</button>
+        <button type="button" class="btn ghost" id="auth-cancel">Cancel</button>
+      </div>
+      <p class="helper" id="auth-helper"></p>
+    </form>
+  </dialog>
+
+  <!-- ========================= CREATE TOURNAMENT MODAL ========================= -->
+  <dialog id="modal-create-tournament" class="modal">
+    <form class="modal-box" id="create-tournament-form">
+      <h2 class="modal-title">Create New Tournament</h2>
+      
+      <label class="field">
+        <span>Tournament Name</span>
+        <input id="tournament-name" type="text" placeholder="e.g., Weekend Warriors" required />
+      </label>
+      
+      <label class="field">
+        <span>Description</span>
+        <textarea id="tournament-description" rows="3" placeholder="Describe your tournament..."></textarea>
+      </label>
+      
+      <label class="field">
+        <span>League</span>
+        <select id="tournament-league" required>
+          <option value="">Select a league</option>
+          <!-- League options will be populated -->
+        </select>
+      </label>
+      
+      <div class="form-row">
+        <label class="field">
+          <span>Start Date</span>
+          <input id="tournament-start-date" type="date" required />
+        </label>
+        <label class="field">
+          <span>End Date</span>
+          <input id="tournament-end-date" type="date" required />
+        </label>
+      </div>
+      
+      <div class="form-row">
+              <label class="field">
+        <span>Tournament Type</span>
+        <select id="tournament-type" required>
+          <option value="weekly">Weekly</option>
+          <option value="monthly">Monthly</option>
+          <option value="season-long">Season Long</option>
+          <option value="custom">Custom</option>
+        </select>
+      </label>
+      
+      <label class="field">
+        <span>Tournament Template</span>
+        <select id="tournament-template">
+          <option value="">No template (custom)</option>
+          <!-- Template options will be populated -->
+        </select>
+      </label>
+        <label class="field">
+          <span>Max Participants</span>
+          <input id="tournament-max-participants" type="number" placeholder="0 = unlimited" min="0" value="0" />
+        </label>
+      </div>
+      
+      <div class="form-row">
+        <label class="field">
+          <span>Entry Fee</span>
+          <input id="tournament-entry-fee" type="number" placeholder="0 = free" min="0" value="0" step="0.01" />
+        </label>
+        <label class="field">
+          <span>Prize Pool</span>
+          <input id="tournament-prize-pool" type="number" placeholder="0 = no prizes" min="0" value="0" step="0.01" />
+        </label>
+      </div>
+      
+      <label class="field checkbox">
+        <input id="tournament-is-public" type="checkbox" checked />
+        <span>Make Tournament Public</span>
+      </label>
+      
+      <div class="modal-actions">
+        <button type="submit" class="btn primary">Create Tournament</button>
+        <button type="button" class="btn ghost" id="create-tournament-cancel">Cancel</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- ========================= MAIN ========================= -->
+  <main class="container">
+    <!-- -------- Hero -------- -->
+    <section class="hero" aria-label="Overview">
+      <h2>Football Tournaments</h2>
+      <p>Compete in tournaments, track your progress, and climb the leaderboards.</p>
+    </section>
+
+    <!-- -------- Tournament Categories -------- -->
+    <section class="section" aria-labelledby="categories-title">
+      <div class="section-head">
+        <h2 id="categories-title">Tournament Categories</h2>
+      </div>
+      <div class="tournament-categories">
+        <button class="category-btn active" data-category="all">All Tournaments</button>
+        <button class="category-btn" data-category="weekly">Weekly</button>
+        <button class="category-btn" data-category="monthly">Monthly</button>
+        <button class="category-btn" data-category="season-long">Season Long</button>
+        <button class="category-btn" data-category="custom">Custom</button>
+      </div>
+    </section>
+
+    <!-- -------- My Tournaments -------- -->
+    <section class="section" aria-labelledby="my-tournaments-title">
+      <div class="section-head">
+        <h2 id="my-tournaments-title">My Tournaments</h2>
+      </div>
+      <div id="my-tournaments" class="tournaments-grid">
+        <!-- User's tournaments will be populated here -->
+      </div>
+      <div id="my-tournaments-empty" class="empty hidden">You haven't joined any tournaments yet.</div>
+      <div id="my-tournaments-loading" class="loading">Loading your tournaments…</div>
+    </section>
+
+    <!-- -------- Available Tournaments -------- -->
+    <section class="section" aria-labelledby="available-tournaments-title">
+      <div class="section-head">
+        <h2 id="available-tournaments-title">Available Tournaments</h2>
+      </div>
+      <div id="available-tournaments" class="tournaments-grid">
+        <!-- Available tournaments will be populated here -->
+      </div>
+      <div id="available-tournaments-empty" class="empty hidden">No tournaments available to join.</div>
+      <div id="available-tournaments-loading" class="loading">Loading available tournaments…</div>
+    </section>
+
+    <!-- -------- Actions -------- -->
+    <section class="section">
+      <div class="actions">
+        <button id="create-tournament-btn" class="btn primary">Create New Tournament</button>
+      </div>
+    </section>
+  </main>
+
+  <!-- ========================= FOOTER ========================= -->
+  <footer class="app-footer">
+    <small><a href="/admin.html" class="link">Admin</a></small>
+  </footer>
+
+  <!-- ========================= TEMPLATES ========================= -->
+  <template id="tournament-card-template">
+    <div class="tournament-card">
+      <div class="tournament-header">
+        <div class="tournament-logo">
+          <span class="tournament-icon">🎯</span>
+        </div>
+        <div class="tournament-info">
+          <h3 class="tournament-name"></h3>
+          <p class="tournament-description"></p>
+          <p class="tournament-league"></p>
+        </div>
+        <div class="tournament-status">
+          <span class="status-badge"></span>
+        </div>
+      </div>
+      <div class="tournament-details">
+        <div class="tournament-dates">
+          <p class="tournament-start"></p>
+          <p class="tournament-end"></p>
+        </div>
+        <div class="tournament-meta">
+          <p class="tournament-type"></p>
+          <p class="tournament-participants"></p>
+          <p class="tournament-prizes"></p>
+        </div>
+      </div>
+      <div class="tournament-actions">
+        <button class="btn primary join-tournament-btn">Join Tournament</button>
+        <button class="btn ghost view-tournament-btn">View Details</button>
+      </div>
+    </div>
+  </template>
+
+  <!-- ========================= SCRIPTS ========================= -->
+  <script type="module" src="/js/auth.js"></script>
+  <script type="module" src="/js/leagues.js"></script>
+  <script type="module" src="/js/tournaments.js"></script>
+  <script type="module" src="/js/nav.js"></script>
+  <script type="module">
+    import { onUserChanged, currentUser, isFirestoreReady } from './js/auth.js';
+    import { getLeagues } from './js/leagues.js';
+    import { 
+      getTournaments, 
+      getUserTournaments, 
+      createTournament, 
+      joinTournament,
+      getTournamentById,
+      getTournamentTemplates
+    } from './js/tournaments.js';
+
+    // DOM elements
+    const myTournamentsEl = document.getElementById('my-tournaments');
+    const myTournamentsEmptyEl = document.getElementById('my-tournaments-empty');
+    const myTournamentsLoadingEl = document.getElementById('my-tournaments-loading');
+    const availableTournamentsEl = document.getElementById('available-tournaments');
+    const availableTournamentsEmptyEl = document.getElementById('available-tournaments-empty');
+    const availableTournamentsLoadingEl = document.getElementById('available-tournaments-loading');
+    const createTournamentBtn = document.getElementById('create-tournament-btn');
+    const createTournamentModal = document.getElementById('modal-create-tournament');
+    const createTournamentForm = document.getElementById('create-tournament-form');
+    const createTournamentCancelBtn = document.getElementById('create-tournament-cancel');
+    const categoryBtns = document.querySelectorAll('.category-btn');
+    const tournamentLeagueSelect = document.getElementById('tournament-league');
+    const tournamentTemplateSelect = document.getElementById('tournament-template');
+
+    let currentCategory = 'all';
+    let allTournaments = [];
+    let userTournaments = [];
+    let availableLeagues = [];
+    let tournamentTemplates = [];
+
+    // Initialize page
+    async function initPage() {
+      if (await isFirestoreReady) {
+        await Promise.all([
+          loadLeagues(),
+          loadTemplates()
+        ]);
+        loadTournaments();
+      } else {
+        // Wait for Firestore to be ready
+        const unsubscribe = onUserChanged(() => {
+          if (isFirestoreReady) {
+            unsubscribe();
+            initPage();
+          }
+        });
+      }
+    }
+
+    // Load tournament templates
+    async function loadTemplates() {
+      try {
+        tournamentTemplates = await getTournamentTemplates();
+        populateTemplateSelect();
+      } catch (error) {
+        console.error('Error loading templates:', error);
+      }
+    }
+
+    // Populate template select dropdown
+    function populateTemplateSelect() {
+      if (!tournamentTemplateSelect) return;
+      
+      // Clear existing options except the first one
+      tournamentTemplateSelect.innerHTML = '<option value="">No template (custom)</option>';
+      
+      tournamentTemplates.forEach(template => {
+        const option = document.createElement('option');
+        option.value = template.id;
+        option.textContent = template.name;
+        tournamentTemplateSelect.appendChild(option);
+      });
+    }
+
+    // Load leagues for tournament creation
+    async function loadLeagues() {
+      try {
+        availableLeagues = await getLeagues({ status: 'active' });
+        populateLeagueSelect();
+      } catch (error) {
+        console.error('Error loading leagues:', error);
+      }
+    }
+
+    // Populate league select dropdown
+    function populateLeagueSelect() {
+      if (!tournamentLeagueSelect) return;
+      
+      tournamentLeagueSelect.innerHTML = '<option value="">Select a league</option>';
+      availableLeagues.forEach(league => {
+        const option = document.createElement('option');
+        option.value = league.id;
+        option.textContent = `${league.name} (${league.country})`;
+        tournamentLeagueSelect.appendChild(option);
+      });
+    }
+
+    // Load tournaments data
+    async function loadTournaments() {
+      try {
+        // Show loading states
+        myTournamentsLoadingEl.classList.remove('hidden');
+        availableTournamentsLoadingEl.classList.remove('hidden');
+        myTournamentsEmptyEl.classList.add('hidden');
+        availableTournamentsEmptyEl.classList.add('hidden');
+
+        // Load user tournaments
+        const user = currentUser();
+        if (user) {
+          userTournaments = await getUserTournaments();
+          renderMyTournaments();
+        }
+
+        // Load all available tournaments
+        allTournaments = await getTournaments({ status: 'active' });
+        renderAvailableTournaments();
+
+      } catch (error) {
+        console.error('Error loading tournaments:', error);
+        showError('Failed to load tournaments. Please try again.');
+      } finally {
+        myTournamentsLoadingEl.classList.add('hidden');
+        availableTournamentsLoadingEl.classList.add('hidden');
+      }
+    }
+
+    // Render user's tournaments
+    function renderMyTournaments() {
+      if (!userTournaments.length) {
+        myTournamentsEmptyEl.classList.remove('hidden');
+        return;
+      }
+
+      myTournamentsEmptyEl.classList.add('hidden');
+      myTournamentsEl.innerHTML = '';
+
+      userTournaments.forEach(tournament => {
+        const card = createTournamentCard(tournament, true);
+        myTournamentsEl.appendChild(card);
+      });
+    }
+
+    // Render available tournaments
+    function renderAvailableTournaments() {
+      const filteredTournaments = filterTournamentsByCategory(allTournaments);
+      const availableTournaments = filteredTournaments.filter(tournament => 
+        !userTournaments.some(userTournament => userTournament.id === tournament.id)
+      );
+
+      if (!availableTournaments.length) {
+        availableTournamentsEmptyEl.classList.remove('hidden');
+        return;
+      }
+
+      availableTournamentsEmptyEl.classList.add('hidden');
+      availableTournamentsEl.innerHTML = '';
+
+      availableTournaments.forEach(tournament => {
+        const card = createTournamentCard(tournament, false);
+        availableTournamentsEl.appendChild(card);
+      });
+    }
+
+    // Filter tournaments by category
+    function filterTournamentsByCategory(tournaments) {
+      if (currentCategory === 'all') return tournaments;
+      return tournaments.filter(tournament => tournament.type === currentCategory);
+    }
+
+    // Create tournament card element
+    function createTournamentCard(tournament, isUserTournament) {
+      const template = document.getElementById('tournament-card-template');
+      const card = template.content.firstElementChild.cloneNode(true);
+      
+      // Set tournament data
+      card.querySelector('.tournament-name').textContent = tournament.name;
+      card.querySelector('.tournament-description').textContent = tournament.description || 'No description';
+      
+      // Get league name
+      const league = availableLeagues.find(l => l.id === tournament.leagueId);
+      card.querySelector('.tournament-league').textContent = league ? `${league.name} (${league.country})` : 'Unknown League';
+      
+      // Set dates
+      const startDate = new Date(tournament.startDate);
+      const endDate = new Date(tournament.endDate);
+      card.querySelector('.tournament-start').textContent = `Starts: ${startDate.toLocaleDateString()}`;
+      card.querySelector('.tournament-end').textContent = `Ends: ${endDate.toLocaleDateString()}`;
+      
+      // Set meta information
+      card.querySelector('.tournament-type').textContent = `Type: ${tournament.type.replace('-', ' ')}`;
+      
+      const participantsText = tournament.maxParticipants > 0 
+        ? `${tournament.participants?.length || 0}/${tournament.maxParticipants} participants`
+        : `${tournament.participants?.length || 0} participants`;
+      card.querySelector('.tournament-participants').textContent = participantsText;
+      
+      // Set prize information
+      if (tournament.entryFee > 0 || tournament.prizePool > 0) {
+        let prizeText = '';
+        if (tournament.entryFee > 0) prizeText += `Entry: $${tournament.entryFee}`;
+        if (tournament.prizePool > 0) {
+          if (prizeText) prizeText += ' • ';
+          prizeText += `Prize: $${tournament.prizePool}`;
+        }
+        card.querySelector('.tournament-prizes').textContent = prizeText;
+      } else {
+        card.querySelector('.tournament-prizes').textContent = 'Free to enter';
+      }
+      
+      // Set status badge
+      const statusBadge = card.querySelector('.status-badge');
+      statusBadge.textContent = tournament.status;
+      statusBadge.className = `status-badge ${tournament.status}`;
+
+      // Handle actions
+      if (isUserTournament) {
+        // User is already in this tournament
+        const joinBtn = card.querySelector('.join-tournament-btn');
+        joinBtn.textContent = 'Current Tournament';
+        joinBtn.disabled = true;
+        joinBtn.classList.remove('primary');
+        joinBtn.classList.add('secondary');
+      } else {
+        // User can join this tournament
+        const joinBtn = card.querySelector('.join-tournament-btn');
+        joinBtn.addEventListener('click', () => handleJoinTournament(tournament.id));
+      }
+
+      // View details button
+      const viewBtn = card.querySelector('.view-tournament-btn');
+      viewBtn.addEventListener('click', () => handleViewTournament(tournament));
+
+      return card;
+    }
+
+    // Handle joining a tournament
+    async function handleJoinTournament(tournamentId) {
+      try {
+        const user = currentUser();
+        if (!user) {
+          showError('Please log in to join a tournament.');
+          return;
+        }
+
+        await joinTournament(tournamentId);
+        
+        // Refresh tournaments
+        await loadTournaments();
+        
+        showSuccess('Successfully joined the tournament!');
+        
+      } catch (error) {
+        console.error('Error joining tournament:', error);
+        showError(error.message || 'Failed to join tournament. Please try again.');
+      }
+    }
+
+    // Handle viewing tournament details
+    function handleViewTournament(tournament) {
+      // For now, just show tournament info
+      // In Phase 3, this will navigate to tournament details page
+      showSuccess(`Tournament: ${tournament.name}\nLeague: ${availableLeagues.find(l => l.id === tournament.leagueId)?.name || 'Unknown'}\nStatus: ${tournament.status}`);
+    }
+
+    // Handle creating a new tournament
+    async function handleCreateTournament(event) {
+      event.preventDefault();
+      
+      try {
+        const formData = new FormData(event.target);
+        const tournamentData = {
+          name: formData.get('tournament-name') || document.getElementById('tournament-name').value,
+          description: formData.get('tournament-description') || document.getElementById('tournament-description').value,
+          leagueId: document.getElementById('tournament-league').value,
+          type: document.getElementById('tournament-type').value,
+          startDate: document.getElementById('tournament-start-date').value,
+          endDate: document.getElementById('tournament-end-date').value,
+          maxParticipants: parseInt(document.getElementById('tournament-max-participants').value) || 0,
+          entryFee: parseFloat(document.getElementById('tournament-entry-fee').value) || 0,
+          prizePool: parseFloat(document.getElementById('tournament-prize-pool').value) || 0,
+          isPublic: document.getElementById('tournament-is-public').checked,
+          template: document.getElementById('tournament-template').value
+        };
+
+        // Validate required fields
+        if (!tournamentData.leagueId) {
+          throw new Error('Please select a league');
+        }
+
+        if (new Date(tournamentData.startDate) >= new Date(tournamentData.endDate)) {
+          throw new Error('End date must be after start date');
+        }
+
+        // If template is selected, apply template settings
+        if (tournamentData.template) {
+          const selectedTemplate = tournamentTemplates.find(t => t.id === tournamentData.template);
+          if (selectedTemplate) {
+            tournamentData.type = selectedTemplate.type;
+            tournamentData.maxParticipants = selectedTemplate.maxParticipants;
+            tournamentData.rules = selectedTemplate.rules;
+            tournamentData.scoringSystem = selectedTemplate.scoringSystem;
+          }
+        }
+
+        await createTournament(tournamentData);
+        
+        // Close modal and refresh
+        createTournamentModal.close();
+        createTournamentForm.reset();
+        await loadTournaments();
+        
+        showSuccess('Tournament created successfully!');
+        
+      } catch (error) {
+        console.error('Error creating tournament:', error);
+        showError(error.message || 'Failed to create tournament. Please try again.');
+      }
+    }
+
+    // Show success message
+    function showSuccess(message) {
+      // Simple success notification - you can enhance this
+      alert(message);
+    }
+
+    // Show error message
+    function showError(message) {
+      // Simple error notification - you can enhance this
+      alert('Error: ' + message);
+    }
+
+    // Event listeners
+    createTournamentBtn.addEventListener('click', () => {
+      createTournamentModal.showModal();
+    });
+
+    createTournamentCancelBtn.addEventListener('click', () => {
+      createTournamentModal.close();
+    });
+
+    createTournamentForm.addEventListener('submit', handleCreateTournament);
+
+    // Category filter buttons
+    categoryBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        // Update active state
+        categoryBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        
+        // Update current category and re-render
+        currentCategory = btn.dataset.category;
+        renderAvailableTournaments();
+      });
+    });
+
+    // Initialize page when DOM is ready
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initPage);
+    } else {
+      initPage();
+    }
+  </script>
+</body>
+</html>

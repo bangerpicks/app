@@ -1,0 +1,664 @@
+/* ========================================
+   FOOTY PREDICTOR - UPDATED STYLES
+   ======================================== */
+
+/* Reset and Base Styles */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    line-height: 1.6;
+    color: #333;
+    background: #26222E;
+    min-height: 100vh;
+}
+
+/* Container */
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 20px;
+}
+
+/* Header */
+.header {
+    background: rgba(241, 242, 242, 0.1);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid rgba(241, 242, 242, 0.2);
+    padding: 1rem 0;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
+
+.header-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.logo {
+    font-size: 2rem;
+    font-weight: bold;
+    color: #F1F2F2;
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+}
+
+.logo-image {
+    height: 50px;
+    width: auto;
+    max-width: 200px;
+    object-fit: contain;
+}
+
+.nav-menu {
+    display: flex;
+    list-style: none;
+    gap: 2rem;
+}
+
+.nav-menu a {
+    color: #F1F2F2;
+    text-decoration: none;
+    padding: 0.5rem 1rem;
+    border-radius: 25px;
+    transition: all 0.3s ease;
+}
+
+.nav-menu a:hover {
+    background: rgba(241, 242, 242, 0.2);
+    transform: translateY(-2px);
+}
+
+/* Main Content */
+.main-content {
+    padding: 3rem 0;
+}
+
+.hero-section {
+    text-align: center;
+    color: #F1F2F2;
+    margin-bottom: 4rem;
+}
+
+.hero-title {
+    font-size: 3.5rem;
+    font-weight: 700;
+    margin-bottom: 1rem;
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.hero-subtitle {
+    font-size: 1.3rem;
+    opacity: 0.9;
+    margin-bottom: 2rem;
+}
+
+.cta-button {
+    display: inline-block;
+    background: #DAFF00;
+    color: #26222E;
+    padding: 1rem 2rem;
+    border-radius: 50px;
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 1.1rem;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 15px rgba(218, 255, 0, 0.3);
+}
+
+.cta-button:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 6px 20px rgba(218, 255, 0, 0.4);
+    background: #E5FF33;
+}
+
+/* Cards Section */
+.cards-section {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 2rem;
+    margin: 4rem 0;
+}
+
+.card {
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 20px;
+    padding: 2rem;
+    text-align: center;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+    transition: all 0.3s ease;
+}
+
+.card:hover {
+    transform: translateY(-10px);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+}
+
+.card-icon {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    color: #DAFF00;
+}
+
+.card-title {
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin-bottom: 1rem;
+    color: #333;
+}
+
+.card-description {
+    color: #666;
+    line-height: 1.6;
+}
+
+/* Footer */
+.footer {
+    background: rgba(0, 0, 0, 0.1);
+    color: #F1F2F2;
+    text-align: center;
+    padding: 2rem 0;
+    margin-top: 4rem;
+}
+
+/* Gameweek Section */
+.gameweek-section {
+    margin: 4rem 0;
+}
+
+.gameweek-card {
+    background: #26222E;
+    border-radius: 20px;
+    overflow: hidden;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+.gameweek-banner {
+    background: #DAFF00;
+    padding: 1.5rem;
+    text-align: center;
+}
+
+.gameweek-banner h2 {
+    color: #26222E;
+    font-size: 1.8rem;
+    font-weight: 700;
+    margin: 0;
+}
+
+.gameweek-content {
+    padding: 3rem 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 2rem;
+}
+
+.prize-tier {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+}
+
+.prize-circle {
+    width: 80px;
+    height: 80px;
+    background: #DAFF00;
+    border-radius: 50%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+}
+
+.prize-label {
+    color: #26222E;
+    font-size: 0.7rem;
+    font-weight: 600;
+    line-height: 1;
+}
+
+.prize-text {
+    color: #26222E;
+    font-size: 0.9rem;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.prize-value {
+    color: #F1F2F2;
+    font-size: 1.5rem;
+    font-weight: 700;
+}
+
+.player-count {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex: 1;
+    justify-content: center;
+}
+
+.player-text {
+    color: #F1F2F2;
+    font-size: 1.2rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.dashed-line {
+    height: 2px;
+    background: repeating-linear-gradient(
+        to right,
+        #F1F2F2 0,
+        #F1F2F2 8px,
+        transparent 8px,
+        transparent 16px
+    );
+    flex: 1;
+    max-width: 100px;
+}
+
+/* Time Remaining */
+.time-remaining {
+    background: #DAFF00;
+    border-radius: 25px;
+    padding: 0.8rem 2rem;
+    text-align: center;
+    max-width: 300px;
+    margin: 2rem auto 0;
+    box-shadow: 0 4px 15px rgba(218, 255, 0, 0.3);
+}
+
+.time-text {
+    color: #26222E;
+    font-size: 1.1rem;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+}
+
+/* Match Predictor Card */
+.match-predictor-section {
+    margin: 4rem 0;
+}
+
+.match-card {
+    background: #26222E;
+    border-radius: 20px;
+    border: 1px solid rgba(241, 242, 242, 0.1);
+    overflow: hidden;
+    box-shadow: 0 15px 40px rgba(0, 0, 0, 0.3);
+    max-width: 900px;
+    margin: 0 auto;
+}
+
+/* Match Header */
+.match-header {
+    background: rgba(241, 242, 242, 0.1);
+    padding: 1rem 2rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid rgba(241, 242, 242, 0.1);
+}
+
+.league {
+    color: #F1F2F2;
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.date {
+    color: #F1F2F2;
+    font-weight: 500;
+    font-size: 0.9rem;
+}
+
+.status {
+    color: #F1F2F2;
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+/* Match Details */
+.match-details {
+    padding: 3rem 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 2rem;
+}
+
+.team {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    flex: 1;
+}
+
+.team-logo {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: rgba(241, 242, 242, 0.1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid rgba(241, 242, 242, 0.2);
+}
+
+.logo-img {
+    width: 60px;
+    height: 60px;
+    object-fit: contain;
+}
+
+.team-name {
+    color: #F1F2F2;
+    font-size: 1.1rem;
+    font-weight: 600;
+    text-align: center;
+}
+
+.team-score {
+    color: #F1F2F2;
+    font-size: 3rem;
+    font-weight: 700;
+    margin: 0.5rem 0;
+}
+
+.team-form {
+    display: flex;
+    gap: 0.3rem;
+}
+
+.form-indicator {
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: white;
+}
+
+.form-indicator.win {
+    background: #4CAF50;
+}
+
+.form-indicator.loss {
+    background: #F44336;
+}
+
+.form-indicator.draw {
+    background: #FF9800;
+}
+
+/* Match Center */
+.match-center {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.5rem;
+    flex: 0 0 auto;
+}
+
+.vs-text {
+    color: #DAFF00;
+    font-size: 1.5rem;
+    font-weight: 700;
+}
+
+.position-section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.position-label {
+    color: #F1F2F2;
+    font-size: 0.8rem;
+    font-weight: 500;
+}
+
+.position-circles {
+    display: flex;
+    gap: 1rem;
+}
+
+.position-circle {
+    width: 30px;
+    height: 30px;
+    background: #4CAF50;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: 700;
+    font-size: 0.9rem;
+}
+
+.form-label {
+    color: #F1F2F2;
+    font-size: 0.8rem;
+    font-weight: 500;
+}
+
+/* Prediction Buttons */
+.prediction-buttons {
+    padding: 2rem;
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    border-top: 1px solid rgba(241, 242, 242, 0.1);
+}
+
+.prediction-btn {
+    padding: 1rem 2rem;
+    border: none;
+    border-radius: 12px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    min-width: 120px;
+}
+
+.prediction-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+}
+
+.home-btn, .draw-btn {
+    background: white;
+    color: #26222E;
+}
+
+.away-btn {
+    background: #DAFF00;
+    color: #26222E;
+}
+
+.away-btn.selected {
+    box-shadow: 0 4px 15px rgba(218, 255, 0, 0.4);
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .header-content {
+        flex-direction: column;
+        gap: 1rem;
+        text-align: center;
+    }
+    
+    .nav-menu {
+        flex-direction: row;
+        gap: 1rem;
+        justify-content: center;
+    }
+    
+    .hero-title {
+        font-size: 2.5rem;
+    }
+    
+    .cards-section {
+        grid-template-columns: 1fr;
+    }
+    
+    .gameweek-content {
+        flex-direction: column;
+        gap: 2rem;
+        padding: 2rem 1rem;
+    }
+    
+    .player-count {
+        order: -1;
+        flex-direction: column;
+        gap: 1rem;
+    }
+    
+    .dashed-line {
+        width: 100%;
+        max-width: none;
+        height: 1px;
+    }
+    
+    .prize-circle {
+        width: 70px;
+        height: 70px;
+    }
+    
+    /* Match Card Mobile */
+    .match-details {
+        flex-direction: column;
+        gap: 1rem;
+        padding: 1.5rem 1rem;
+    }
+    
+    .team {
+        flex-direction: row;
+        gap: 0.8rem;
+        width: 100%;
+        align-items: center;
+        padding: 0.5rem 0;
+    }
+    
+    .team-logo {
+        width: 40px;
+        height: 40px;
+        flex-shrink: 0;
+    }
+    
+    .logo-img {
+        width: 30px;
+        height: 30px;
+    }
+    
+    .team-score {
+        font-size: 1.8rem;
+        margin: 0;
+        margin-left: auto;
+        margin-right: 1rem;
+    }
+    
+    .team-name {
+        font-size: 0.9rem;
+        flex: 1;
+    }
+    
+    .team-form {
+        display: flex;
+        gap: 0.2rem;
+        margin-left: auto;
+    }
+    
+    .form-indicator {
+        width: 18px;
+        height: 18px;
+        font-size: 0.6rem;
+    }
+    
+    .match-center {
+        order: -1;
+        flex-direction: column;
+        gap: 0.8rem;
+        width: 100%;
+        justify-content: center;
+        align-items: center;
+        padding: 1.5rem 0;
+        border-top: 1px solid rgba(241, 242, 242, 0.1);
+        border-bottom: 1px solid rgba(241, 242, 242, 0.1);
+    }
+    
+    .vs-text {
+        font-size: 1.8rem;
+        font-weight: 700;
+        color: #F1F2F2;
+    }
+    
+    .position-section {
+        flex-direction: row;
+        gap: 1rem;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    .position-label {
+        font-size: 0.8rem;
+        color: #F1F2F2;
+    }
+    
+    .position-circles {
+        gap: 0.8rem;
+    }
+    
+    .position-circle {
+        width: 28px;
+        height: 28px;
+        font-size: 0.9rem;
+    }
+    
+    .form-label {
+        font-size: 0.8rem;
+        color: #F1F2F2;
+    }
+    
+    .prediction-buttons {
+        flex-direction: row;
+        gap: 0.5rem;
+        padding: 1.5rem;
+        justify-content: space-between;
+    }
+    
+    .prediction-btn {
+        flex: 1;
+        min-width: auto;
+        padding: 0.8rem 1rem;
+        font-size: 0.9rem;
+    }
+}
+
+/* Utility Classes */
+.text-center { text-align: center; }
+.mb-1 { margin-bottom: 1rem; }
+.mb-2 { margin-bottom: 2rem; }
+.mb-3 { margin-bottom: 3rem; }
+.mt-1 { margin-top: 1rem; }
+.mt-2 { margin-top: 2rem; }
+.mt-3 { margin-top: 3rem; }

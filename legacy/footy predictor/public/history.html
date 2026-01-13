@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>My History • Footy Picker</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="stylesheet" href="/style.css" />
+  <meta name="api-sports-key" content="053bc3ed82f451e04159426e80a34c64" />
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand">
+      <span class="logo">⚽</span>
+      <h1>My History</h1>
+    </div>
+    <div class="user-panel" id="user-panel">
+      <!-- Populated by auth.js -->
+    </div>
+  </header>
+  <!-- AUTH MODAL -->
+  <dialog id="modal-auth" class="modal">
+    <form class="modal-box" id="auth-form">
+      <h2 class="modal-title" id="auth-title">Log in</h2>
+      <label class="field">
+        <span>Email</span>
+        <input id="auth-email" type="email" placeholder="you@email.com" required />
+      </label>
+      <label class="field">
+        <span>Password</span>
+        <input id="auth-pass" type="password" placeholder="••••••••" required />
+      </label>
+      <div class="modal-actions">
+        <button type="submit" class="btn primary" id="auth-submit">Continue</button>
+<button type="button" class="btn ghost" id="auth-cancel">Cancel</button>
+      </div>
+      <p class="helper" id="auth-helper"></p>
+    </form>
+  </dialog>
+
+  <main class="container">
+    <section class="section" aria-labelledby="hist-title">
+      <div class="section-head">
+        <h2 id="hist-title">Your picks and points</h2>
+      </div>
+      <div class="table-wrap">
+        <table class="table" id="hist-table">
+          <thead>
+            <tr>
+              <th>Fixture</th>
+              <th>Your Pick</th>
+              <th>Result</th>
+              <th>Point</th>
+            </tr>
+          </thead>
+          <tbody id="hist-body"></tbody>
+        </table>
+      </div>
+      <div id="hist-empty" class="empty hidden">Log in to see your history.</div>
+    </section>
+  </main>
+  <footer class="app-footer">
+    <small><a class="link" href="/">Back to Dashboard</a></small>
+  </footer>
+  <script type="module" src="/js/nav.js"></script>
+  <script type="module" src="/js/history.js"></script>
+</body>
+</html>
+
+

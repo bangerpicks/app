@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Advanced Tournament Management — Footy Picker</title>
+  <meta name="api-sports-key" content="053bc3ed82f451e04159426e80a34c64" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <!-- ========================= HEADER ========================= -->
+  <header class="app-header">
+    <div class="brand">
+      <span class="logo">⚽</span>
+      <h1>Advanced Tournament Management</h1>
+    </div>
+    <div class="user-panel" id="user-panel">
+      <!-- Populated by auth.js -->
+    </div>
+  </header>
+
+  <!-- ========================= AUTH MODALS ========================= -->
+  <dialog id="modal-auth" class="modal">
+    <form class="modal-box" id="auth-form">
+      <h2 class="modal-title" id="auth-title">Log in</h2>
+      <label class="field">
+        <span>Email</span>
+        <input id="auth-email" type="email" placeholder="you@email.com" required />
+      </label>
+      <label class="field">
+        <span>Password</span>
+        <input id="auth-pass" type="password" placeholder="••••••••" required />
+      </label>
+      <div class="modal-actions">
+        <button type="submit" class="btn primary" id="auth-submit">Continue</button>
+        <button type="button" class="btn ghost" id="auth-cancel">Cancel</button>
+      </div>
+      <p class="helper" id="auth-helper"></p>
+    </form>
+  </dialog>
+
+  <!-- ========================= CREATE STRUCTURE MODAL ========================= -->
+  <dialog id="modal-create-structure" class="modal">
+    <form class="modal-box" id="create-structure-form">
+      <h2 class="modal-title">Create Tournament Structure</h2>
+      
+      <label class="field">
+        <span>Tournament</span>
+        <select id="structure-tournament" required>
+          <option value="">Select a tournament</option>
+        </select>
+      </label>
+      
+      <label class="field">
+        <span>Structure Type</span>
+        <select id="structure-type" required>
+          <option value="knockout">Knockout Tournament</option>
+          <option value="group">Group Stage + Knockout</option>
+          <option value="hybrid">Hybrid (Custom)</option>
+        </select>
+      </label>
+      
+      <label class="field">
+        <span>Seeding Method</span>
+        <select id="structure-seeding">
+          <option value="random">Random</option>
+          <option value="ranked">Ranked by Performance</option>
+          <option value="manual">Manual Seeding</option>
+        </select>
+      </label>
+      
+      <div id="group-settings" class="hidden">
+        <label class="field">
+          <span>Number of Groups</span>
+          <select id="group-count">
+            <option value="2">2 Groups</option>
+            <option value="4" selected>4 Groups</option>
+            <option value="8">8 Groups</option>
+          </select>
+        </label>
+      </div>
+      
+      <label class="field">
+        <span>Tiebreaker Priority</span>
+        <div class="tiebreaker-list">
+          <label class="checkbox">
+            <input type="checkbox" value="goalDifference" checked />
+            <span>Goal Difference</span>
+          </label>
+          <label class="checkbox">
+            <input type="checkbox" value="goalsFor" checked />
+            <span>Goals For</span>
+          </label>
+          <label class="checkbox">
+            <input type="checkbox" value="headToHead" checked />
+            <span>Head to Head</span>
+          </label>
+        </div>
+      </label>
+      
+      <div class="modal-actions">
+        <button type="submit" class="btn primary">Create Structure</button>
+        <button type="button" class="btn ghost" id="create-structure-cancel">Cancel</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- ========================= NOTIFICATIONS MODAL ========================= -->
+  <dialog id="modal-notifications" class="modal">
+    <div class="modal-box">
+      <h2 class="modal-title">Notifications</h2>
+      <div id="notifications-list" class="notifications-list">
+        <!-- Notifications will be populated here -->
+      </div>
+      <div id="notifications-empty" class="empty">No notifications</div>
+      <div class="modal-actions">
+        <button type="button" class="btn ghost" id="notifications-close">Close</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- ========================= MAIN ========================= -->
+  <main class="container">
+    <!-- -------- Hero -------- -->
+    <section class="hero" aria-label="Overview">
+      <h2>Advanced Tournament Management</h2>
+      <p>Create complex tournament structures, manage knockout rounds, and handle group stages with advanced features.</p>
+    </section>
+
+    <!-- -------- Tournament Selection -------- -->
+    <section class="section" aria-labelledby="tournament-selection-title">
+      <div class="section-head">
+        <h2 id="tournament-selection-title">Select Tournament</h2>
+      </div>
+      <div class="tournament-selector">
+        <select id="tournament-selector" class="tournament-select">
+          <option value="">Choose a tournament to manage</option>
+        </select>
+        <button id="refresh-tournaments" class="btn secondary">Refresh</button>
+      </div>
+    </section>
+
+    <!-- -------- Structure Management -------- -->
+    <section class="section" aria-labelledby="structure-title">
+      <div class="section-head">
+        <h2 id="structure-title">Tournament Structure</h2>
+        <button id="create-structure-btn" class="btn primary">Create Structure</button>
+      </div>
+      <div id="structure-info" class="structure-info hidden">
+        <!-- Tournament structure information will be displayed here -->
+      </div>
+      <div id="no-structure" class="empty">No tournament structure created yet.</div>
+    </section>
+
+    <!-- -------- Advanced Features -------- -->
+    <section class="section" aria-labelledby="advanced-features-title">
+      <div class="section-head">
+        <h2 id="advanced-features-title">Advanced Features</h2>
+      </div>
+      <div class="advanced-features-grid">
+        <div class="feature-card">
+          <h3>Knockout Rounds</h3>
+          <p>Create single-elimination knockout brackets</p>
+          <button id="create-knockout-btn" class="btn secondary">Create Knockout</button>
+        </div>
+        
+        <div class="feature-card">
+          <h3>Group Stages</h3>
+          <p>Set up group stage competitions with standings</p>
+          <button id="create-groups-btn" class="btn secondary">Create Groups</button>
+        </div>
+        
+        <div class="feature-card">
+          <h3>Advanced Scoring</h3>
+          <p>Configure custom scoring rules and bonuses</p>
+          <button id="scoring-rules-btn" class="btn secondary">Configure</button>
+        </div>
+        
+        <div class="feature-card">
+          <h3>Real-time Updates</h3>
+          <p>Send notifications and live updates</p>
+          <button id="notifications-btn" class="btn secondary">View All</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- -------- Analytics Dashboard -------- -->
+    <section class="section" aria-labelledby="analytics-title">
+      <div class="section-head">
+        <h2 id="analytics-title">Tournament Analytics</h2>
+      </div>
+      <div class="analytics-grid">
+        <div class="analytics-card">
+          <h3>Participant Performance</h3>
+          <div id="performance-chart" class="chart-placeholder">
+            <p>Performance chart will be displayed here</p>
+          </div>
+        </div>
+        
+        <div class="analytics-card">
+          <h3>Scoring Trends</h3>
+          <div id="scoring-chart" class="chart-placeholder">
+            <p>Scoring trends will be displayed here</p>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ========================= FOOTER ========================= -->
+  <footer class="app-footer">
+    <small><a href="/" class="link">Dashboard</a> • <a href="/tournaments.html" class="link">Tournaments</a> • <a href="/admin.html" class="link">Admin</a></small>
+  </footer>
+
+  <!-- ========================= SCRIPTS ========================= -->
+  <script type="module" src="/js/auth.js"></script>
+  <script type="module" src="/js/leagues.js"></script>
+  <script type="module" src="/js/tournaments.js"></script>
+  <script type="module" src="/js/nav.js"></script>
+  <script type="module">
+    import { onUserChanged, currentUser, isFirestoreReady } from './js/auth.js';
+    import { getLeagues } from './js/leagues.js';
+    import { 
+      getUserTournaments,
+      createTournamentStructure,
+      createKnockoutRounds,
+      createGroupStages,
+      sendTournamentNotification,
+      getUserNotifications,
+      markNotificationAsRead
+    } from './js/tournaments.js';
+
+    // DOM elements
+    const tournamentSelector = document.getElementById('tournament-selector');
+    const refreshTournamentsBtn = document.getElementById('refresh-tournaments');
+    const createStructureBtn = document.getElementById('create-structure-btn');
+    const createStructureModal = document.getElementById('modal-create-structure');
+    const createStructureForm = document.getElementById('create-structure-form');
+    const createStructureCancelBtn = document.getElementById('create-structure-cancel');
+    const structureTournamentSelect = document.getElementById('structure-tournament');
+    const structureTypeSelect = document.getElementById('structure-type');
+    const structureSeedingSelect = document.getElementById('structure-seeding');
+    const groupSettings = document.getElementById('group-settings');
+    const groupCountSelect = document.getElementById('group-count');
+    const structureInfo = document.getElementById('structure-info');
+    const noStructure = document.getElementById('no-structure');
+    const createKnockoutBtn = document.getElementById('create-knockout-btn');
+    const createGroupsBtn = document.getElementById('create-groups-btn');
+    const notificationsBtn = document.getElementById('notifications-btn');
+    const notificationsModal = document.getElementById('modal-notifications');
+    const notificationsCloseBtn = document.getElementById('notifications-close');
+    const notificationsList = document.getElementById('notifications-list');
+    const notificationsEmpty = document.getElementById('notifications-empty');
+
+    let userTournaments = [];
+    let selectedTournament = null;
+
+    // Initialize page
+    async function initPage() {
+      if (await isFirestoreReady) {
+        await loadUserTournaments();
+        setupEventListeners();
+      } else {
+        const unsubscribe = onUserChanged(() => {
+          if (isFirestoreReady) {
+            unsubscribe();
+            initPage();
+          }
+        });
+      }
+    }
+
+    // Load user tournaments
+    async function loadUserTournaments() {
+      try {
+        const user = currentUser();
+        if (!user) return;
+
+        userTournaments = await getUserTournaments();
+        populateTournamentSelectors();
+      } catch (error) {
+        console.error('Error loading tournaments:', error);
+      }
+    }
+
+    // Populate tournament selectors
+    function populateTournamentSelectors() {
+      // Main tournament selector
+      tournamentSelector.innerHTML = '<option value="">Choose a tournament to manage</option>';
+      userTournaments.forEach(tournament => {
+        const option = document.createElement('option');
+        option.value = tournament.id;
+        option.textContent = tournament.name;
+        tournamentSelector.appendChild(option);
+      });
+
+      // Structure creation tournament selector
+      structureTournamentSelect.innerHTML = '<option value="">Select a tournament</option>';
+      userTournaments.forEach(tournament => {
+        const option = document.createElement('option');
+        option.value = tournament.id;
+        option.textContent = tournament.name;
+        structureTournamentSelect.appendChild(option);
+      });
+    }
+
+    // Setup event listeners
+    function setupEventListeners() {
+      // Tournament selection
+      tournamentSelector.addEventListener('change', handleTournamentSelection);
+      refreshTournamentsBtn.addEventListener('click', loadUserTournaments);
+
+      // Structure creation
+      createStructureBtn.addEventListener('click', () => createStructureModal.showModal());
+      createStructureCancelBtn.addEventListener('click', () => createStructureModal.close());
+      createStructureForm.addEventListener('submit', handleCreateStructure);
+      structureTypeSelect.addEventListener('change', handleStructureTypeChange);
+
+      // Advanced features
+      createKnockoutBtn.addEventListener('click', handleCreateKnockout);
+      createGroupsBtn.addEventListener('click', handleCreateGroups);
+      notificationsBtn.addEventListener('click', () => notificationsModal.showModal());
+      notificationsCloseBtn.addEventListener('click', () => notificationsModal.close());
+    }
+
+    // Handle tournament selection
+    function handleTournamentSelection(event) {
+      const tournamentId = event.target.value;
+      if (!tournamentId) {
+        selectedTournament = null;
+        hideStructureInfo();
+        return;
+      }
+
+      selectedTournament = userTournaments.find(t => t.id === tournamentId);
+      if (selectedTournament) {
+        loadTournamentStructure(tournamentId);
+      }
+    }
+
+    // Load tournament structure
+    async function loadTournamentStructure(tournamentId) {
+      try {
+        // For now, show placeholder structure info
+        // In a real implementation, this would fetch from Firestore
+        showStructureInfo({
+          type: 'Not yet created',
+          status: 'pending',
+          participants: selectedTournament.participants?.length || 0
+        });
+      } catch (error) {
+        console.error('Error loading tournament structure:', error);
+        hideStructureInfo();
+      }
+    }
+
+    // Show structure info
+    function showStructureInfo(structure) {
+      structureInfo.innerHTML = `
+        <div class="structure-details">
+          <h3>Structure Details</h3>
+          <p><strong>Type:</strong> ${structure.type}</p>
+          <p><strong>Status:</strong> ${structure.status}</p>
+          <p><strong>Participants:</strong> ${structure.participants}</p>
+        </div>
+      `;
+      structureInfo.classList.remove('hidden');
+      noStructure.classList.add('hidden');
+    }
+
+    // Hide structure info
+    function hideStructureInfo() {
+      structureInfo.classList.add('hidden');
+      noStructure.classList.remove('hidden');
+    }
+
+    // Handle structure type change
+    function handleStructureTypeChange(event) {
+      const type = event.target.value;
+      if (type === 'group' || type === 'hybrid') {
+        groupSettings.classList.remove('hidden');
+      } else {
+        groupSettings.classList.add('hidden');
+      }
+    }
+
+    // Handle create structure
+    async function handleCreateStructure(event) {
+      event.preventDefault();
+      
+      try {
+        const tournamentId = structureTournamentSelect.value;
+        const type = structureTypeSelect.value;
+        const seeding = structureSeedingSelect.value;
+        const groupCount = groupCountSelect.value;
+        
+        if (!tournamentId) {
+          throw new Error('Please select a tournament');
+        }
+
+        const structureData = {
+          type,
+          seeding,
+          stages: [],
+          groups: type === 'group' ? parseInt(groupCount) : 0,
+          knockoutRounds: type === 'knockout' ? [] : [],
+          tiebreakers: ['goalDifference', 'goalsFor', 'headToHead']
+        };
+
+        await createTournamentStructure(tournamentId, structureData);
+        
+        // Close modal and refresh
+        createStructureModal.close();
+        createStructureForm.reset();
+        
+        // Send notification to participants
+        await sendTournamentNotification(tournamentId, {
+          type: 'tournament_update',
+          title: 'Tournament Structure Created',
+          message: `Tournament structure has been created with ${type} format.`,
+          data: { structureType: type }
+        });
+
+        showSuccess('Tournament structure created successfully!');
+        
+        // Refresh the page to show new structure
+        if (selectedTournament && selectedTournament.id === tournamentId) {
+          loadTournamentStructure(tournamentId);
+        }
+        
+      } catch (error) {
+        console.error('Error creating structure:', error);
+        showError(error.message || 'Failed to create tournament structure.');
+      }
+    }
+
+    // Handle create knockout rounds
+    async function handleCreateKnockout() {
+      if (!selectedTournament) {
+        showError('Please select a tournament first');
+        return;
+      }
+
+      try {
+        const participants = selectedTournament.participants || [];
+        if (participants.length < 2) {
+          throw new Error('Need at least 2 participants for knockout rounds');
+        }
+
+        await createKnockoutRounds(selectedTournament.id, participants);
+        showSuccess('Knockout rounds created successfully!');
+        
+        // Send notification
+        await sendTournamentNotification(selectedTournament.id, {
+          type: 'tournament_update',
+          title: 'Knockout Rounds Created',
+          message: `Knockout tournament structure has been set up with ${participants.length} participants.`,
+          data: { participantCount: participants.length }
+        });
+        
+      } catch (error) {
+        console.error('Error creating knockout rounds:', error);
+        showError(error.message || 'Failed to create knockout rounds.');
+      }
+    }
+
+    // Handle create group stages
+    async function handleCreateGroups() {
+      if (!selectedTournament) {
+        showError('Please select a tournament first');
+        return;
+      }
+
+      try {
+        const participants = selectedTournament.participants || [];
+        if (participants.length < 4) {
+          throw new Error('Need at least 4 participants for group stages');
+        }
+
+        const groupCount = 4; // Default to 4 groups
+        await createGroupStages(selectedTournament.id, participants, groupCount);
+        showSuccess('Group stages created successfully!');
+        
+        // Send notification
+        await sendTournamentNotification(selectedTournament.id, {
+          type: 'tournament_update',
+          title: 'Group Stages Created',
+          message: `Group stage structure has been set up with ${groupCount} groups.`,
+          data: { groupCount, participantCount: participants.length }
+        });
+        
+      } catch (error) {
+        console.error('Error creating group stages:', error);
+        showError(error.message || 'Failed to create group stages.');
+      }
+    }
+
+    // Load and display notifications
+    async function loadNotifications() {
+      try {
+        const user = currentUser();
+        if (!user) return;
+
+        const notifications = await getUserNotifications(user.uid);
+        displayNotifications(notifications);
+      } catch (error) {
+        console.error('Error loading notifications:', error);
+      }
+    }
+
+    // Display notifications
+    function displayNotifications(notifications) {
+      if (!notifications || notifications.length === 0) {
+        notificationsEmpty.classList.remove('hidden');
+        notificationsList.innerHTML = '';
+        return;
+      }
+
+      notificationsEmpty.classList.add('hidden');
+      notificationsList.innerHTML = '';
+
+      notifications.forEach(notification => {
+        const notificationEl = createNotificationElement(notification);
+        notificationsList.appendChild(notificationEl);
+      });
+    }
+
+    // Create notification element
+    function createNotificationElement(notification) {
+      const div = document.createElement('div');
+      div.className = `notification-item ${notification.read ? 'read' : 'unread'}`;
+      div.innerHTML = `
+        <div class="notification-content">
+          <h4>${notification.title}</h4>
+          <p>${notification.message}</p>
+          <small>${new Date(notification.createdAt?.toDate()).toLocaleString()}</small>
+        </div>
+        <div class="notification-actions">
+          ${!notification.read ? `<button class="btn small mark-read" data-id="${notification.id}">Mark Read</button>` : ''}
+        </div>
+      `;
+
+      // Add event listener for mark as read
+      const markReadBtn = div.querySelector('.mark-read');
+      if (markReadBtn) {
+        markReadBtn.addEventListener('click', () => handleMarkAsRead(notification.id));
+      }
+
+      return div;
+    }
+
+    // Handle mark as read
+    async function handleMarkAsRead(notificationId) {
+      try {
+        await markNotificationAsRead(notificationId);
+        await loadNotifications(); // Refresh notifications
+      } catch (error) {
+        console.error('Error marking notification as read:', error);
+      }
+    }
+
+    // Show success message
+    function showSuccess(message) {
+      alert(message); // Simple success notification
+    }
+
+    // Show error message
+    function showError(message) {
+      alert('Error: ' + message); // Simple error notification
+    }
+
+    // Initialize page when DOM is ready
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initPage);
+    } else {
+      initPage();
+    }
+  </script>
+
+  <style>
+    .tournament-selector {
+      display: flex;
+      gap: 1rem;
+      align-items: center;
+    }
+
+    .tournament-select {
+      flex: 1;
+      padding: 0.75rem;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      font-size: 1rem;
+    }
+
+    .structure-info {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.5rem;
+      margin: 1rem 0;
+    }
+
+    .advanced-features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 1.5rem;
+      margin: 1rem 0;
+    }
+
+    .feature-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.5rem;
+      text-align: center;
+    }
+
+    .feature-card h3 {
+      margin: 0 0 0.5rem 0;
+      color: var(--accent);
+    }
+
+    .feature-card p {
+      margin: 0 0 1rem 0;
+      color: var(--muted);
+    }
+
+    .analytics-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 1.5rem;
+      margin: 1rem 0;
+    }
+
+    .analytics-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.5rem;
+    }
+
+    .chart-placeholder {
+      background: var(--bg);
+      border: 2px dashed var(--border);
+      border-radius: var(--radius);
+      padding: 2rem;
+      text-align: center;
+      color: var(--muted);
+    }
+
+    .tiebreaker-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .checkbox {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .notifications-list {
+      max-height: 400px;
+      overflow-y: auto;
+    }
+
+    .notification-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .notification-item:last-child {
+      border-bottom: none;
+    }
+
+    .notification-item.unread {
+      background: var(--bg);
+      border-left: 3px solid var(--accent);
+    }
+
+    .notification-content h4 {
+      margin: 0 0 0.25rem 0;
+    }
+
+    .notification-content p {
+      margin: 0 0 0.25rem 0;
+      color: var(--muted);
+    }
+
+    .notification-content small {
+      color: var(--muted);
+      font-size: 0.875rem;
+    }
+
+    .btn.small {
+      padding: 0.25rem 0.5rem;
+      font-size: 0.875rem;
+    }
+
+    @media (max-width: 768px) {
+      .tournament-selector {
+        flex-direction: column;
+        align-items: stretch;
+      }
+      
+      .advanced-features-grid {
+        grid-template-columns: 1fr;
+      }
+      
+      .analytics-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</body>
+</html>
