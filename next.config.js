@@ -1,7 +1,10 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  productionBrowserSourceMaps: true,
+  output: 'export',
   images: {
+    unoptimized: true,
     domains: ['api-football.com', 'media.api-sports.io'],
   },
   // Disable output file tracing which can cause EISDIR errors on Windows

@@ -3,9 +3,10 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/lib/AuthProvider'
 import { ShopClient } from '@/components/dashboard/ShopClient'
+import { ShopComingSoon } from '@/components/dashboard/ShopComingSoon'
 import { NotSignedIn } from '@/components/dashboard/NotSignedIn'
 import { ShopItem } from '@/types/shop'
-import { getUserDisplayName, getUserPoints } from '@/lib/users'
+import { getUserData } from '@/lib/users'
 
 // TODO: Replace with actual data fetching from Firebase/Firestore
 // This is mock data for initial development
@@ -110,14 +111,11 @@ export default function ShopPage() {
 
   useEffect(() => {
     if (user) {
-      // Fetch display name and points from Firestore
-      Promise.all([
-        getUserDisplayName(user),
-        getUserPoints(user)
-      ])
-        .then(([displayName, points]) => {
+      // Fetch display name and referral points from Firestore in a single call
+      getUserData(user)
+        .then(({ displayName, referralPoints }) => {
           setUsername(displayName)
-          setUserPoints(points)
+          setUserPoints(referralPoints)
         })
         .catch((error) => {
           console.error('Error fetching user data:', error)
@@ -144,8 +142,18 @@ export default function ShopPage() {
     return <NotSignedIn />
   }
 
+  // Check if coming soon mode is enabled via environment variable
+  const isComingSoon = process.env.NEXT_PUBLIC_SHOP_COMING_SOON === 'true'
+
   // TODO: Fetch real shop items from Firebase
   // const shopItems = await getShopItems()
 
-  return <ShopClient items={mockShopItems} userPoints={userPoints} username={username} />
+  // Render coming soon page if enabled, otherwise render full shop
+  if (isComingSoon) {
+    return <ShopComingSoon username={username} />
+  }
+
+  return (
+    <ShopClient items={mockShopItems} userPoints={userPoints} username={username} />
+  )
 }

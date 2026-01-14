@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl'
 import { Header } from './Header'
 import { BottomNavigation } from './BottomNavigation'
 import { RankingsTable } from './RankingsTable'
+import { ReferralPopup } from './ReferralPopup'
 import { RankingEntry, RankingView, GameweekRankingData } from '@/types/dashboard'
 import { Trophy, Medal, Award } from 'lucide-react'
 
@@ -137,17 +138,16 @@ export function RankingsClient({
     }
   }, [])
 
-  useEffect(() => {
-    // Disable Next.js scroll restoration
-    if ('scrollRestoration' in window.history) {
-      window.history.scrollRestoration = 'manual'
-    }
-  }, [])
+  // REMOVED: Scroll restoration setting - was causing conflicts with Next.js router
+  // Next.js manages scroll restoration internally
 
   return (
     <div ref={containerRef} className="min-h-[100dvh] min-h-screen bg-midnight-violet flex flex-col">
       {/* Header */}
       <Header username={username} />
+
+      {/* Referral Popup */}
+      <ReferralPopup />
 
       {/* Main Content */}
       <main className={`flex-1 px-4 sm:px-5 pb-20 sm:pb-24 flex flex-col items-center overflow-x-hidden ${

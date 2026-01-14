@@ -1,14 +1,14 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { Timestamp } from 'firebase/firestore'
 import { useAuth } from '@/lib/AuthProvider'
-import { getUserDisplayName } from '@/lib/users'
+import { getUserDisplayName, hasSeenOnboardingIntro } from '@/lib/users'
 import { getUserPredictions, getGameweekPlayerCount } from '@/lib/predictions'
 import { DashboardClient } from '@/components/dashboard/DashboardClient'
+import { OnboardingIntro } from '@/components/dashboard/OnboardingIntro'
 import { GameweekData, MatchCardData, GameweekStatus, FormResult } from '@/types/dashboard'
 import { getActiveGameweek, getGameweekFixtures, AdminGameweekData, GameweekFixtureData } from '@/lib/admin'
-import { getStandings } from '@/lib/api-football'
 import { useLiveMatches } from '@/lib/useLiveMatches'
 
 /**
@@ -57,16 +57,6 @@ function formatTime(date: Date): string {
   }).format(date)
 }
 
-/**
- * Calculate season year from date (season starts in August)
- */
-function calculateSeason(date: Date): number {
-  const year = date.getFullYear()
-  const month = date.getMonth() + 1 // 1-12
-  // If date is Jan-Jul, we're in second half of season (use previous year)
-  // If date is Aug-Dec, we're in first half of season (use current year)
-  return month >= 8 ? year : year - 1
-}
 
 /**
  * Convert form string (e.g., "WWDLW") to FormResult array
@@ -240,8 +230,10 @@ export default function DashboardPage() {
   const [gameweek, setGameweek] = useState<GameweekData | null>(null)
   const [initialMatches, setInitialMatches] = useState<MatchCardData[]>([])
   const [gameweekId, setGameweekId] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [loadingGameweek, setLoadingGameweek] = useState(true)
+  const [loadingPredictions, setLoadingPredictions] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [showOnboarding, setShowOnboarding] = useState(false)
 
   useEffect(() => {
     if (user) {
@@ -254,18 +246,31 @@ export default function DashboardPage() {
           console.error('Error fetching display name:', error)
           setUsername(user.displayName || undefined)
         })
+      
+      // Check if user has seen onboarding intro (fallback check)
+      hasSeenOnboardingIntro(user)
+        .then((hasSeen) => {
+          if (!hasSeen) {
+            setShowOnboarding(true)
+          }
+        })
+        .catch((error) => {
+          console.error('Error checking onboarding status:', error)
+          // Don't show onboarding on error to avoid blocking user
+        })
     } else {
       setUsername(undefined)
+      setShowOnboarding(false)
     }
   }, [user])
 
   useEffect(() => {
     async function fetchActiveGameweek() {
       try {
-        setLoading(true)
+        setLoadingGameweek(true)
         setError(null)
         
-        // Fetch active gameweek
+        // STEP 1: Fetch critical data first (gameweek and fixtures)
         const activeGameweek = await getActiveGameweek()
         
         if (!activeGameweek) {
@@ -274,63 +279,47 @@ export default function DashboardPage() {
           setGameweek(mockGameweek)
           setInitialMatches(mockMatches)
           setGameweekId(null)
-          setLoading(false)
+          setLoadingGameweek(false)
           return
         }
         
-        // Convert admin gameweek to dashboard format
+        // Convert admin gameweek to dashboard format (without player count initially)
         const convertedGameweek = convertGameweekData(activeGameweek)
         setGameweekId(activeGameweek.gameweekId)
+        setGameweek({ ...convertedGameweek, playerCount: 0 }) // Set playerCount to 0 initially
         
-        // Fetch player count for the gameweek
-        let playerCount = 0
-        if (activeGameweek.fixtureIds && activeGameweek.fixtureIds.length > 0) {
-          try {
-            playerCount = await getGameweekPlayerCount(activeGameweek.fixtureIds)
-          } catch (err) {
-            console.warn('Error fetching player count:', err)
-            // Continue with 0 if there's an error
-          }
-        }
-        
-        // Update gameweek with player count
-        const gameweekWithCount = { ...convertedGameweek, playerCount }
-        setGameweek(gameweekWithCount)
-        
-        // Fetch fixtures for the gameweek
+        // Fetch fixtures for the gameweek (critical - needed to show matches)
         const fixtures = await getGameweekFixtures(activeGameweek.gameweekId)
         
-        // Group fixtures by league to fetch standings efficiently
-        const leaguesMap = new Map<number, { leagueId: number; date: Date }>()
-        fixtures.forEach((fixture) => {
-          const leagueId = fixture.league.id
-          const fixtureDate = new Date(fixture.fixture.fixture.date)
-          if (!leaguesMap.has(leagueId)) {
-            leaguesMap.set(leagueId, { leagueId, date: fixtureDate })
-          }
-        })
-        
-        // Fetch standings for each unique league
+        // Extract standings from gameweek data (stored during creation)
         const teamPositions = new Map<number, number>()
         const teamForms = new Map<number, FormResult[]>()
         
-        await Promise.all(
-          Array.from(leaguesMap.values()).map(async ({ leagueId, date }) => {
-            try {
-              const season = calculateSeason(date)
-              const standings = await getStandings(leagueId, season)
-              standings.forEach((team) => {
-                teamPositions.set(team.team.id, team.rank)
-                teamForms.set(team.team.id, convertFormString(team.form))
-              })
-            } catch (err) {
-              console.warn(`Error fetching standings for league ${leagueId}:`, err)
-              // Continue without standings for this league
+        if (activeGameweek.standings) {
+          // Convert stored standings to Maps for use in convertFixtureToMatchCard
+          Object.entries(activeGameweek.standings).forEach(([leagueId, standings]) => {
+            if (!Array.isArray(standings)) {
+              console.warn(`[dashboard] League ${leagueId} standings is not an array:`, typeof standings, standings)
+              return
             }
+            
+            standings.forEach((team) => {
+              if (team && team.team && typeof team.team.id === 'number') {
+                teamPositions.set(team.team.id, team.rank)
+                teamForms.set(team.team.id, convertFormString(team.form || ''))
+              } else {
+                console.warn('[dashboard] Invalid team data in standings:', {
+                  leagueId,
+                  team,
+                  teamId: team?.team?.id,
+                  teamIdType: typeof team?.team?.id
+                })
+              }
+            })
           })
-        )
+        }
         
-        // Convert fixtures to match card format with positions and form
+        // Convert fixtures to match card format WITH standings (if available)
         const convertedMatches = fixtures.map((fixture) =>
           convertFixtureToMatchCard(fixture, teamPositions, teamForms)
         )
@@ -338,27 +327,45 @@ export default function DashboardPage() {
         const sortedMatches = convertedMatches.sort((a, b) => 
           a.date.getTime() - b.date.getTime()
         )
-
-        // Load user predictions if user is authenticated
+        
+        // Show matches immediately (with standings if available)
+        setInitialMatches(sortedMatches)
+        setLoadingGameweek(false) // Critical data loaded, show page
+        
+        // STEP 2: Load secondary data in background (player count, predictions)
+        
+        // Load player count in background
+        if (activeGameweek.fixtureIds && activeGameweek.fixtureIds.length > 0) {
+          getGameweekPlayerCount(activeGameweek.fixtureIds)
+            .then((playerCount) => {
+              setGameweek((prev) => prev ? { ...prev, playerCount } : null)
+            })
+            .catch((err) => {
+              console.warn('Error fetching player count:', err)
+              // Continue with 0 if there's an error
+            })
+        }
+        
+        // Load user predictions in background if user is authenticated
         if (user) {
+          setLoadingPredictions(true)
           try {
             const fixtureIds = sortedMatches.map((match) => match.fixtureId)
             const predictions = await getUserPredictions(user.uid, fixtureIds)
             
             // Merge predictions into match data
-            const matchesWithPredictions = sortedMatches.map((match) => ({
-              ...match,
-              userPrediction: predictions.get(match.fixtureId) || null,
-            }))
-            
-            setInitialMatches(matchesWithPredictions)
+            setInitialMatches((prevMatches) => {
+              return prevMatches.map((match) => ({
+                ...match,
+                userPrediction: predictions.get(match.fixtureId) || null,
+              }))
+            })
           } catch (err) {
             console.warn('Error loading user predictions:', err)
             // Continue without predictions if loading fails
-            setInitialMatches(sortedMatches)
+          } finally {
+            setLoadingPredictions(false)
           }
-        } else {
-          setInitialMatches(sortedMatches)
         }
       } catch (err: any) {
         console.error('Error fetching active gameweek:', err)
@@ -367,8 +374,8 @@ export default function DashboardPage() {
         setGameweek(mockGameweek)
         setInitialMatches(mockMatches)
         setGameweekId(null)
-      } finally {
-        setLoading(false)
+        setLoadingGameweek(false)
+        setLoadingPredictions(false)
       }
     }
     
@@ -377,13 +384,26 @@ export default function DashboardPage() {
 
   // Use fetched data or fallback to mock data
   const displayGameweek = gameweek || mockGameweek
-  const baseMatches = initialMatches.length > 0 ? initialMatches : mockMatches
+  // Memoize baseMatches to prevent unnecessary re-renders in useLiveMatches
+  const baseMatches = useMemo(() => {
+    return initialMatches.length > 0 ? initialMatches : mockMatches
+  }, [initialMatches])
   
   // Apply live updates to matches via Firestore listeners (updated by Cloud Function)
   // Hook must be called before early returns to maintain consistent hook order
   const liveMatches = useLiveMatches(gameweekId, baseMatches)
 
-  if (authLoading || loading) {
+  // Show loading only for auth, not for data (progressive loading)
+  if (authLoading) {
+    return (
+      <div className="min-h-[100dvh] min-h-screen bg-midnight-violet flex items-center justify-center">
+        <div className="text-ivory">Loading...</div>
+      </div>
+    )
+  }
+  
+  // Show page skeleton if critical data (gameweek) is still loading
+  if (loadingGameweek && !gameweek) {
     return (
       <div className="min-h-[100dvh] min-h-screen bg-midnight-violet flex items-center justify-center">
         <div className="text-ivory">Loading...</div>
@@ -400,11 +420,16 @@ export default function DashboardPage() {
   }
 
   return (
-    <DashboardClient
-      gameweek={displayGameweek}
-      playerCount={displayGameweek.playerCount}
-      matches={liveMatches}
-      username={username}
-    />
+    <>
+      <DashboardClient
+        gameweek={displayGameweek}
+        playerCount={displayGameweek.playerCount}
+        matches={liveMatches}
+        username={username}
+      />
+      <OnboardingIntro isOpen={showOnboarding} onClose={() => {
+        setShowOnboarding(false);
+      }} />
+    </>
   )
 }

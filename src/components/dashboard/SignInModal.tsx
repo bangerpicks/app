@@ -5,7 +5,9 @@ import { createPortal } from 'react-dom'
 import { signInWithPhoneNumber, RecaptchaVerifier, ConfirmationResult, updateProfile } from 'firebase/auth'
 import { auth } from '@/lib/firebase'
 import { ensureUserDocument } from '@/lib/users'
+import { trackReferralSignup } from '@/lib/referrals'
 import { getRandomSuggestions } from '@/data/displayNameSuggestions'
+import { OnboardingIntro } from './OnboardingIntro'
 
 interface SignInModalProps {
   isOpen: boolean
@@ -49,7 +51,8 @@ export function SignInModal({ isOpen, onClose }: SignInModalProps) {
   const [countryCode, setCountryCode] = useState('+1')
   const [phoneNumber, setPhoneNumber] = useState('')
   const [verificationCode, setVerificationCode] = useState('')
-  const [step, setStep] = useState<'phone' | 'code' | 'displayName'>('phone')
+  const [step, setStep] = useState<'phone' | 'code' | 'displayName' | 'onboarding'>('phone')
+  const [showOnboarding, setShowOnboarding] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null)
@@ -59,6 +62,29 @@ export function SignInModal({ isOpen, onClose }: SignInModalProps) {
   const [selectedDisplayName, setSelectedDisplayName] = useState<string>('')
   const [customDisplayName, setCustomDisplayName] = useState<string>('')
   const [recommendedNames] = useState<string[]>(() => getRandomSuggestions(12))
+  const [referralCode, setReferralCode] = useState<string | null>(null)
+
+  // Capture referral code from URL on mount
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    
+    // Check URL parameters
+    const urlParams = new URLSearchParams(window.location.search)
+    const ref = urlParams.get('ref')
+    
+    if (ref) {
+      const trimmedRef = ref.trim().toUpperCase()
+      setReferralCode(trimmedRef)
+      // Store in sessionStorage as backup
+      sessionStorage.setItem('referralCode', trimmedRef)
+    } else {
+      // Check sessionStorage if URL doesn't have ref
+      const storedRef = sessionStorage.getItem('referralCode')
+      if (storedRef) {
+        setReferralCode(storedRef)
+      }
+    }
+  }, [])
 
   // Handle mounting for portal
   useEffect(() => {
@@ -194,12 +220,32 @@ export function SignInModal({ isOpen, onClose }: SignInModalProps) {
       // Update Firebase Auth profile
       await updateProfile(user, { displayName: trimmedDisplayName })
 
-      // Save to Firestore
-      await ensureUserDocument(user, trimmedDisplayName)
+      // Save to Firestore (with referral code if present)
+      // Check if this is a new user
+      const { isNewUser } = await ensureUserDocument(user, trimmedDisplayName, referralCode || undefined)
 
-      // Success - Firebase Auth state will update automatically
-      onClose()
-      resetForm()
+      // Process referral if code was provided
+      if (referralCode) {
+        try {
+          await trackReferralSignup(user.uid, referralCode)
+        } catch (refError) {
+          console.error('Error processing referral:', refError)
+          // Don't fail signup if referral processing fails
+        }
+        // Clear referral code from sessionStorage
+        if (typeof window !== 'undefined') {
+          sessionStorage.removeItem('referralCode')
+        }
+      }
+
+      // If this is a new user, show onboarding
+      if (isNewUser) {
+        setShowOnboarding(true)
+      } else {
+        // Existing user - close modal
+        onClose()
+        resetForm()
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to update display name')
       console.error('Display name update error:', err)
@@ -216,10 +262,18 @@ export function SignInModal({ isOpen, onClose }: SignInModalProps) {
     setError(null)
     setSelectedDisplayName('')
     setCustomDisplayName('')
+    setShowOnboarding(false)
+    // Don't clear referralCode - keep it for the session
     if (recaptchaVerifierRef.current) {
       recaptchaVerifierRef.current.clear()
       recaptchaVerifierRef.current = null
     }
+  }
+
+  const handleOnboardingClose = () => {
+    setShowOnboarding(false)
+    onClose()
+    resetForm()
   }
 
   const handleClose = () => {
@@ -409,5 +463,10 @@ export function SignInModal({ isOpen, onClose }: SignInModalProps) {
     </div>
   )
 
-  return createPortal(modalContent, document.body)
+  return (
+    <>
+      {createPortal(modalContent, document.body)}
+      <OnboardingIntro isOpen={showOnboarding} onClose={handleOnboardingClose} />
+    </>
+  )
 }

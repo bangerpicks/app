@@ -4,7 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "node scripts/dev-with-ip.js",
+    "prebuild": "node -e \"const fs=require('fs');try{fs.rmSync('.next',{recursive:true,force:true})}catch(e){}\"",
     "build": "next build",
+    "build:safe": "npm run prebuild && npm run build",
     "start": "next start",
     "lint": "next lint",
     "type-check": "tsc --noEmit",

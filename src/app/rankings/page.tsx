@@ -44,39 +44,37 @@ export default function RankingsPage() {
   }, [user])
 
   useEffect(() => {
-    // Fetch all-time rankings when user is available
-    const fetchRankings = async () => {
+    // Fetch all rankings data when user is available
+    // Parallelize all-time rankings with weekly rankings for better performance
+    const fetchAllRankings = async () => {
       setRankingsLoading(true)
-      setRankingsError(null)
-      try {
-        const rankings = await getAllTimeRankings(user, 100)
-        setAllTimeRankings(rankings)
-      } catch (error) {
-        console.error('Error fetching all-time rankings:', error)
-        setRankingsError('Failed to load rankings. Please try again later.')
-        setAllTimeRankings([])
-      } finally {
-        setRankingsLoading(false)
-      }
-    }
-
-    if (user) {
-      fetchRankings()
-    } else {
-      setAllTimeRankings([])
-      setRankingsLoading(false)
-    }
-  }, [user])
-
-  useEffect(() => {
-    // Fetch weekly rankings when user is available
-    const fetchWeeklyRankings = async () => {
       setWeeklyLoading(true)
+      setRankingsError(null)
       setWeeklyError(null)
+      
+      let allTimeRankingsResult: RankingEntry[] = []
+      
       try {
-        // Get current gameweek
-        const currentGameweek = await getCurrentGameweek()
-        
+        // Start fetching all-time rankings and current gameweek in parallel
+        const [rankingsResult, currentGameweek] = await Promise.all([
+          getAllTimeRankings(user, 100).catch((error) => {
+            console.error('Error fetching all-time rankings:', error)
+            setRankingsError('Failed to load rankings. Please try again later.')
+            return []
+          }),
+          getCurrentGameweek().catch((error) => {
+            console.error('Error fetching current gameweek:', error)
+            return null
+          }),
+        ])
+
+        allTimeRankingsResult = rankingsResult
+
+        // Set all-time rankings immediately
+        setAllTimeRankings(allTimeRankingsResult)
+        setRankingsLoading(false)
+
+        // Handle weekly rankings if gameweek is available
         if (!currentGameweek) {
           // No gameweek available, disable weekly view
           setWeeklyRankings(undefined)
@@ -96,31 +94,40 @@ export default function RankingsPage() {
           return
         }
 
-        // Transform gameweek data
-        const transformedData = await transformGameweekData(currentGameweek, fixtures)
-        setGameweekData(transformedData)
+        // Parallelize transformGameweekData and getWeeklyRankings since they're independent
+        const [transformedData, rankings] = await Promise.all([
+          transformGameweekData(currentGameweek, fixtures),
+          getWeeklyRankings(
+            currentGameweek.gameweekId,
+            user?.uid || null
+          ),
+        ])
 
-        // Get weekly rankings
-        const rankings = await getWeeklyRankings(
-          currentGameweek.gameweekId,
-          user?.uid || null
-        )
+        setGameweekData(transformedData)
         setWeeklyRankings(rankings)
+        setWeeklyLoading(false)
       } catch (error) {
-        console.error('Error fetching weekly rankings:', error)
+        console.error('Error fetching rankings:', error)
+        // Ensure loading states are cleared on error
+        setRankingsLoading(false)
+        setWeeklyLoading(false)
+        // Only set error if we don't have all-time rankings loaded
+        if (allTimeRankingsResult.length === 0) {
+          setRankingsError('Failed to load rankings. Please try again later.')
+        }
         setWeeklyError('Failed to load weekly rankings. Please try again later.')
         setWeeklyRankings(undefined)
         setGameweekData(undefined)
-      } finally {
-        setWeeklyLoading(false)
       }
     }
 
     if (user) {
-      fetchWeeklyRankings()
+      fetchAllRankings()
     } else {
+      setAllTimeRankings([])
       setWeeklyRankings(undefined)
       setGameweekData(undefined)
+      setRankingsLoading(false)
       setWeeklyLoading(false)
     }
   }, [user])

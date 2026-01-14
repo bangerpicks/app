@@ -42,10 +42,15 @@ Firestore Database
   photoURL: string | null;          // Profile photo URL
   
   // Statistics
-  points: number;                   // Total accumulated points
+  points: number;                   // Total accumulated points (competitive points only)
   totalPredictions: number;         // Total predictions made
   correctPredictions: number;       // Correct predictions count
   accuracy: number;                 // Accuracy percentage (0-100)
+  
+  // Referral System
+  referralCode: string;             // Unique referral code for this user
+  referralPoints: number;           // Shop-only points from referrals (default: 0)
+  referredBy: string | null;        // UID of referring user (optional, for analytics)
   
   // Preferences
   favoriteTeam: {
@@ -72,6 +77,9 @@ Firestore Database
   "totalPredictions": 50,
   "correctPredictions": 35,
   "accuracy": 70,
+  "referralCode": "ABC1234",
+  "referralPoints": 15,
+  "referredBy": null,
   "favoriteTeam": {
     "id": 33,
     "name": "Manchester United",
@@ -409,7 +417,45 @@ Firestore Database
 - Update: Admin only (for status updates)
 - Delete: Not allowed (redemptions are permanent records)
 
-### 6. Settings Collection
+### 6. Referrals Collection
+
+**Path**: `referrals/{referralId}`
+
+**Description**: Tracks referral relationships and rewards.
+
+**Document Structure**:
+```typescript
+{
+  referrerUid: string;              // User who made the referral
+  referredUid: string;              // User who was referred
+  referralCode: string;             // Referral code used
+  status: 'pending' | 'completed';  // Referral status
+  pointsAwarded: number;            // Points awarded (5)
+  createdAt: Timestamp;             // When referral was created
+  completedAt: Timestamp | null;    // When referral was completed
+}
+```
+
+**Example**:
+```json
+{
+  "referrerUid": "user123",
+  "referredUid": "user456",
+  "referralCode": "ABC1234",
+  "status": "completed",
+  "pointsAwarded": 5,
+  "createdAt": "2024-01-15T10:00:00Z",
+  "completedAt": "2024-01-15T10:05:00Z"
+}
+```
+
+**Security Rules**:
+- Read: Users can read referrals where they are the referrer or referred user
+- Create: Server-side only (via Cloud Functions or API routes)
+- Update: Server-side only
+- Delete: Not allowed (referrals are permanent records)
+
+### 7. Settings Collection
 
 **Path**: `settings/app`
 
@@ -499,6 +545,12 @@ Checks if the authenticated user is in the admin list.
 - Read: Users (own redemptions), Admins (all)
 - Create: Authenticated users (own redemptions only)
 - Update: Admin only
+- Delete: Not allowed
+
+**Referrals**
+- Read: Users (own referrals)
+- Create: Server-side only
+- Update: Server-side only
 - Delete: Not allowed
 
 **Settings**

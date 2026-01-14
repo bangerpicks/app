@@ -11,6 +11,17 @@ import { APIFootballFixture } from '@/lib/api-football'
 export type GameweekStatus = 'draft' | 'active' | 'completed' | 'archived'
 
 /**
+ * Standings data for a league
+ */
+export interface LeagueStandings {
+  team: { id: number; name: string; logo: string }
+  rank: number
+  points: number
+  goalsDiff: number
+  form: string // e.g., "WWDLW"
+}
+
+/**
  * Full gameweek data structure for admin
  */
 export interface AdminGameweekData {
@@ -26,6 +37,10 @@ export interface AdminGameweekData {
   createdAt: Timestamp
   updatedAt: Timestamp
   forceOpenForTesting?: boolean
+  standings?: {
+    [leagueId: string]: LeagueStandings[]
+  }
+  standingsFetchedAt?: Timestamp
 }
 
 /**

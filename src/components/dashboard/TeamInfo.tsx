@@ -40,7 +40,7 @@ export function TeamInfo({ team }: TeamInfoProps) {
               alt={team.name}
               width={35}
               height={35}
-              className="object-contain"
+              className="object-contain w-full h-full"
             />
           ) : (
             <div className="w-full h-full" />

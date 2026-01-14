@@ -8,6 +8,8 @@ import {
   doc,
   getDoc,
   getDocs,
+  query,
+  where,
   Timestamp,
 } from 'firebase/firestore'
 import { db } from './firebase'
@@ -237,25 +239,63 @@ async function getPredictionsForFixture(
 }
 
 /**
- * Get user display name from Firestore
+ * Batch fetch user documents from Firestore in parallel
+ * Fetches all user documents concurrently to avoid N+1 query problem
  * 
- * @param userId - User ID
- * @returns Promise<string>
+ * @param userIds - Array of user IDs to fetch
+ * @returns Promise<Map<userId, { displayName: string, points: number }>>
  */
-async function getUserDisplayName(userId: string): Promise<string> {
+async function batchFetchUsers(userIds: string[]): Promise<Map<string, { displayName: string; points: number }>> {
+  const userDataMap = new Map<string, { displayName: string; points: number }>()
+  
+  if (userIds.length === 0) {
+    return userDataMap
+  }
+
   try {
-    const userRef = doc(db, 'users', userId)
-    const userDoc = await getDoc(userRef)
+    // Fetch all user documents in parallel
+    // This is much faster than sequential calls (N+1 problem)
+    const docPromises = userIds.map(async (userId) => {
+      try {
+        const userRef = doc(db, 'users', userId)
+        const userDoc = await getDoc(userRef)
+        
+        if (userDoc.exists()) {
+          const data = userDoc.data()
+          return {
+            userId,
+            displayName: data.displayName || 'Player',
+            points: data.points || 0,
+          }
+        }
+        
+        return {
+          userId,
+          displayName: 'Player',
+          points: 0,
+        }
+      } catch (error) {
+        console.error(`Error fetching user ${userId}:`, error)
+        return {
+          userId,
+          displayName: 'Player',
+          points: 0,
+        }
+      }
+    })
+    
+    const results = await Promise.all(docPromises)
+    
+    // Build map from results
+    results.forEach(({ userId, displayName, points }) => {
+      userDataMap.set(userId, { displayName, points })
+    })
 
-    if (userDoc.exists()) {
-      const data = userDoc.data()
-      return data.displayName || 'Player'
-    }
-
-    return 'Player'
+    return userDataMap
   } catch (error) {
-    console.error(`Error fetching display name for user ${userId}:`, error)
-    return 'Player'
+    console.error('Error batch fetching users:', error)
+    // Return empty map on error - fallback to defaults
+    return userDataMap
   }
 }
 
@@ -323,83 +363,79 @@ export async function getWeeklyRankings(
       })
     })
 
+    // Collect all unique user IDs who made predictions
+    const userIds = Array.from(userPredictionsMap.keys())
+    
+    // Batch fetch all user documents at once (optimized: reduces N+1 queries)
+    const userDataMap = await batchFetchUsers(userIds)
+
     // Build ranking entries
     const rankingEntries: RankingEntry[] = []
 
-    // Fetch user data and build entries
-    const userPromises = Array.from(userPredictionsMap.entries()).map(
-      async ([userId, predictions]) => {
-        // Calculate weekly points (sum of points from all predictions)
-        let weeklyPoints = 0
-        const matchPredictions: MatchPrediction[] = []
+    // Process each user's predictions
+    for (const [userId, predictions] of userPredictionsMap.entries()) {
+      // Calculate weekly points (sum of points from all predictions)
+      let weeklyPoints = 0
+      const matchPredictions: MatchPrediction[] = []
 
-        // Process each fixture
-        fixtureIds.forEach((fixtureId) => {
-          const prediction = predictions.get(fixtureId)
-          const fixtureDetail = fixtureDetailsMap.get(fixtureId)
+      // Process each fixture
+      fixtureIds.forEach((fixtureId) => {
+        const prediction = predictions.get(fixtureId)
+        const fixtureDetail = fixtureDetailsMap.get(fixtureId)
 
-          if (prediction) {
-            // Add points if awarded
-            if (prediction.awarded && prediction.points) {
-              weeklyPoints += prediction.points
-            }
+        if (prediction) {
+          // Add points if awarded
+          if (prediction.awarded && prediction.points) {
+            weeklyPoints += prediction.points
+          }
 
-            // Build match prediction with correctness info
-            if (fixtureDetail) {
-              matchPredictions.push({
-                fixtureId,
-                prediction: prediction.pick,
-                homeTeam: fixtureDetail.homeTeam,
-                awayTeam: fixtureDetail.awayTeam,
-                correct: prediction.correct ?? null,
-              })
-            } else {
-              // Fallback: use data from prediction entry
-              matchPredictions.push({
-                fixtureId,
-                prediction: prediction.pick,
-                homeTeam: prediction.homeTeam as TeamInfo,
-                awayTeam: prediction.awayTeam as TeamInfo,
-                correct: prediction.correct ?? null,
-              })
-            }
-          } else if (fixtureDetail) {
-            // User didn't make a prediction for this fixture
+          // Build match prediction with correctness info
+          if (fixtureDetail) {
             matchPredictions.push({
               fixtureId,
-              prediction: null,
+              prediction: prediction.pick,
               homeTeam: fixtureDetail.homeTeam,
               awayTeam: fixtureDetail.awayTeam,
-              correct: null,
+              correct: prediction.correct ?? null,
+            })
+          } else {
+            // Fallback: use data from prediction entry
+            matchPredictions.push({
+              fixtureId,
+              prediction: prediction.pick,
+              homeTeam: prediction.homeTeam as TeamInfo,
+              awayTeam: prediction.awayTeam as TeamInfo,
+              correct: prediction.correct ?? null,
             })
           }
-        })
-
-        // Only include users who made at least one prediction
-        if (matchPredictions.some((mp) => mp.prediction !== null)) {
-          // Get user display name
-          const displayName = await getUserDisplayName(userId)
-
-          // Get user's total points (for all-time ranking context)
-          const userRef = doc(db, 'users', userId)
-          const userDoc = await getDoc(userRef)
-          const userData = userDoc.exists() ? userDoc.data() : {}
-          const totalPoints = userData.points || 0
-
-          rankingEntries.push({
-            userId,
-            displayName,
-            points: totalPoints, // All-time points
-            rank: 0, // Will be calculated after sorting
-            weeklyPoints,
-            matchPredictions,
-            isCurrentUser: currentUserId ? userId === currentUserId : false,
+        } else if (fixtureDetail) {
+          // User didn't make a prediction for this fixture
+          matchPredictions.push({
+            fixtureId,
+            prediction: null,
+            homeTeam: fixtureDetail.homeTeam,
+            awayTeam: fixtureDetail.awayTeam,
+            correct: null,
           })
         }
-      }
-    )
+      })
 
-    await Promise.all(userPromises)
+      // Only include users who made at least one prediction
+      if (matchPredictions.some((mp) => mp.prediction !== null)) {
+        // Get user data from batched map
+        const userData = userDataMap.get(userId) || { displayName: 'Player', points: 0 }
+
+        rankingEntries.push({
+          userId,
+          displayName: userData.displayName,
+          points: userData.points, // All-time points
+          rank: 0, // Will be calculated after sorting
+          weeklyPoints,
+          matchPredictions,
+          isCurrentUser: currentUserId ? userId === currentUserId : false,
+        })
+      }
+    }
 
     // Sort by weekly points descending, then by number of predictions
     rankingEntries.sort((a, b) => {

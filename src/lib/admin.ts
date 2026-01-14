@@ -18,7 +18,7 @@ import {
   QueryConstraint,
 } from 'firebase/firestore'
 import { db } from './firebase'
-import { APIFootballFixture } from './api-football'
+import { APIFootballFixture, getStandings } from './api-football'
 
 /**
  * Generate cache key for fixture search
@@ -136,6 +136,17 @@ export async function saveCachedFixtureSearch(
 }
 
 /**
+ * Standings data for a league
+ */
+export interface LeagueStandings {
+  team: { id: number; name: string; logo: string }
+  rank: number
+  points: number
+  goalsDiff: number
+  form: string // e.g., "WWDLW"
+}
+
+/**
  * Admin gameweek data structure
  */
 export interface AdminGameweekData {
@@ -151,6 +162,10 @@ export interface AdminGameweekData {
   createdAt: Timestamp
   updatedAt: Timestamp
   forceOpenForTesting?: boolean
+  standings?: {
+    [leagueId: string]: LeagueStandings[]
+  }
+  standingsFetchedAt?: Timestamp
 }
 
 /**
@@ -228,7 +243,7 @@ export async function createGameweek(data: CreateGameweekData): Promise<string> 
       createdBy: data.createdBy,
       createdAt: now,
       updatedAt: now,
-      forceOpenForTesting: data.forceOpenForTesting,
+      ...(data.forceOpenForTesting !== undefined && { forceOpenForTesting: data.forceOpenForTesting }),
     }
 
     await setDoc(doc(db, 'gameweeks', gameweekId), gameweekData)
@@ -419,8 +434,10 @@ export async function getActiveGameweek(): Promise<AdminGameweekData | null> {
     
     // Return the first (most recent) active gameweek
     const doc = snapshot.docs[0]
+    const data = doc.data()
+    
     return {
-      ...doc.data(),
+      ...data,
       gameweekId: doc.id,
     } as AdminGameweekData
   } catch (error) {
@@ -447,6 +464,96 @@ export async function forceOpenActiveGameweek(forceOpen: boolean): Promise<void>
   } catch (error) {
     console.error('Error forcing open active gameweek:', error)
     throw error
+  }
+}
+
+/**
+ * Calculate season year from date (season starts in August)
+ * 
+ * @param date - Date to calculate season for
+ * @returns Season year (e.g., 2024 for 2024-2025 season)
+ */
+function calculateSeason(date: Date): number {
+  const year = date.getFullYear()
+  const month = date.getMonth() + 1 // 1-12
+  // If date is Jan-Jul, we're in second half of season (use previous year)
+  // If date is Aug-Dec, we're in first half of season (use current year)
+  return month >= 8 ? year : year - 1
+}
+
+/**
+ * Fetch and store standings for all unique leagues in fixtures
+ * 
+ * @param gameweekId - Gameweek ID
+ * @param fixtures - Array of fixtures to extract leagues from
+ */
+export async function fetchAndStoreStandings(
+  gameweekId: string,
+  fixtures: APIFootballFixture[]
+): Promise<void> {
+  try {
+    // Extract unique leagues from fixtures
+    const leaguesMap = new Map<number, { leagueId: number; date: Date }>()
+    fixtures.forEach((fixture) => {
+      const leagueId = fixture.league.id
+      const fixtureDate = new Date(fixture.fixture.date)
+      if (!leaguesMap.has(leagueId)) {
+        leaguesMap.set(leagueId, { leagueId, date: fixtureDate })
+      }
+    })
+
+    if (leaguesMap.size === 0) {
+      console.log('[admin] No leagues found in fixtures, skipping standings fetch')
+      return
+    }
+
+    console.log(`[admin] Fetching standings for ${leaguesMap.size} unique league(s)`)
+
+    // Fetch standings for each unique league
+    const standingsData: { [leagueId: string]: LeagueStandings[] } = {}
+    const errors: string[] = []
+
+    await Promise.all(
+      Array.from(leaguesMap.values()).map(async ({ leagueId, date }) => {
+        try {
+          const season = calculateSeason(date)
+          console.log(`[admin] Fetching standings for league ${leagueId}, season ${season}`)
+          
+          const standings = await getStandings(leagueId, season)
+          if (standings.length > 0) {
+            standingsData[leagueId.toString()] = standings
+            console.log(`[admin] Successfully fetched ${standings.length} teams for league ${leagueId}`)
+          } else {
+            console.warn(`[admin] No standings returned for league ${leagueId}`)
+          }
+        } catch (err: any) {
+          const errorMsg = `Error fetching standings for league ${leagueId}: ${err.message || 'Unknown error'}`
+          console.warn(`[admin] ${errorMsg}`)
+          errors.push(errorMsg)
+          // Continue with other leagues even if one fails
+        }
+      })
+    )
+
+    // Update gameweek document with standings data
+    const gameweekRef = doc(db, 'gameweeks', gameweekId)
+    const updateData: any = {
+      standings: standingsData,
+      standingsFetchedAt: Timestamp.now(),
+      updatedAt: Timestamp.now(),
+    }
+
+    await updateDoc(gameweekRef, updateData)
+    
+    const successCount = Object.keys(standingsData).length
+    console.log(`[admin] Standings stored: ${successCount} league(s) successful, ${errors.length} error(s)`)
+    
+    if (errors.length > 0) {
+      console.warn('[admin] Some standings failed to fetch:', errors)
+    }
+  } catch (error) {
+    console.error('[admin] Error fetching and storing standings:', error)
+    // Don't throw - standings are optional, gameweek save should still succeed
   }
 }
 
@@ -522,6 +629,10 @@ export async function saveGameweekFixtures(
     })
     
     await batch.commit()
+    
+    // Fetch and store standings for all unique leagues in fixtures
+    // This is done after fixtures are saved, and errors are handled gracefully
+    await fetchAndStoreStandings(gameweekId, fixtures)
   } catch (error) {
     console.error('Error saving gameweek fixtures:', error)
     throw error

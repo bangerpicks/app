@@ -21,7 +21,7 @@ export function Header({ logoUrl = '/logo.svg', username, userPhotoUrl }: Header
           width={156}
           height={40}
           priority
-          className="object-contain w-[120px] sm:w-[156px] h-auto"
+          className="object-contain w-[120px] h-[30.77px] sm:w-[156px] sm:h-[40px]"
         />
       </Link>
       <UserBadge username={username} />

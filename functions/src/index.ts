@@ -247,13 +247,27 @@ export const updateLiveFixtures = functions.pubsub
               continue
             }
 
-            // Check if match is finished (skip if finished)
+            // Check if match is finished
             const status = updatedFixture.fixture.status.short
-            if (isMatchFinished(status)) {
+            const isFinished = isMatchFinished(status)
+            
+            // Check current status in Firestore to see if we need to update
+            const currentFixture = fixtureData.fixture as APIFootballFixture | undefined
+            const currentStatus = currentFixture?.fixture?.status?.short
+            
+            // Skip if match is finished AND already updated to finished status
+            // This prevents unnecessary updates but still allows the final status update
+            if (isFinished && currentStatus === status) {
               console.log(
-                `[updateLiveFixtures] Fixture ${fixtureId} is finished (${status}), skipping update`
+                `[updateLiveFixtures] Fixture ${fixtureId} is already marked as finished (${status}), skipping update`
               )
               continue
+            }
+            
+            if (isFinished && currentStatus !== status) {
+              console.log(
+                `[updateLiveFixtures] Fixture ${fixtureId} just finished (${currentStatus} -> ${status}), updating to FT`
+              )
             }
 
             // Update only the fixture field (preserve other fields)

@@ -127,6 +127,7 @@ export function DashboardClient({
     try {
       // Ensure user document exists
       await ensureUserDocument(user, username || user.displayName || 'Player')
+      // Note: We don't need to check isNewUser here since this is just ensuring the document exists
 
       // Save predictions
       await savePredictions(user.uid, pendingPredictions, matches)
@@ -167,10 +168,12 @@ export function DashboardClient({
   }
 
   useEffect(() => {
-    // Disable Next.js scroll restoration
-    if ('scrollRestoration' in window.history) {
-      window.history.scrollRestoration = 'manual'
-    }
+    // REMOVED: Disabling scroll restoration - this was causing conflicts with Next.js router
+    // Next.js manages scroll restoration internally, and setting it to 'manual' causes
+    // Next.js to repeatedly try to sync scroll position, triggering replaceState loops
+    // if ('scrollRestoration' in window.history) {
+    //   window.history.scrollRestoration = 'manual'
+    // }
   }, [])
 
   const hasPendingPredictions = pendingPredictions.size > 0

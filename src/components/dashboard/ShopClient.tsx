@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Header } from './Header'
 import { BottomNavigation } from './BottomNavigation'
 import { ShopItem } from './ShopItem'
+import { ReferralPopup } from './ReferralPopup'
 import { ShopClientProps } from '@/types/shop'
 import { ShoppingBag, Coins } from 'lucide-react'
 
@@ -77,6 +78,9 @@ export function ShopClient({ items, userPoints, username }: ShopClientProps) {
       {/* Header */}
       <Header username={username} />
 
+      {/* Referral Popup */}
+      <ReferralPopup />
+
       {/* Main Content */}
       <main className="flex-1 px-4 sm:px-5 pb-20 sm:pb-24 py-4 sm:py-5 overflow-x-hidden">
         {/* Title Section */}
@@ -93,7 +97,7 @@ export function ShopClient({ items, userPoints, username }: ShopClientProps) {
           <div className="flex items-center justify-center gap-2">
             <Coins className="w-5 h-5 text-midnight-violet" />
             <span className="text-midnight-violet font-semibold text-sm">
-              Available Points:
+              Shop Points:
             </span>
             <span className="text-midnight-violet font-bold text-xl">
               {getAvailablePoints().toLocaleString()}

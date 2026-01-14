@@ -25,13 +25,26 @@ export default function ProfilePage() {
 
   useEffect(() => {
     if (user) {
+      // Show optimistic UI immediately with auth user data
+      setUserData({
+        displayName: user.displayName || 'Player',
+        photoURL: user.photoURL || null,
+        points: 0, // Will be updated when Firestore data loads
+        totalPredictions: 0,
+        correctPredictions: 0,
+        accuracy: 0,
+        favoriteTeam: null,
+        favoritePlayer: null,
+      })
+      
       setLoadingUserData(true)
-      // Fetch user document from Firestore
+      // Fetch user document from Firestore in background
       const userRef = doc(db, 'users', user.uid)
       getDoc(userRef)
         .then((userDoc) => {
           if (userDoc.exists()) {
             const data = userDoc.data() as UserDocument
+            // Update with Firestore data when ready
             setUserData({
               displayName: data.displayName || user.displayName || 'Player',
               photoURL: data.photoURL || user.photoURL || null,
@@ -54,12 +67,7 @@ export default function ProfilePage() {
         })
         .catch((error) => {
           console.error('Error fetching user data:', error)
-          // Fallback to mock data on error
-          setUserData({
-            displayName: user.displayName || 'Player',
-            photoURL: user.photoURL || null,
-            ...mockUserData,
-          })
+          // Keep optimistic UI on error (already set above)
           setLoadingUserData(false)
         })
     } else {
@@ -68,8 +76,8 @@ export default function ProfilePage() {
     }
   }, [user])
 
-  // Show loading state while checking authentication or fetching user data
-  if (authLoading || (user && loadingUserData)) {
+  // Show loading state only while checking authentication
+  if (authLoading) {
     return (
       <div className="min-h-[100dvh] min-h-screen bg-midnight-violet flex items-center justify-center">
         <div className="text-ivory">Loading...</div>
@@ -82,8 +90,10 @@ export default function ProfilePage() {
     return <NotSignedIn />
   }
 
-  // Only render if we have userData (should always be set after loading completes for authenticated users)
+  // Render with optimistic UI (userData is set immediately from auth data)
+  // Firestore data will update when it loads
   if (!userData) {
+    // Fallback (shouldn't happen, but just in case)
     return (
       <div className="min-h-[100dvh] min-h-screen bg-midnight-violet flex items-center justify-center">
         <div className="text-ivory">Loading...</div>
