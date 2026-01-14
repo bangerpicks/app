@@ -1,0 +1,61 @@
+{
+  "common": {
+    "loading": "Cargando...",
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "settings": "Configuración",
+    "profile": "Perfil",
+    "signOut": "Cerrar sesión",
+    "signingOut": "Cerrando sesión..."
+  },
+  "settings": {
+    "title": "Configuración",
+    "language": "Idioma",
+    "languageDescription": "Elige tu idioma preferido",
+    "english": "Inglés",
+    "spanish": "Español",
+    "saving": "Guardando...",
+    "saved": "Guardado",
+    "error": "Ocurrió un error. Por favor, intenta de nuevo."
+  },
+  "profile": {
+    "title": "Perfil",
+    "points": "Puntos",
+    "accuracy": "Precisión",
+    "totalPredictions": "Predicciones totales",
+    "correct": "Correctas",
+    "favoriteTeam": "Equipo favorito"
+  },
+  "navigation": {
+    "dashboard": "Panel",
+    "rankings": "Clasificaciones",
+    "shop": "Tienda",
+    "profile": "Perfil"
+  },
+  "dashboard": {
+    "title": "Predice Partidos de Fútbol",
+    "subtitle": "Únete a los aficionados haciendo predicciones y compitiendo por el primer lugar",
+    "playersJoined": "Jugadores Unidos",
+    "saving": "Guardando...",
+    "savePrediction": "Guardar {count} Predicción",
+    "savePredictions": "Guardar {count} Predicciones",
+    "noChangesToSave": "No Hay Cambios para Guardar",
+    "savedSuccessfully": "¡Predicciones guardadas exitosamente!",
+    "gameweekClosed": "Esta semana ya no está abierta para predicciones.",
+    "home": "LOCAL",
+    "draw": "EMPATE",
+    "away": "VISITA"
+  },
+  "rankings": {
+    "title": "Clasificaciones",
+    "subtitle": "Ve cómo te comparas con la competencia",
+    "allTime": "Todos los Tiempos",
+    "thisWeek": "Esta Semana",
+    "players": "jugadores",
+    "noRankings": "Aún no hay clasificaciones disponibles",
+    "startPredicting": "¡Comienza a hacer predicciones para ver tu posición!",
+    "rank": "Pos",
+    "user": "Usuario",
+    "points": "Pts."
+  }
+}

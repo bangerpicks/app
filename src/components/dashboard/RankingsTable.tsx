@@ -1,7 +1,8 @@
 'use client'
 
-import { RankingEntry, GameweekRankingData } from '@/types/dashboard'
 import Image from 'next/image'
+import { useTranslations } from 'next-intl'
+import { RankingEntry, GameweekRankingData } from '@/types/dashboard'
 
 interface RankingsTableProps {
   rankings: RankingEntry[]
@@ -12,6 +13,7 @@ export function RankingsTable({
   rankings,
   gameweekData,
 }: RankingsTableProps) {
+  const t = useTranslations('rankings')
   const { fixtures } = gameweekData
   // Always show 10 columns, pad with empty fixtures if needed
   const displayedFixtures = Array.from({ length: 10 }, (_, i) => 
@@ -21,11 +23,14 @@ export function RankingsTable({
   const getPredictionForFixture = (
     entry: RankingEntry,
     fixtureId: number
-  ): 'H' | 'D' | 'A' | null => {
+  ): { prediction: 'H' | 'D' | 'A' | null; correct: boolean | null | undefined } => {
     const matchPred = entry.matchPredictions?.find(
       (mp) => mp.fixtureId === fixtureId
     )
-    return matchPred?.prediction ?? null
+    return {
+      prediction: matchPred?.prediction ?? null,
+      correct: matchPred?.correct ?? null,
+    }
   }
 
   return (
@@ -37,14 +42,14 @@ export function RankingsTable({
               {/* Rank Column */}
               <th className="sticky left-0 z-[25] bg-midnight-violet px-2 py-2.5 text-left w-12">
                 <span className="text-ivory/70 text-xs font-semibold uppercase tracking-wider">
-                  Rnk
+                  {t('rank')}
                 </span>
               </th>
 
               {/* User Column */}
               <th className="sticky left-12 z-[25] bg-midnight-violet px-2 py-2 text-left min-w-[90px] max-w-[100px]">
                 <span className="text-ivory/70 text-xs font-semibold uppercase tracking-wider">
-                  User
+                  {t('user')}
                 </span>
               </th>
 
@@ -102,7 +107,7 @@ export function RankingsTable({
               {/* Points Column */}
               <th className="sticky right-0 z-[25] px-2 py-2 text-right bg-midnight-violet w-14">
                 <span className="text-ivory/70 text-xs font-semibold uppercase tracking-wider">
-                  Pts.
+                  {t('points')}
                 </span>
               </th>
             </tr>
@@ -113,11 +118,7 @@ export function RankingsTable({
             {rankings.map((entry) => (
               <tr
                 key={entry.userId}
-                className={`border-b border-ivory/10 ${
-                  entry.isCurrentUser
-                    ? 'bg-lime-yellow/10 hover:bg-lime-yellow/15'
-                    : 'hover:bg-ivory/5'
-                }`}
+                className="border-b border-ivory/10 hover:bg-ivory/5"
               >
                 {/* Rank */}
                 <td className="sticky left-0 z-10 bg-midnight-violet px-2 py-2 w-12">
@@ -148,15 +149,40 @@ export function RankingsTable({
                       </td>
                     )
                   }
-                  const prediction = getPredictionForFixture(
+                  const { prediction, correct } = getPredictionForFixture(
                     entry,
                     fixture.fixtureId
                   )
+                  
+                  // Determine background color based on correctness
+                  const getBackgroundColor = () => {
+                    if (!prediction) {
+                      return 'bg-ivory/10' // No prediction
+                    }
+                    if (correct === true) {
+                      return 'bg-lime-yellow' // Correct prediction
+                    }
+                    if (correct === false) {
+                      return 'bg-red-500/70' // Incorrect prediction
+                    }
+                    return 'bg-ivory/20' // Pending/unknown (not yet scored)
+                  }
+                  
+                  const getTextColor = () => {
+                    if (correct === true) {
+                      return 'text-midnight-violet' // Correct - dark text on lime-yellow
+                    }
+                    if (correct === false) {
+                      return 'text-white' // Incorrect - white text on red
+                    }
+                    return 'text-ivory' // Pending - ivory text
+                  }
+                  
                   return (
                     <td key={fixture.fixtureId} className="px-2 py-3 text-center">
                       {prediction ? (
-                        <div className="w-8 h-8 mx-auto bg-lime-yellow rounded flex items-center justify-center">
-                          <span className="text-midnight-violet font-bold text-sm">
+                        <div className={`w-8 h-8 mx-auto ${getBackgroundColor()} rounded flex items-center justify-center`}>
+                          <span className={`${getTextColor()} font-bold text-sm`}>
                             {prediction}
                           </span>
                         </div>

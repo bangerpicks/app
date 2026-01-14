@@ -8,6 +8,7 @@ export interface GameweekData {
   deadline?: Date
   startDate?: Date
   endDate?: Date
+  forceOpenForTesting?: boolean
 }
 
 export type Prediction = 'H' | 'D' | 'A' // Home, Draw, Away
@@ -35,6 +36,7 @@ export interface MatchCardData {
   userPrediction?: Prediction | null
   matchStatus?: string // NS, 1H, HT, 2H, FT, LIVE, etc.
   minute?: number // Current minute of the match (for LIVE matches)
+  stoppageTime?: number // Stoppage time in minutes (for LIVE matches)
   score?: {
     home: number
     away: number
@@ -48,6 +50,7 @@ export interface MatchPrediction {
   prediction: 'H' | 'D' | 'A' | null
   homeTeam: TeamInfo
   awayTeam: TeamInfo
+  correct?: boolean | null // Whether the prediction was correct (null if not yet determined)
 }
 
 export interface RankingEntry {

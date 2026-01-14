@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import { useTranslations } from 'next-intl'
 import { Header } from './Header'
 import { BottomNavigation } from './BottomNavigation'
 import { RankingsTable } from './RankingsTable'
@@ -81,6 +82,7 @@ export function RankingsClient({
   gameweekData,
   username,
 }: RankingsClientProps) {
+  const t = useTranslations('rankings')
   const [activeView, setActiveView] = useState<RankingView>('all-time')
   const containerRef = useRef<HTMLDivElement>(null)
   const lastScrollY = useRef(0)
@@ -156,10 +158,10 @@ export function RankingsClient({
           <div className="w-full flex flex-col items-center gap-2 mt-4">
             <Trophy className="w-12 h-12 text-lime-yellow mb-2" />
             <h1 className="text-3xl sm:text-4xl font-bold text-ivory">
-              Rankings
+              {t('title')}
             </h1>
             <p className="text-ivory/70 text-sm sm:text-base">
-              See how you stack up against the competition
+              {t('subtitle')}
             </p>
           </div>
         )}
@@ -174,7 +176,7 @@ export function RankingsClient({
                 : 'bg-ivory/10 text-ivory/70 hover:bg-ivory/15'
             }`}
           >
-            All Time
+            {t('allTime')}
           </button>
           <button
             onClick={() => setActiveView('this-week')}
@@ -189,7 +191,7 @@ export function RankingsClient({
                 : ''
             }`}
           >
-            This Week
+            {t('thisWeek')}
           </button>
         </div>
 
@@ -205,7 +207,7 @@ export function RankingsClient({
                   {gameweekData.gameweek.name}
                 </h2>
                 <p className="text-midnight-violet/80 text-sm font-semibold">
-                  {gameweekData.gameweek.playerCount} players
+                  {gameweekData.gameweek.playerCount} {t('players')}
                 </p>
               </div>
             </div>
@@ -223,10 +225,10 @@ export function RankingsClient({
             {currentRankings.length === 0 ? (
               <div className="text-center py-12">
                 <p className="text-ivory/70 text-lg">
-                  No rankings available yet
+                  {t('noRankings')}
                 </p>
                 <p className="text-ivory/50 text-sm mt-2">
-                  Start making predictions to see your rank!
+                  {t('startPredicting')}
                 </p>
               </div>
             ) : (

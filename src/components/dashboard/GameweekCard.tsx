@@ -1,4 +1,7 @@
+'use client'
+
 import { Users } from 'lucide-react'
+import { useTranslations } from 'next-intl'
 import { GameweekData } from '@/types/dashboard'
 
 interface GameweekCardProps {
@@ -34,6 +37,8 @@ function StatusBadge({ status }: { status: GameweekData['status'] }) {
 }
 
 export function GameweekCard({ gameweek, playerCount }: GameweekCardProps) {
+  const t = useTranslations('dashboard')
+
   return (
     <div className="w-full">
       {/* Header */}
@@ -50,7 +55,7 @@ export function GameweekCard({ gameweek, playerCount }: GameweekCardProps) {
           <Users size={18} className="text-ivory" aria-hidden="true" />
           <div className="flex items-center gap-2.5">
             <span className="text-base text-ivory">{playerCount}</span>
-            <span className="text-base text-ivory">Players Joined</span>
+            <span className="text-base text-ivory">{t('playersJoined')}</span>
           </div>
         </div>
 

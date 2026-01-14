@@ -1,0 +1,61 @@
+{
+  "common": {
+    "loading": "Loading...",
+    "save": "Save",
+    "cancel": "Cancel",
+    "settings": "Settings",
+    "profile": "Profile",
+    "signOut": "Sign Out",
+    "signingOut": "Signing Out..."
+  },
+  "settings": {
+    "title": "Settings",
+    "language": "Language",
+    "languageDescription": "Choose your preferred language",
+    "english": "English",
+    "spanish": "Spanish",
+    "saving": "Saving...",
+    "saved": "Saved",
+    "error": "An error occurred. Please try again."
+  },
+  "profile": {
+    "title": "Profile",
+    "points": "Points",
+    "accuracy": "Accuracy",
+    "totalPredictions": "Total Predictions",
+    "correct": "Correct",
+    "favoriteTeam": "Favorite Team"
+  },
+  "navigation": {
+    "dashboard": "Dashboard",
+    "rankings": "Rankings",
+    "shop": "Shop",
+    "profile": "Profile"
+  },
+  "dashboard": {
+    "title": "Predict Football Matches",
+    "subtitle": "Join fans making predictions and competing for the top spot",
+    "playersJoined": "Players Joined",
+    "saving": "Saving...",
+    "savePrediction": "Save {count} Prediction",
+    "savePredictions": "Save {count} Predictions",
+    "noChangesToSave": "No Changes to Save",
+    "savedSuccessfully": "Predictions saved successfully!",
+    "gameweekClosed": "This gameweek is no longer open for predictions.",
+    "home": "HOME",
+    "draw": "DRAW",
+    "away": "AWAY"
+  },
+  "rankings": {
+    "title": "Rankings",
+    "subtitle": "See how you stack up against the competition",
+    "allTime": "All Time",
+    "thisWeek": "This Week",
+    "players": "players",
+    "noRankings": "No rankings available yet",
+    "startPredicting": "Start making predictions to see your rank!",
+    "rank": "Rnk",
+    "user": "User",
+    "points": "Pts."
+  }
+}

@@ -11,10 +11,13 @@ const nextConfig = {
     },
   },
   webpack: (config, { isServer }) => {
-    // Fix for Windows symlink issues
+    // Fix for Windows symlink issues - disable symlink resolution
     config.resolve.symlinks = false
-    // Disable webpack cache to avoid EISDIR errors on Windows
+    
+    // Disable filesystem cache completely to avoid EISDIR errors on Windows
+    // This is a workaround for webpack's PackFileCacheStrategy readlink issue on Windows
     config.cache = false
+    
     return config
   },
 }

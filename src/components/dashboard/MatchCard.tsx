@@ -61,9 +61,22 @@ export function MatchCard({
           {match.matchStatus === 'LIVE' ? 'LIVE' : formatDate(match.date)}
         </div>
         <div className="text-[10px] sm:text-xs font-medium text-midnight-violet text-right truncate min-w-0 flex items-center justify-end gap-1.5">
-          {match.matchStatus === 'LIVE' ? (
+          {match.matchStatus === 'HT' ? (
             <>
-              <span>{match.minute}'</span>
+              <span>HT</span>
+              <span 
+                className="w-1.5 h-1.5 rounded-full bg-cinnabar animate-pulse"
+                style={{
+                  boxShadow: '0 0 6px #ee4136',
+                }}
+              />
+            </>
+          ) : match.matchStatus === 'LIVE' ? (
+            <>
+              <span>
+                {match.minute}
+                {match.stoppageTime ? `+${match.stoppageTime}` : ''}'
+              </span>
               <span 
                 className="w-1.5 h-1.5 rounded-full bg-cinnabar animate-pulse"
                 style={{
@@ -80,7 +93,7 @@ export function MatchCard({
       </div>
 
       {/* Match Body */}
-      <div className="border border-ivory rounded-b-[10px] px-2.5 py-2.5 flex flex-col gap-2.5">
+      <div className="border border-ivory rounded-b-[10px] px-2.5 py-2.5 flex flex-col gap-3">
         {/* Teams and Stats - Horizontal Layout */}
         <div className="flex items-center gap-2.5">
           {/* Home Team */}
@@ -91,6 +104,7 @@ export function MatchCard({
             score={match.score}
             homePosition={match.homeTeam.position}
             awayPosition={match.awayTeam.position}
+            isLive={match.matchStatus === 'LIVE' || match.matchStatus === 'HT'}
           />
 
           {/* Away Team */}

@@ -2,23 +2,25 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { LayoutDashboard, Trophy, ShoppingBag, User } from 'lucide-react'
 
 interface NavItem {
   icon: React.ComponentType<React.SVGProps<SVGSVGElement> & { size?: number | string }>
-  label: string
+  labelKey: string
   href: string
 }
 
 const navItems: NavItem[] = [
-  { icon: LayoutDashboard, label: 'Dashboard', href: '/dashboard' },
-  { icon: Trophy, label: 'Rankings', href: '/rankings' },
-  { icon: ShoppingBag, label: 'Shop', href: '/shop' },
-  { icon: User, label: 'Profile', href: '/profile' },
+  { icon: LayoutDashboard, labelKey: 'navigation.dashboard', href: '/dashboard' },
+  { icon: Trophy, labelKey: 'navigation.rankings', href: '/rankings' },
+  { icon: ShoppingBag, labelKey: 'navigation.shop', href: '/shop' },
+  { icon: User, labelKey: 'navigation.profile', href: '/profile' },
 ]
 
 export function BottomNavigation() {
   const pathname = usePathname()
+  const t = useTranslations()
 
   return (
     <nav 
@@ -28,13 +30,14 @@ export function BottomNavigation() {
       {navItems.map((item) => {
         const Icon = item.icon
         const isActive = pathname === item.href
+        const label = t(item.labelKey)
 
         return (
           <Link
             key={item.href}
             href={item.href}
             className="flex-1 min-w-0 flex flex-col items-center justify-center gap-1.5 sm:gap-2.5"
-            aria-label={item.label}
+            aria-label={label}
           >
             <Icon
               size={32}
@@ -46,7 +49,7 @@ export function BottomNavigation() {
                 isActive ? 'font-bold' : ''
               }`}
             >
-              {item.label}
+              {label}
             </span>
           </Link>
         )

@@ -158,3 +158,45 @@ button {
 nav a {
   transition: opacity 0.2s ease-in-out;
 }
+
+/* API-SPORTS Widget Custom Theme - Banger Picks Admin */
+api-sports-widget[data-theme="banger-picks-admin"] {
+  --primary-color: #daff00;
+  --success-color: #2ecc58;
+  --warning-color: #ff9b00;
+  --danger-color: #ee4136;
+  --light-color: #898989;
+
+  --home-color: var(--primary-color);
+  --away-color: #ff9b00;
+
+  --text-color: #fdfff0;
+  --text-color-info: #fdfff0;
+
+  --background-color: #240830;
+
+  --primary-font-size: 0.875rem;
+  --secondary-font-size: 0.75rem;
+  --button-font-size: 0.875rem;
+  --title-font-size: 1rem;
+
+  --header-text-transform: none;
+  --button-text-transform: none;
+  --title-text-transform: none;
+
+  --border: 1px solid rgba(218, 255, 0, 0.2);
+  --game-height: 2.5rem;
+  --league-height: 2.5rem;
+
+  --score-size: 2rem;
+  --flag-size: 22px;
+  --teams-logo-size: 20px;
+  --teams-logo-size-xl: 4rem;
+  --hover: rgba(218, 255, 0, 0.15);
+}
+
+/* Ensure widgets are visible and properly styled */
+api-sports-widget {
+  display: block;
+  width: 100%;
+}

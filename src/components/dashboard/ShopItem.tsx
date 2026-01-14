@@ -77,7 +77,7 @@ export function ShopItem({ item, userPoints, isRedeemed = false, onRedeem }: Sho
             <span className="text-lime-yellow font-bold text-xl">{item.pointsCost}</span>
             <span className="text-ivory/70 text-sm">pts</span>
           </div>
-          {item.stock !== null && item.stock > 0 && (
+          {item.stock != null && item.stock > 0 && (
             <span className="text-ivory/50 text-xs">{item.stock} left</span>
           )}
         </div>

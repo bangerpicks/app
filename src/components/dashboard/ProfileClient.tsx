@@ -2,6 +2,8 @@
 
 import { useState } from 'react'
 import Image from 'next/image'
+import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { User } from 'firebase/auth'
 import { signOut } from 'firebase/auth'
 import { auth } from '@/lib/firebase'
@@ -16,6 +18,9 @@ interface ProfileClientProps {
 }
 
 export function ProfileClient({ user, userData }: ProfileClientProps) {
+  const router = useRouter()
+  const t = useTranslations('profile')
+  const tCommon = useTranslations('common')
   const [isSigningOut, setIsSigningOut] = useState(false)
 
   const handleSignOut = async () => {
@@ -27,6 +32,10 @@ export function ProfileClient({ user, userData }: ProfileClientProps) {
       console.error('Error signing out:', error)
       setIsSigningOut(false)
     }
+  }
+
+  const handleSettingsClick = () => {
+    router.push('/settings')
   }
 
   const displayName = userData.displayName || user.displayName || 'Player'
@@ -76,7 +85,7 @@ export function ProfileClient({ user, userData }: ProfileClientProps) {
           {/* Points Card */}
           <div className="bg-lime-yellow rounded-lg px-4 py-3 flex flex-col items-center gap-1">
             <Coins className="w-6 h-6 text-midnight-violet mb-1" />
-            <span className="text-midnight-violet text-xs sm:text-sm font-semibold">Points</span>
+            <span className="text-midnight-violet text-xs sm:text-sm font-semibold">{t('points')}</span>
             <span className="text-midnight-violet font-bold text-xl sm:text-2xl">
               {points.toLocaleString()}
             </span>
@@ -85,7 +94,7 @@ export function ProfileClient({ user, userData }: ProfileClientProps) {
           {/* Accuracy Card */}
           <div className="bg-lime-yellow rounded-lg px-4 py-3 flex flex-col items-center gap-1">
             <Target className="w-6 h-6 text-midnight-violet mb-1" />
-            <span className="text-midnight-violet text-xs sm:text-sm font-semibold">Accuracy</span>
+            <span className="text-midnight-violet text-xs sm:text-sm font-semibold">{t('accuracy')}</span>
             <span className="text-midnight-violet font-bold text-xl sm:text-2xl">
               {accuracy}%
             </span>
@@ -94,7 +103,7 @@ export function ProfileClient({ user, userData }: ProfileClientProps) {
           {/* Total Predictions Card */}
           <div className="bg-ivory/10 border border-ivory/20 rounded-lg px-4 py-3 flex flex-col items-center gap-1">
             <Trophy className="w-6 h-6 text-lime-yellow mb-1" />
-            <span className="text-ivory/70 text-xs sm:text-sm font-semibold">Total Predictions</span>
+            <span className="text-ivory/70 text-xs sm:text-sm font-semibold">{t('totalPredictions')}</span>
             <span className="text-ivory font-bold text-xl sm:text-2xl">
               {totalPredictions}
             </span>
@@ -103,7 +112,7 @@ export function ProfileClient({ user, userData }: ProfileClientProps) {
           {/* Correct Predictions Card */}
           <div className="bg-ivory/10 border border-ivory/20 rounded-lg px-4 py-3 flex flex-col items-center gap-1">
             <Trophy className="w-6 h-6 text-lime-yellow mb-1" />
-            <span className="text-ivory/70 text-xs sm:text-sm font-semibold">Correct</span>
+            <span className="text-ivory/70 text-xs sm:text-sm font-semibold">{t('correct')}</span>
             <span className="text-ivory font-bold text-xl sm:text-2xl">
               {correctPredictions}
             </span>
@@ -113,7 +122,7 @@ export function ProfileClient({ user, userData }: ProfileClientProps) {
         {/* Favorite Team Section */}
         {userData.favoriteTeam && (
           <div className="w-full max-w-2xl mx-auto mb-6 bg-ivory/5 border border-ivory/10 rounded-lg px-4 py-3">
-            <h3 className="text-ivory font-semibold text-sm mb-2">Favorite Team</h3>
+            <h3 className="text-ivory font-semibold text-sm mb-2">{t('favoriteTeam')}</h3>
             <div className="flex items-center gap-3">
               {userData.favoriteTeam.logo && (
                 <Image
@@ -131,14 +140,13 @@ export function ProfileClient({ user, userData }: ProfileClientProps) {
 
         {/* Action Buttons */}
         <div className="w-full max-w-2xl mx-auto flex flex-col gap-3">
-          {/* Settings Button (placeholder for future) */}
+          {/* Settings Button */}
           <button
+            onClick={handleSettingsClick}
             className="w-full bg-ivory/10 border border-ivory/20 rounded-lg px-4 py-3 flex items-center justify-center gap-2 text-ivory hover:bg-ivory/15 transition-colors"
-            disabled
           >
             <Settings className="w-5 h-5" />
-            <span className="font-semibold">Settings</span>
-            <span className="text-xs text-ivory/50 ml-auto">Coming Soon</span>
+            <span className="font-semibold">{tCommon('settings')}</span>
           </button>
 
           {/* Sign Out Button */}
@@ -148,7 +156,7 @@ export function ProfileClient({ user, userData }: ProfileClientProps) {
             className="w-full bg-cinnabar/20 border border-cinnabar/40 rounded-lg px-4 py-3 flex items-center justify-center gap-2 text-cinnabar hover:bg-cinnabar/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <LogOut className="w-5 h-5" />
-            <span className="font-semibold">{isSigningOut ? 'Signing Out...' : 'Sign Out'}</span>
+            <span className="font-semibold">{isSigningOut ? tCommon('signingOut') : tCommon('signOut')}</span>
           </button>
         </div>
       </main>

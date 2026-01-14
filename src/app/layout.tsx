@@ -1,7 +1,10 @@
 import type { Metadata, Viewport } from 'next'
+import Script from 'next/script'
 import './globals.css'
 import { ViewportTracker } from '@/components/ViewportTracker'
 import { AuthProvider } from '@/lib/AuthProvider'
+import { LanguageProvider } from '@/lib/LanguageProvider'
+import { IntlProvider } from '@/lib/IntlProvider'
 
 export const metadata: Metadata = {
   title: 'Banger Picks - Football Predictions',
@@ -34,9 +37,18 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
+        <Script
+          type="module"
+          src="https://widgets.api-sports.io/3.1.0/widgets.js"
+          strategy="lazyOnload"
+        />
         <AuthProvider>
-          <ViewportTracker />
-          {children}
+          <LanguageProvider>
+            <IntlProvider>
+              <ViewportTracker />
+              {children}
+            </IntlProvider>
+          </LanguageProvider>
         </AuthProvider>
       </body>
     </html>
