@@ -1,12 +1,14 @@
 'use client'
 
 import { useState } from 'react'
+import { useTranslations } from 'next-intl'
 import { Header } from './Header'
 import { BottomNavigation } from './BottomNavigation'
 import { SignInModal } from './SignInModal'
 import { Lock } from 'lucide-react'
 
 export function NotSignedIn() {
+  const t = useTranslations('auth')
   const [isModalOpen, setIsModalOpen] = useState(false)
 
   return (
@@ -25,10 +27,10 @@ export function NotSignedIn() {
           {/* Message */}
           <div className="flex flex-col gap-3">
             <h1 className="text-3xl sm:text-4xl font-bold text-ivory">
-              Sign In Required
+              {t('signInRequired')}
             </h1>
             <p className="text-ivory/70 text-base sm:text-lg">
-              Please sign in to access this page
+              {t('pleaseSignIn')}
             </p>
           </div>
 
@@ -37,7 +39,7 @@ export function NotSignedIn() {
             onClick={() => setIsModalOpen(true)}
             className="w-full max-w-xs bg-lime-yellow text-midnight-violet py-3 px-6 rounded-lg font-semibold text-lg hover:bg-opacity-90 transition-colors active:bg-opacity-80"
           >
-            Sign In
+            {t('signIn')}
           </button>
         </div>
       </main>

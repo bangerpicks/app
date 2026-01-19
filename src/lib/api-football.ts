@@ -27,9 +27,7 @@ function getApiKey(): string {
  */
 async function apiRequest(endpoint: string, params: Record<string, any> = {}): Promise<any> {
   try {
-    console.log('[api-football] apiRequest called:', { endpoint, params })
     const apiKey = getApiKey()
-    console.log('[api-football] API key present:', !!apiKey, 'Length:', apiKey?.length || 0)
     
     // Build query string
     const queryParams = new URLSearchParams()
@@ -45,10 +43,7 @@ async function apiRequest(endpoint: string, params: Record<string, any> = {}): P
     })
     
     const url = `${API_FOOTBALL_BASE_URL}${endpoint}${queryParams.toString() ? `?${queryParams.toString()}` : ''}`
-    console.log('[api-football] Request URL:', url)
-    console.log('[api-football] Query params:', queryParams.toString())
     
-    console.log('[api-football] Making fetch request...')
     const response = await fetch(url, {
       method: 'GET',
       headers: {
@@ -56,52 +51,22 @@ async function apiRequest(endpoint: string, params: Record<string, any> = {}): P
       },
     })
     
-    console.log('[api-football] Response received:', {
-      status: response.status,
-      statusText: response.statusText,
-      ok: response.ok,
-      headers: Object.fromEntries(response.headers.entries()),
-    })
-    
     if (!response.ok) {
       const errorText = await response.text()
-      console.error('[api-football] Request failed:', {
-        status: response.status,
-        statusText: response.statusText,
-        errorText,
-      })
       throw new Error(`API-Football request failed: ${response.status} ${response.statusText} - ${errorText}`)
     }
     
-    console.log('[api-football] Parsing JSON response...')
     const data = await response.json()
-    console.log('[api-football] Response data:', {
-      hasResponse: !!data.response,
-      responseType: typeof data.response,
-      responseIsArray: Array.isArray(data.response),
-      responseLength: data.response?.length || 0,
-      hasErrors: !!data.errors,
-      errors: data.errors,
-      results: data.results,
-      fullData: JSON.stringify(data),
-    })
     
     // Check for API errors (API-Football returns errors as an object with keys)
     if (data.errors) {
       const errorKeys = Object.keys(data.errors)
       if (errorKeys.length > 0) {
-        console.error('[api-football] API returned errors:', data.errors)
         const errorMessages = errorKeys.map(key => `${key}: ${data.errors[key]}`).join(', ')
         throw new Error(`API-Football errors: ${errorMessages}`)
       }
     }
     
-    // Log if no results but request was successful
-    if (data.results === 0) {
-      console.warn('[api-football] API returned 0 results for the query')
-    }
-    
-    console.log('[api-football] Request successful, returning data')
     return data
   } catch (error) {
     console.error('[api-football] apiRequest error:', error)
@@ -239,8 +204,6 @@ export async function searchFixtures(params: {
   season?: number // Optional season year (will be calculated from 'from' date if not provided)
 }): Promise<APIFootballFixture[]> {
   try {
-    console.log('[api-football] searchFixtures called with params:', params)
-    
     const apiParams: any = {
       from: params.from,
       to: params.to,
@@ -264,35 +227,22 @@ export async function searchFixtures(params: {
       apiParams.timezone = params.timezone
     }
     
-    console.log('[api-football] API params:', apiParams)
-    
     // Check cache first (only for date/league searches, not team/status filters)
     if (!params.team && !params.status) {
       const cached = await getCachedFixtureSearch(params.from, params.to, params.league)
       if (cached) {
-        console.log('[api-football] Returning cached fixtures:', cached.length)
         return cached
       }
-      console.log('[api-football] No cache found, calling API...')
     }
     
     // Call API with season parameter
     const response = await apiRequest('/fixtures', apiParams)
-    console.log('[api-football] Raw API response:', response)
-    console.log('[api-football] Response type:', typeof response)
-    console.log('[api-football] Response.response:', response?.response)
-    console.log('[api-football] Response.response type:', typeof response?.response)
-    console.log('[api-football] Response.response is array:', Array.isArray(response?.response))
-    console.log('[api-football] Response.response length:', response?.response?.length)
     
     const fixtures = response.response || []
-    console.log('[api-football] Returning fixtures:', fixtures)
-    console.log('[api-football] Fixtures length:', fixtures.length)
     
     // Save to cache (only for date/league searches, not team/status filters)
     if (!params.team && !params.status && fixtures.length > 0) {
       await saveCachedFixtureSearch(params.from, params.to, params.league, fixtures)
-      console.log('[api-football] Saved fixtures to cache')
     }
     
     return fixtures
@@ -453,17 +403,12 @@ export async function refreshMajorLeaguesFixtures(
   let leaguesProcessed = 0
   const errors: string[] = []
 
-  console.log(`[api-football] Refreshing fixtures for ${majorLeagues.length} leagues from ${fromDate} to ${toDate}`)
-
   // Calculate season from the start date
   const season = calculateSeason(fromDate)
-  console.log(`[api-football] Using season: ${season} for date range ${fromDate} to ${toDate}`)
 
   // Process each league sequentially to avoid rate limits
   for (const league of majorLeagues) {
     try {
-      console.log(`[api-football] Fetching fixtures for ${league.name} (${league.country}) - Season ${season}`)
-      
       const fixtures = await searchFixtures({
         from: fromDate,
         to: toDate,
@@ -478,16 +423,11 @@ export async function refreshMajorLeaguesFixtures(
       if (onProgress) {
         onProgress(`${league.name} (${league.country})`, fixtures.length)
       }
-
-      console.log(`[api-football] Fetched ${fixtures.length} fixtures for ${league.name}`)
     } catch (error: any) {
       const errorMsg = `Error fetching ${league.name}: ${error.message || 'Unknown error'}`
-      console.error(`[api-football] ${errorMsg}`)
       errors.push(errorMsg)
     }
   }
-
-  console.log(`[api-football] Refresh complete: ${totalFixtures} fixtures from ${leaguesProcessed} leagues, ${errors.length} errors`)
 
   return {
     totalFixtures,

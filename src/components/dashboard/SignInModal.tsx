@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { signInWithPhoneNumber, RecaptchaVerifier, ConfirmationResult, updateProfile } from 'firebase/auth'
 import { auth } from '@/lib/firebase'
-import { ensureUserDocument } from '@/lib/users'
+import { ensureUserDocument, isDisplayNameAvailable } from '@/lib/users'
 import { trackReferralSignup } from '@/lib/referrals'
 import { getRandomSuggestions } from '@/data/displayNameSuggestions'
 import { OnboardingIntro } from './OnboardingIntro'
@@ -51,7 +51,7 @@ export function SignInModal({ isOpen, onClose }: SignInModalProps) {
   const [countryCode, setCountryCode] = useState('+1')
   const [phoneNumber, setPhoneNumber] = useState('')
   const [verificationCode, setVerificationCode] = useState('')
-  const [step, setStep] = useState<'phone' | 'code' | 'displayName' | 'onboarding'>('phone')
+  const [step, setStep] = useState<'phone' | 'code'>('phone')
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -96,11 +96,27 @@ export function SignInModal({ isOpen, onClose }: SignInModalProps) {
   useEffect(() => {
     return () => {
       if (recaptchaVerifierRef.current) {
-        recaptchaVerifierRef.current.clear()
+        try {
+          recaptchaVerifierRef.current.clear()
+        } catch (error) {
+          // Ignore errors if reCAPTCHA is already cleared or container is removed
+        }
         recaptchaVerifierRef.current = null
       }
     }
   }, [])
+
+  // Cleanup reCAPTCHA when modal closes
+  useEffect(() => {
+    if (!isOpen && recaptchaVerifierRef.current) {
+      try {
+        recaptchaVerifierRef.current.clear()
+        recaptchaVerifierRef.current = null
+      } catch (error) {
+        // Ignore errors if reCAPTCHA is already cleared or container is removed
+      }
+    }
+  }, [isOpen])
 
   const handlePhoneSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -108,13 +124,26 @@ export function SignInModal({ isOpen, onClose }: SignInModalProps) {
     setLoading(true)
 
     try {
+      // Ensure the container element exists and is in the DOM
+      if (!recaptchaContainerRef.current) {
+        throw new Error('reCAPTCHA container not found. Please refresh and try again.')
+      }
+
+      // Wait a tick to ensure DOM is ready
+      await new Promise(resolve => setTimeout(resolve, 100))
+
       // Clear existing verifier if any
       if (recaptchaVerifierRef.current) {
-        recaptchaVerifierRef.current.clear()
+        try {
+          recaptchaVerifierRef.current.clear()
+        } catch (clearError) {
+          // Ignore errors during cleanup
+        }
+        recaptchaVerifierRef.current = null
       }
 
       // Initialize reCAPTCHA verifier
-      const verifier = new RecaptchaVerifier(auth, recaptchaContainerRef.current || 'recaptcha-container', {
+      const verifier = new RecaptchaVerifier(auth, recaptchaContainerRef.current, {
         size: 'invisible',
         callback: () => {
           // reCAPTCHA solved, will allow signInWithPhoneNumber
@@ -122,6 +151,15 @@ export function SignInModal({ isOpen, onClose }: SignInModalProps) {
         'expired-callback': () => {
           setError('reCAPTCHA expired. Please try again.')
           setLoading(false)
+          // Clear verifier on expiration
+          if (recaptchaVerifierRef.current) {
+            try {
+              recaptchaVerifierRef.current.clear()
+              recaptchaVerifierRef.current = null
+            } catch (clearError) {
+              // Ignore errors during cleanup
+            }
+          }
         }
       })
 
@@ -130,15 +168,27 @@ export function SignInModal({ isOpen, onClose }: SignInModalProps) {
       // Format phone number with selected country code
       const formattedPhone = `${countryCode}${phoneNumber.replace(/^\+/, '')}`
       
-      const confirmation = await signInWithPhoneNumber(auth, formattedPhone, verifier)
+      // Add timeout wrapper to provide better error messages
+      const confirmationPromise = signInWithPhoneNumber(auth, formattedPhone, verifier)
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Verification code request timed out. Please check your internet connection and try again.')), 30000)
+      )
+      
+      const confirmation = await Promise.race([confirmationPromise, timeoutPromise]) as ConfirmationResult
       setConfirmationResult(confirmation)
       setStep('code')
     } catch (err: any) {
-      setError(err.message || 'Failed to send verification code')
+      const errorMessage = err.message || 'Failed to send verification code'
+      setError(errorMessage)
       console.error('Phone auth error:', err)
+      
       // Clear verifier on error
       if (recaptchaVerifierRef.current) {
-        recaptchaVerifierRef.current.clear()
+        try {
+          recaptchaVerifierRef.current.clear()
+        } catch (clearError) {
+          // Ignore errors during cleanup
+        }
         recaptchaVerifierRef.current = null
       }
     } finally {
@@ -157,14 +207,35 @@ export function SignInModal({ isOpen, onClose }: SignInModalProps) {
       }
 
       const result = await confirmationResult.confirm(verificationCode)
-      // Success - Firebase Auth state will update automatically
-      // Check if user has displayName, if not, show displayName step
-      if (result.user && !result.user.displayName) {
-        setStep('displayName')
-      } else {
-        onClose()
-        resetForm()
+      const user = result.user
+      
+      if (!user) {
+        throw new Error('No user found after verification')
       }
+
+      // Always ensure user document exists in Firestore, even if user has displayName
+      // This is critical for first-time users who might have a displayName but no Firestore doc
+      const displayName = user.displayName || 'Player'
+      const { isNewUser } = await ensureUserDocument(user, displayName, referralCode || undefined)
+
+      // Process referral if code was provided
+      if (referralCode) {
+        try {
+          await trackReferralSignup(user.uid, referralCode)
+        } catch (refError) {
+          console.error('Error processing referral:', refError)
+          // Don't fail signup if referral processing fails
+        }
+        // Clear referral code from sessionStorage
+        if (typeof window !== 'undefined') {
+          sessionStorage.removeItem('referralCode')
+        }
+      }
+
+      // For all users, close modal after sign-in
+      // Onboarding will be handled by the dashboard page
+      onClose()
+      resetForm()
     } catch (err: any) {
       setError(err.message || 'Invalid verification code')
       console.error('Code verification error:', err)
@@ -217,6 +288,14 @@ export function SignInModal({ isOpen, onClose }: SignInModalProps) {
 
       const trimmedDisplayName = displayName.trim()
 
+      // Check if display name is available (case-insensitive)
+      const isAvailable = await isDisplayNameAvailable(trimmedDisplayName, user.uid)
+      if (!isAvailable) {
+        setError('This display name is already taken. Please choose another.')
+        setLoading(false)
+        return
+      }
+
       // Update Firebase Auth profile
       await updateProfile(user, { displayName: trimmedDisplayName })
 
@@ -265,13 +344,21 @@ export function SignInModal({ isOpen, onClose }: SignInModalProps) {
     setShowOnboarding(false)
     // Don't clear referralCode - keep it for the session
     if (recaptchaVerifierRef.current) {
-      recaptchaVerifierRef.current.clear()
+      try {
+        recaptchaVerifierRef.current.clear()
+      } catch (error) {
+        // Ignore errors if reCAPTCHA is already cleared or container is removed
+      }
       recaptchaVerifierRef.current = null
     }
   }
 
   const handleOnboardingClose = () => {
     setShowOnboarding(false)
+    // Clear the flag when onboarding is completed
+    if (typeof window !== 'undefined') {
+      sessionStorage.removeItem('onboardingFromSignIn')
+    }
     onClose()
     resetForm()
   }
@@ -281,9 +368,22 @@ export function SignInModal({ isOpen, onClose }: SignInModalProps) {
     onClose()
   }
 
-  if (!isOpen || !mounted) return null
 
-  const modalContent = (
+  // Render onboarding even if modal is closed (onboarding handles its own visibility)
+  // But only render sign-in modal content if modal is open and not showing onboarding
+  if (!mounted) {
+    // Still render OnboardingIntro even if not mounted yet
+    return (
+      <OnboardingIntro 
+        isOpen={showOnboarding} 
+        onClose={handleOnboardingClose}
+        requiresDisplayName={true}
+        referralCode={referralCode}
+      />
+    )
+  }
+
+  const modalContent = isOpen && !showOnboarding ? (
     <div 
       className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4 overflow-y-auto overflow-x-hidden"
       onClick={handleClose}
@@ -295,7 +395,7 @@ export function SignInModal({ isOpen, onClose }: SignInModalProps) {
       >
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-xl sm:text-2xl font-bold text-midnight-violet pr-2">
-            {step === 'phone' ? 'Sign In / Sign Up' : step === 'code' ? 'Verify Code' : 'Choose Display Name'}
+            {step === 'phone' ? 'Sign In / Sign Up' : 'Verify Code'}
           </h2>
           <button
             onClick={handleClose}
@@ -309,12 +409,6 @@ export function SignInModal({ isOpen, onClose }: SignInModalProps) {
         {step === 'phone' && (
           <p className="mb-4 text-xs sm:text-sm text-midnight-violet text-opacity-80">
             Enter your phone number to sign in or create an account. We'll send you a verification code.
-          </p>
-        )}
-
-        {step === 'displayName' && (
-          <p className="mb-4 text-xs sm:text-sm text-midnight-violet text-opacity-80">
-            Choose a display name that others will see. You can select a recommendation or enter your own.
           </p>
         )}
 
@@ -355,7 +449,11 @@ export function SignInModal({ isOpen, onClose }: SignInModalProps) {
                 />
               </div>
             </div>
-            <div ref={recaptchaContainerRef} id="recaptcha-container"></div>
+            <div 
+              ref={recaptchaContainerRef} 
+              id="recaptcha-container"
+              style={{ position: 'fixed', top: '-9999px', left: '-9999px', visibility: 'hidden' }}
+            ></div>
             <button
               type="submit"
               disabled={loading}
@@ -367,7 +465,7 @@ export function SignInModal({ isOpen, onClose }: SignInModalProps) {
               By continuing, you agree to receive SMS messages for verification. Message and data rates may apply.
             </p>
           </form>
-        ) : step === 'code' ? (
+        ) : (
           <form onSubmit={handleCodeSubmit} className="space-y-4 overflow-x-hidden">
             <div>
               <label htmlFor="code" className="block text-sm font-semibold text-midnight-violet mb-2">
@@ -407,66 +505,14 @@ export function SignInModal({ isOpen, onClose }: SignInModalProps) {
               Change phone number
             </button>
           </form>
-        ) : (
-          <form onSubmit={handleDisplayNameSubmit} className="space-y-4 overflow-x-hidden">
-            <div>
-              <label className="block text-sm font-semibold text-midnight-violet mb-2">
-                Recommended Display Names
-              </label>
-              <div className="flex flex-wrap gap-2 mb-4">
-                {recommendedNames.map((name) => (
-                  <button
-                    key={name}
-                    type="button"
-                    onClick={() => handleDisplayNameSelect(name)}
-                    className={`px-4 py-2 rounded font-semibold text-sm min-h-[44px] transition-colors ${
-                      selectedDisplayName === name && !customDisplayName.trim()
-                        ? 'bg-midnight-violet text-lime-yellow'
-                        : 'bg-midnight-violet/10 text-midnight-violet hover:bg-midnight-violet/20'
-                    }`}
-                  >
-                    {name}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div>
-              <label htmlFor="custom-display-name" className="block text-sm font-semibold text-midnight-violet mb-2">
-                Or Enter Custom Display Name
-              </label>
-              <input
-                id="custom-display-name"
-                type="text"
-                value={customDisplayName}
-                onChange={(e) => {
-                  setCustomDisplayName(e.target.value)
-                  setSelectedDisplayName('')
-                }}
-                placeholder="Enter your display name"
-                maxLength={30}
-                className="w-full px-4 py-2.5 min-h-[44px] rounded border border-midnight-violet text-midnight-violet focus:outline-none focus:ring-2 focus:ring-midnight-violet text-base"
-              />
-              <p className="mt-1 text-xs text-midnight-violet text-opacity-70">
-                Must be 2-30 characters. Letters, numbers, spaces, hyphens, and underscores only.
-              </p>
-            </div>
-            <button
-              type="submit"
-              disabled={loading || (!selectedDisplayName && !customDisplayName.trim())}
-              className="w-full bg-midnight-violet text-lime-yellow py-3 px-4 rounded font-semibold hover:bg-opacity-90 disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px] active:bg-opacity-80"
-            >
-              {loading ? 'Saving...' : 'Continue'}
-            </button>
-          </form>
         )}
       </div>
     </div>
-  )
+  ) : null
 
   return (
     <>
-      {createPortal(modalContent, document.body)}
-      <OnboardingIntro isOpen={showOnboarding} onClose={handleOnboardingClose} />
+      {isOpen && createPortal(modalContent, document.body)}
     </>
   )
 }

@@ -43,31 +43,8 @@ export function FixtureSearch({
   const selectedFixtureIds = selectedFixtures.map((f) => f.fixture.id)
   const canSelectMore = selectedFixtures.length < maxSelections
 
-  // Log when dates change
-  useEffect(() => {
-    console.log('[FixtureSearch] fromDate changed:', fromDate)
-  }, [fromDate])
-
-  useEffect(() => {
-    console.log('[FixtureSearch] toDate changed:', toDate)
-  }, [toDate])
-
-  useEffect(() => {
-    console.log('[FixtureSearch] selectedLeague changed:', selectedLeague)
-  }, [selectedLeague])
-
   const handleSearch = async () => {
-    console.log('[FixtureSearch] handleSearch called')
-    console.log('[FixtureSearch] Current state:', {
-      fromDate,
-      toDate,
-      selectedLeague,
-      selectedFixtureIds,
-      selectedFixturesCount: selectedFixtures.length,
-    })
-
     if (!fromDate || !toDate) {
-      console.warn('[FixtureSearch] Missing dates - fromDate:', fromDate, 'toDate:', toDate)
       setError('Gameweek start and end dates must be set first')
       return
     }
@@ -77,13 +54,6 @@ export function FixtureSearch({
       setError('Please select a league to search. API-Football requires a league filter for date range searches.')
       return
     }
-
-    console.log('[FixtureSearch] Starting search with params:', {
-      from: fromDate,
-      to: toDate,
-      league: selectedLeague || undefined,
-      timezone: 'UTC',
-    })
 
     setLoading(true)
     setError(null)
@@ -95,35 +65,20 @@ export function FixtureSearch({
         league: selectedLeague || undefined,
         timezone: 'UTC',
       }
-      console.log('[FixtureSearch] Calling searchFixtures with:', searchParams)
       
       const results = await searchFixtures(searchParams)
-      
-      console.log('[FixtureSearch] searchFixtures returned:', {
-        resultsCount: results?.length || 0,
-        results: results,
-        isArray: Array.isArray(results),
-      })
 
       // Filter out fixtures that are already selected
-      console.log('[FixtureSearch] Filtering results - selectedFixtureIds:', selectedFixtureIds)
       const availableResults = results.filter(
         (fixture) => !selectedFixtureIds.includes(fixture.fixture.id)
       )
-      console.log('[FixtureSearch] After filtering:', {
-        originalCount: results.length,
-        availableCount: availableResults.length,
-        filteredOut: results.length - availableResults.length,
-      })
 
       setSearchResults(availableResults)
-      console.log('[FixtureSearch] Search results set, count:', availableResults.length)
       
       // Fetch standings if a league is selected
       if (selectedLeague && results.length > 0) {
         try {
           const season = calculateSeason(fromDate)
-          console.log('[FixtureSearch] Fetching standings for league:', selectedLeague, 'season:', season)
           const standings = await getStandings(selectedLeague, season)
           
           // Create a map of team ID to position
@@ -132,9 +87,7 @@ export function FixtureSearch({
             positionsMap.set(team.team.id, team.rank)
           })
           setTeamPositions(positionsMap)
-          console.log('[FixtureSearch] Loaded positions for', positionsMap.size, 'teams')
         } catch (err) {
-          console.warn('[FixtureSearch] Could not load standings:', err)
           // Standings are optional, so we continue even if they fail
         }
       } else {
@@ -147,13 +100,9 @@ export function FixtureSearch({
       }
 
       if (availableResults.length === 0) {
-        console.warn('[FixtureSearch] No available fixtures after filtering')
         if (results.length > 0) {
-          console.log('[FixtureSearch] All fixtures were already selected')
           setError('All fixtures from the search are already selected. Deselect some to see them again.')
         } else {
-          console.log('[FixtureSearch] No fixtures found in API response')
-          console.log('[FixtureSearch] Search params were:', { fromDate, toDate, selectedLeague })
           // Provide helpful error message
           const errorMsg = selectedLeague 
             ? `No fixtures found for ${fromDate} to ${toDate} in the selected league. Try a different date range or select "All Leagues".`
@@ -161,26 +110,16 @@ export function FixtureSearch({
           setError(errorMsg)
         }
       } else {
-        console.log('[FixtureSearch] Search successful, displaying', availableResults.length, 'fixtures')
         setError(null) // Clear any previous errors
       }
     } catch (err: any) {
-      console.error('[FixtureSearch] Error searching fixtures:', err)
-      console.error('[FixtureSearch] Error details:', {
-        message: err.message,
-        stack: err.stack,
-        name: err.name,
-        fullError: err,
-      })
       const errorMessage =
         err.message?.includes('rate limit') || err.message?.includes('429')
           ? 'API rate limit reached. Please try again later.'
           : err.message || 'Failed to search fixtures. Please try again.'
-      console.error('[FixtureSearch] Setting error message:', errorMessage)
       setError(errorMessage)
       setSearchResults([])
     } finally {
-      console.log('[FixtureSearch] Search completed, setting loading to false')
       setLoading(false)
     }
   }
@@ -200,19 +139,6 @@ export function FixtureSearch({
   const handleDeselectFixture = (fixtureId: number) => {
     onDeselectFixture(fixtureId)
   }
-
-  // Log component state on render
-  console.log('[FixtureSearch] Component render:', {
-    fromDate,
-    toDate,
-    selectedLeague,
-    searchResultsCount: searchResults.length,
-    selectedFixturesCount: selectedFixtures.length,
-    loading,
-    error,
-    canSelectMore,
-    maxSelections,
-  })
 
   return (
     <div className="space-y-4">

@@ -1,10 +1,12 @@
 'use client'
 
+import { useTranslations } from 'next-intl'
 import { ShopItemProps } from '@/types/shop'
 import { ShoppingBag, Package } from 'lucide-react'
 import Image from 'next/image'
 
 export function ShopItem({ item, userPoints, isRedeemed = false, onRedeem }: ShopItemProps) {
+  const t = useTranslations('shop')
   const canAfford = userPoints >= item.pointsCost
   const isAvailable = item.status === 'active' && (item.stock === null || (item.stock && item.stock > 0))
   const isDisabled = !canAfford || !isAvailable || isRedeemed
@@ -45,20 +47,20 @@ export function ShopItem({ item, userPoints, isRedeemed = false, onRedeem }: Sho
                 : 'bg-lime-yellow text-midnight-violet'
             }`}
           >
-            {item.category === 'digital' ? 'Digital' : 'Physical'}
+            {item.category === 'digital' ? t('digital') : t('physical')}
           </span>
         </div>
         {/* Sold Out Overlay */}
         {item.status === 'sold_out' || (item.stock !== null && item.stock === 0) ? (
           <div className="absolute inset-0 bg-midnight-violet/80 flex items-center justify-center">
-            <span className="text-ivory font-bold text-lg">Sold Out</span>
+            <span className="text-ivory font-bold text-lg">{t('soldOut')}</span>
           </div>
         ) : null}
         {/* Featured Badge */}
         {item.featured && (
           <div className="absolute top-2 left-2">
             <span className="px-2 py-1 rounded text-xs font-bold bg-lime-yellow text-midnight-violet">
-              Featured
+              {t('featured')}
             </span>
           </div>
         )}
@@ -75,10 +77,10 @@ export function ShopItem({ item, userPoints, isRedeemed = false, onRedeem }: Sho
         <div className="flex items-center justify-between">
           <div className="flex items-baseline gap-1">
             <span className="text-lime-yellow font-bold text-xl">{item.pointsCost}</span>
-            <span className="text-ivory/70 text-sm">pts</span>
+            <span className="text-ivory/70 text-sm">{t('pts')}</span>
           </div>
           {item.stock != null && item.stock > 0 && (
-            <span className="text-ivory/50 text-xs">{item.stock} left</span>
+            <span className="text-ivory/50 text-xs">{item.stock} {t('left')}</span>
           )}
         </div>
 
@@ -93,12 +95,12 @@ export function ShopItem({ item, userPoints, isRedeemed = false, onRedeem }: Sho
           }`}
         >
           {isRedeemed
-            ? 'Already Redeemed'
+            ? t('alreadyRedeemed')
             : !canAfford
-              ? 'Insufficient Points'
+              ? t('insufficientPoints')
               : item.status === 'sold_out' || (item.stock !== null && item.stock === 0)
-                ? 'Sold Out'
-                : 'Redeem'}
+                ? t('soldOut')
+                : t('redeem')}
         </button>
       </div>
     </div>

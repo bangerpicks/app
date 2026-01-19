@@ -110,8 +110,6 @@ export async function trackReferralSignup(newUserUid: string, referralCode: stri
       referralPoints: increment(5),
       lastUpdated: serverTimestamp() as any,
     })
-
-    console.log(`Awarded 5 referral points to ${referrerUid} for referral of ${newUserUid}`)
   } catch (error: any) {
     console.error('Error tracking referral signup:', error)
     throw error

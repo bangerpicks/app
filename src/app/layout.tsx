@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import Script from 'next/script'
 import './globals.css'
 import { ViewportTracker } from '@/components/ViewportTracker'
+import { DynamicLang } from '@/components/DynamicLang'
 import { AuthProvider } from '@/lib/AuthProvider'
 import { LanguageProvider } from '@/lib/LanguageProvider'
 import { IntlProvider } from '@/lib/IntlProvider'
@@ -35,7 +36,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en">
+    <html suppressHydrationWarning>
       <body>
         <Script
           type="module"
@@ -44,6 +45,7 @@ export default function RootLayout({
         />
         <AuthProvider>
           <LanguageProvider>
+            <DynamicLang />
             <IntlProvider>
               <ViewportTracker />
               {children}

@@ -67,6 +67,52 @@ export async function getUserDisplayName(user: User): Promise<string> {
 }
 
 /**
+ * Checks if a display name is available (not already taken by another user).
+ * Performs case-insensitive comparison (e.g., "John" and "john" are considered duplicates).
+ * 
+ * @param displayName - The display name to check
+ * @param excludeUserId - Optional user ID to exclude from the check (for updates)
+ * @returns Promise<boolean> - True if available, false if already taken
+ */
+export async function isDisplayNameAvailable(displayName: string, excludeUserId?: string): Promise<boolean> {
+  try {
+    if (!displayName || displayName.trim().length === 0) {
+      return false
+    }
+
+    const normalizedName = displayName.trim().toLowerCase()
+    
+    // Query all users to check for case-insensitive matches
+    // Note: Firestore doesn't support case-insensitive queries, so we fetch and filter
+    const usersRef = collection(db, 'users')
+    const querySnapshot = await getDocs(usersRef)
+    
+    // Check each user's displayName (case-insensitive)
+    for (const docSnapshot of querySnapshot.docs) {
+      // Skip the current user if excludeUserId is provided
+      if (excludeUserId && docSnapshot.id === excludeUserId) {
+        continue
+      }
+      
+      const userData = docSnapshot.data() as UserDocument
+      const existingDisplayName = userData.displayName || ''
+      const normalizedExisting = existingDisplayName.trim().toLowerCase()
+      
+      // Case-insensitive comparison
+      if (normalizedName === normalizedExisting) {
+        return false // Display name is already taken
+      }
+    }
+    
+    return true // Display name is available
+  } catch (error) {
+    console.error('Error checking display name availability:', error)
+    // On error, return false to be safe (prevent duplicates)
+    return false
+  }
+}
+
+/**
  * Gets the user's points from Firestore, defaulting to 0 if not found
  * 
  * @param user - The Firebase Auth user object
@@ -278,7 +324,6 @@ export async function updateUserLanguage(user: User, language: 'en' | 'es-MX'): 
     }
 
     await setDoc(userRef, updates, { merge: true })
-    console.log(`Updated user language for ${user.uid} to ${language}`)
   } catch (error: any) {
     console.error(`Error updating user language for ${user.uid}:`, error)
     
@@ -330,7 +375,6 @@ export async function ensureUserDocument(user: User, displayName: string, referr
       }
 
       if (attempts >= maxAttempts) {
-        console.warn(`Failed to generate unique referral code for ${user.uid}, using timestamp-based code`)
         code = `REF${Date.now().toString(36).toUpperCase().slice(-7)}`
       }
 
@@ -349,7 +393,6 @@ export async function ensureUserDocument(user: User, displayName: string, referr
       }
 
       await setDoc(userRef, userData)
-      console.log(`Created new user document for ${user.uid} with referral code ${code}`)
       return { isNewUser: true }
     } else {
       // User document exists - update displayName
@@ -385,7 +428,6 @@ export async function ensureUserDocument(user: User, displayName: string, referr
       }
 
       await setDoc(userRef, updates, { merge: true })
-      console.log(`Updated user document for ${user.uid}`)
       return { isNewUser: false }
     }
   } catch (error: any) {
@@ -423,7 +465,6 @@ export async function markOnboardingIntroSeen(user: User): Promise<void> {
     }
 
     await setDoc(userRef, updates, { merge: true })
-    console.log(`Marked onboarding intro as seen for ${user.uid}`)
   } catch (error: any) {
     console.error(`Error marking onboarding intro as seen for ${user.uid}:`, error)
     

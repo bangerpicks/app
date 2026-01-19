@@ -17,6 +17,22 @@ const LanguageContext = createContext<LanguageContextType>({
   loading: true,
 })
 
+// Function to detect browser/system language
+function detectBrowserLanguage(): Locale {
+  if (typeof window === 'undefined') return 'en'
+  
+  // Get browser's preferred languages
+  const browserLang = navigator.language || (navigator as any).userLanguage || 'en'
+  
+  // Check if it starts with 'es' (Spanish)
+  if (browserLang.startsWith('es')) {
+    return 'es-MX'
+  }
+  
+  // Default to English
+  return 'en'
+}
+
 export function LanguageProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth()
   const [locale, setLocaleState] = useState<Locale>('en')
@@ -27,14 +43,17 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     const loadLanguage = async () => {
       if (user) {
         try {
+          // If user is logged in, use their saved preference
           const userLang = await getUserLanguage(user)
           setLocaleState(userLang)
         } catch (error) {
           console.error('Error loading user language:', error)
-          setLocaleState('en')
+          // Fallback to browser language if user preference fails
+          setLocaleState(detectBrowserLanguage())
         }
       } else {
-        setLocaleState('en')
+        // If not logged in, use browser/system language
+        setLocaleState(detectBrowserLanguage())
       }
       setLoading(false)
     }

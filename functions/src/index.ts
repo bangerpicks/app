@@ -168,8 +168,6 @@ export const updateLiveFixtures = functions.pubsub
     const db = admin.firestore()
 
     try {
-      console.log('[updateLiveFixtures] Starting live fixture update...')
-
       // Query all active gameweeks
       const gameweeksSnapshot = await db
         .collection('gameweeks')
@@ -177,16 +175,12 @@ export const updateLiveFixtures = functions.pubsub
         .get()
 
       if (gameweeksSnapshot.empty) {
-        console.log('[updateLiveFixtures] No active gameweeks found')
         return null
       }
-
-      console.log(`[updateLiveFixtures] Found ${gameweeksSnapshot.size} active gameweek(s)`)
 
       // Process each active gameweek
       for (const gameweekDoc of gameweeksSnapshot.docs) {
         const gameweekId = gameweekDoc.id
-        console.log(`[updateLiveFixtures] Processing gameweek: ${gameweekId}`)
 
         try {
           // Get all fixtures for this gameweek
@@ -197,7 +191,6 @@ export const updateLiveFixtures = functions.pubsub
             .get()
 
           if (fixturesSnapshot.empty) {
-            console.log(`[updateLiveFixtures] No fixtures found for gameweek ${gameweekId}`)
             continue
           }
 
@@ -213,16 +206,11 @@ export const updateLiveFixtures = functions.pubsub
           }
 
           if (fixtureIds.length === 0) {
-            console.log(`[updateLiveFixtures] No fixture IDs found for gameweek ${gameweekId}`)
             continue
           }
 
-          console.log(`[updateLiveFixtures] Fetching ${fixtureIds.length} fixtures from API-Football...`)
-
           // Fetch updated fixtures from API-Football
           const updatedFixtures = await fetchFixturesByIds(fixtureIds)
-
-          console.log(`[updateLiveFixtures] Received ${updatedFixtures.length} fixtures from API-Football`)
 
           // Create a map of fixture ID to updated fixture data
           const fixtureMap = new Map<number, APIFootballFixture>()
@@ -241,9 +229,6 @@ export const updateLiveFixtures = functions.pubsub
             // Get updated fixture data
             const updatedFixture = fixtureMap.get(fixtureId)
             if (!updatedFixture) {
-              console.warn(
-                `[updateLiveFixtures] No updated fixture data found for fixture ID ${fixtureId}`
-              )
               continue
             }
 
@@ -258,16 +243,7 @@ export const updateLiveFixtures = functions.pubsub
             // Skip if match is finished AND already updated to finished status
             // This prevents unnecessary updates but still allows the final status update
             if (isFinished && currentStatus === status) {
-              console.log(
-                `[updateLiveFixtures] Fixture ${fixtureId} is already marked as finished (${status}), skipping update`
-              )
               continue
-            }
-            
-            if (isFinished && currentStatus !== status) {
-              console.log(
-                `[updateLiveFixtures] Fixture ${fixtureId} just finished (${currentStatus} -> ${status}), updating to FT`
-              )
             }
 
             // Update only the fixture field (preserve other fields)
@@ -287,13 +263,6 @@ export const updateLiveFixtures = functions.pubsub
           // Commit batch update
           if (updateCount > 0) {
             await batch.commit()
-            console.log(
-              `[updateLiveFixtures] Updated ${updateCount} fixtures for gameweek ${gameweekId}`
-            )
-          } else {
-            console.log(
-              `[updateLiveFixtures] No fixtures to update for gameweek ${gameweekId} (all finished)`
-            )
           }
         } catch (error: any) {
           console.error(`[updateLiveFixtures] Error processing gameweek ${gameweekId}:`, error)
@@ -301,7 +270,6 @@ export const updateLiveFixtures = functions.pubsub
         }
       }
 
-      console.log('[updateLiveFixtures] Live fixture update completed successfully')
       return null
     } catch (error: any) {
       console.error('[updateLiveFixtures] Error in live fixture update:', error)
@@ -319,8 +287,6 @@ export const autoScoring = functions.pubsub
     const db = admin.firestore()
 
     try {
-      console.log('[autoScoring] Starting auto-scoring...')
-
       // Query all active gameweeks
       const gameweeksSnapshot = await db
         .collection('gameweeks')
@@ -328,11 +294,8 @@ export const autoScoring = functions.pubsub
         .get()
 
       if (gameweeksSnapshot.empty) {
-        console.log('[autoScoring] No active gameweeks found')
         return null
       }
-
-      console.log(`[autoScoring] Found ${gameweeksSnapshot.size} active gameweek(s)`)
 
       let totalAwarded = 0
       let totalProcessed = 0
@@ -340,7 +303,6 @@ export const autoScoring = functions.pubsub
       // Process each active gameweek
       for (const gameweekDoc of gameweeksSnapshot.docs) {
         const gameweekId = gameweekDoc.id
-        console.log(`[autoScoring] Processing gameweek: ${gameweekId}`)
 
         try {
           // Get all fixtures for this gameweek
@@ -351,7 +313,6 @@ export const autoScoring = functions.pubsub
             .get()
 
           if (fixturesSnapshot.empty) {
-            console.log(`[autoScoring] No fixtures found for gameweek ${gameweekId}`)
             continue
           }
 
@@ -376,11 +337,8 @@ export const autoScoring = functions.pubsub
           }
 
           if (finishedFixtureIds.length === 0) {
-            console.log(`[autoScoring] No finished fixtures found for gameweek ${gameweekId}`)
             continue
           }
-
-          console.log(`[autoScoring] Found ${finishedFixtureIds.length} finished fixtures for gameweek ${gameweekId}`)
 
           // Fetch latest fixture results from API-Football
           const updatedFixtures = await fetchFixturesByIds(finishedFixtureIds)
@@ -393,14 +351,12 @@ export const autoScoring = functions.pubsub
           for (const fixtureId of finishedFixtureIds) {
             const fixtureResult = fixtureResultsMap.get(fixtureId)
             if (!fixtureResult) {
-              console.warn(`[autoScoring] No result found for fixture ${fixtureId}`)
               continue
             }
 
             // Determine match winner
             const winner = determineMatchWinner(fixtureResult)
             if (!winner) {
-              console.warn(`[autoScoring] Could not determine winner for fixture ${fixtureId}`)
               continue
             }
 
@@ -414,11 +370,8 @@ export const autoScoring = functions.pubsub
               const predictionsSnapshot = await predictionsRef.get()
 
               if (predictionsSnapshot.empty) {
-                console.log(`[autoScoring] No predictions found for fixture ${fixtureId}`)
                 continue
               }
-
-              console.log(`[autoScoring] Processing ${predictionsSnapshot.size} predictions for fixture ${fixtureId}`)
 
               // Batch updates for this fixture
               const batch = db.batch()
@@ -443,7 +396,6 @@ export const autoScoring = functions.pubsub
                 const pick = prediction.pick
 
                 if (!pick || (pick !== 'H' && pick !== 'D' && pick !== 'A')) {
-                  console.warn(`[autoScoring] Invalid prediction pick for fixture ${fixtureId}, user ${uid}`)
                   continue
                 }
 
@@ -494,7 +446,6 @@ export const autoScoring = functions.pubsub
                 if (batchCount >= maxBatchSize) {
                   await batch.commit()
                   totalProcessed += batchCount
-                  console.log(`[autoScoring] Committed batch of ${batchCount} predictions for fixture ${fixtureId}`)
                   batchCount = 0
                 }
               }
@@ -503,7 +454,6 @@ export const autoScoring = functions.pubsub
               if (batchCount > 0) {
                 await batch.commit()
                 totalProcessed += batchCount
-                console.log(`[autoScoring] Committed final batch of ${batchCount} predictions for fixture ${fixtureId}`)
               }
 
               // Update user documents with points and stats
@@ -515,7 +465,6 @@ export const autoScoring = functions.pubsub
                     const userDoc = await transaction.get(userRef)
 
                     if (!userDoc.exists) {
-                      console.warn(`[autoScoring] User document not found for ${uid}, skipping stats update`)
                       return
                     }
 
@@ -542,8 +491,6 @@ export const autoScoring = functions.pubsub
                   // Continue with other users even if one fails
                 }
               }
-
-              console.log(`[autoScoring] Completed processing fixture ${fixtureId}`)
             } catch (error: any) {
               console.error(`[autoScoring] Error processing fixture ${fixtureId}:`, error)
               // Continue with next fixture
@@ -555,9 +502,6 @@ export const autoScoring = functions.pubsub
         }
       }
 
-      console.log(
-        `[autoScoring] Auto-scoring completed. Processed ${totalProcessed} predictions, awarded ${totalAwarded} points`
-      )
       return null
     } catch (error: any) {
       console.error('[autoScoring] Error in auto-scoring:', error)

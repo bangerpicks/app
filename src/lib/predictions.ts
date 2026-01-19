@@ -81,7 +81,6 @@ export async function savePredictions(
     }
 
     if (predictions.size === 0) {
-      console.log('No predictions to save')
       return
     }
 
@@ -97,7 +96,6 @@ export async function savePredictions(
     for (const [fixtureId, pick] of predictions.entries()) {
       const match = matchDataMap.get(fixtureId)
       if (!match) {
-        console.warn(`No match data found for fixture ${fixtureId}, skipping`)
         continue
       }
 
@@ -146,9 +144,7 @@ export async function savePredictions(
       batch.set(entryRef, entryData, { merge: true })
     }
 
-    console.log(`Saving ${predictions.size} predictions for user ${uid}`)
     await batch.commit()
-    console.log('All predictions saved successfully')
   } catch (error: any) {
     console.error('Error saving predictions:', error)
     
@@ -222,7 +218,6 @@ export async function getUserPredictions(
           predictions.set(fixtureId, prediction)
         }
       } catch (error) {
-        console.warn(`Error fetching prediction for fixture ${fixtureId}:`, error)
         // Continue with other fixtures
       }
     })
@@ -266,7 +261,6 @@ export async function getGameweekPlayerCount(
         })
       } catch (error) {
         // If the collection doesn't exist or there's an error, skip it
-        console.warn(`Error fetching predictions for fixture ${fixtureId}:`, error)
       }
     })
 

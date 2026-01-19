@@ -321,7 +321,6 @@ export async function getWeeklyRankings(
     // Get fixture IDs
     const fixtureIds = gameweek.fixtureIds || []
     if (fixtureIds.length === 0) {
-      console.warn('Gameweek has no fixtures')
       return []
     }
 

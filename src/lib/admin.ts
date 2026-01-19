@@ -50,20 +50,12 @@ export async function getCachedFixtureSearch(
   league?: number
 ): Promise<APIFootballFixture[] | null> {
   try {
-    console.log('[admin] getCachedFixtureSearch called:', { from, to, league })
     const cacheKey = generateCacheKey(from, to, league)
-    console.log('[admin] Generated cache key:', cacheKey)
     
     const cacheDoc = await getDoc(doc(db, 'fixture_searches', cacheKey))
-    console.log('[admin] Cache document exists:', cacheDoc.exists())
     
     if (cacheDoc.exists()) {
       const data = cacheDoc.data()
-      console.log('[admin] Cache data found:', {
-        hasFixtures: !!data.fixtures,
-        fixturesCount: data.fixtures?.length || 0,
-        cachedAt: data.cachedAt,
-      })
       
       // Check if cache is still valid (24 hours)
       const cachedAt = data.cachedAt?.toMillis() || 0
@@ -71,23 +63,9 @@ export async function getCachedFixtureSearch(
       const cacheAge = now - cachedAt
       const cacheExpiry = 24 * 60 * 60 * 1000 // 24 hours
       
-      console.log('[admin] Cache age check:', {
-        cachedAt,
-        now,
-        cacheAge,
-        cacheExpiry,
-        isValid: cacheAge < cacheExpiry,
-        ageInHours: (cacheAge / (60 * 60 * 1000)).toFixed(2),
-      })
-      
       if (cacheAge < cacheExpiry) {
-        console.log('[admin] Returning cached fixtures:', data.fixtures?.length || 0)
         return data.fixtures || null
-      } else {
-        console.log('[admin] Cache expired, returning null')
       }
-    } else {
-      console.log('[admin] No cache document found')
     }
     
     return null
@@ -112,14 +90,7 @@ export async function saveCachedFixtureSearch(
   fixtures: APIFootballFixture[]
 ): Promise<void> {
   try {
-    console.log('[admin] saveCachedFixtureSearch called:', {
-      from,
-      to,
-      league,
-      fixturesCount: fixtures.length,
-    })
     const cacheKey = generateCacheKey(from, to, league)
-    console.log('[admin] Saving to cache with key:', cacheKey)
     
     await setDoc(doc(db, 'fixture_searches', cacheKey), {
       from,
@@ -128,7 +99,6 @@ export async function saveCachedFixtureSearch(
       fixtures,
       cachedAt: Timestamp.now(),
     })
-    console.log('[admin] Successfully saved to cache')
   } catch (error) {
     console.error('[admin] Error saving cached fixture search:', error)
     // Don't throw - caching is not critical
@@ -503,11 +473,8 @@ export async function fetchAndStoreStandings(
     })
 
     if (leaguesMap.size === 0) {
-      console.log('[admin] No leagues found in fixtures, skipping standings fetch')
       return
     }
-
-    console.log(`[admin] Fetching standings for ${leaguesMap.size} unique league(s)`)
 
     // Fetch standings for each unique league
     const standingsData: { [leagueId: string]: LeagueStandings[] } = {}
@@ -517,18 +484,13 @@ export async function fetchAndStoreStandings(
       Array.from(leaguesMap.values()).map(async ({ leagueId, date }) => {
         try {
           const season = calculateSeason(date)
-          console.log(`[admin] Fetching standings for league ${leagueId}, season ${season}`)
           
           const standings = await getStandings(leagueId, season)
           if (standings.length > 0) {
             standingsData[leagueId.toString()] = standings
-            console.log(`[admin] Successfully fetched ${standings.length} teams for league ${leagueId}`)
-          } else {
-            console.warn(`[admin] No standings returned for league ${leagueId}`)
           }
         } catch (err: any) {
           const errorMsg = `Error fetching standings for league ${leagueId}: ${err.message || 'Unknown error'}`
-          console.warn(`[admin] ${errorMsg}`)
           errors.push(errorMsg)
           // Continue with other leagues even if one fails
         }
@@ -544,13 +506,6 @@ export async function fetchAndStoreStandings(
     }
 
     await updateDoc(gameweekRef, updateData)
-    
-    const successCount = Object.keys(standingsData).length
-    console.log(`[admin] Standings stored: ${successCount} league(s) successful, ${errors.length} error(s)`)
-    
-    if (errors.length > 0) {
-      console.warn('[admin] Some standings failed to fetch:', errors)
-    }
   } catch (error) {
     console.error('[admin] Error fetching and storing standings:', error)
     // Don't throw - standings are optional, gameweek save should still succeed

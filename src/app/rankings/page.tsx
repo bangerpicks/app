@@ -147,6 +147,8 @@ export default function RankingsPage() {
   }
 
   // Show error state if rankings failed to load
+  // Note: This uses hardcoded text but could be translated if needed
+  // Since rankingsError might contain dynamic error messages from the API
   if (rankingsError) {
     return (
       <div className="min-h-[100dvh] min-h-screen bg-midnight-violet flex items-center justify-center">

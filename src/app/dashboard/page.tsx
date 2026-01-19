@@ -247,16 +247,23 @@ export default function DashboardPage() {
           setUsername(user.displayName || undefined)
         })
       
-      // Check if user has seen onboarding intro (fallback check)
+      // Check if user needs onboarding (either hasn't seen it OR needs displayName)
+      // This handles both new sign-ins and direct navigation to dashboard
+      const needsDisplayName = !user.displayName || user.displayName.trim() === 'Player'
+      
       hasSeenOnboardingIntro(user)
         .then((hasSeen) => {
-          if (!hasSeen) {
+          if (!hasSeen || needsDisplayName) {
+            // Show onboarding - it will handle displayName step if needed
             setShowOnboarding(true)
           }
         })
         .catch((error) => {
           console.error('Error checking onboarding status:', error)
-          // Don't show onboarding on error to avoid blocking user
+          // If there's an error but user needs displayName, still show onboarding
+          if (needsDisplayName) {
+            setShowOnboarding(true)
+          }
         })
     } else {
       setUsername(undefined)
@@ -275,7 +282,6 @@ export default function DashboardPage() {
         
         if (!activeGameweek) {
           // No active gameweek found, use mock data as fallback
-          console.log('No active gameweek found, using mock data')
           setGameweek(mockGameweek)
           setInitialMatches(mockMatches)
           setGameweekId(null)
@@ -299,7 +305,6 @@ export default function DashboardPage() {
           // Convert stored standings to Maps for use in convertFixtureToMatchCard
           Object.entries(activeGameweek.standings).forEach(([leagueId, standings]) => {
             if (!Array.isArray(standings)) {
-              console.warn(`[dashboard] League ${leagueId} standings is not an array:`, typeof standings, standings)
               return
             }
             
@@ -307,13 +312,6 @@ export default function DashboardPage() {
               if (team && team.team && typeof team.team.id === 'number') {
                 teamPositions.set(team.team.id, team.rank)
                 teamForms.set(team.team.id, convertFormString(team.form || ''))
-              } else {
-                console.warn('[dashboard] Invalid team data in standings:', {
-                  leagueId,
-                  team,
-                  teamId: team?.team?.id,
-                  teamIdType: typeof team?.team?.id
-                })
               }
             })
           })
@@ -341,7 +339,6 @@ export default function DashboardPage() {
               setGameweek((prev) => prev ? { ...prev, playerCount } : null)
             })
             .catch((err) => {
-              console.warn('Error fetching player count:', err)
               // Continue with 0 if there's an error
             })
         }
@@ -361,7 +358,6 @@ export default function DashboardPage() {
               }))
             })
           } catch (err) {
-            console.warn('Error loading user predictions:', err)
             // Continue without predictions if loading fails
           } finally {
             setLoadingPredictions(false)
@@ -427,9 +423,13 @@ export default function DashboardPage() {
         matches={liveMatches}
         username={username}
       />
-      <OnboardingIntro isOpen={showOnboarding} onClose={() => {
-        setShowOnboarding(false);
-      }} />
+      <OnboardingIntro 
+        isOpen={showOnboarding} 
+        onClose={() => {
+          setShowOnboarding(false);
+        }}
+        requiresDisplayName={user ? (!user.displayName || user.displayName.trim() === 'Player') : false}
+      />
     </>
   )
 }

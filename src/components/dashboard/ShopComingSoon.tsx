@@ -1,5 +1,6 @@
 'use client'
 
+import { useTranslations } from 'next-intl'
 import { Header } from './Header'
 import { BottomNavigation } from './BottomNavigation'
 import { ShoppingBag, Sparkles, Coins, Zap, Star } from 'lucide-react'
@@ -9,6 +10,7 @@ interface ShopComingSoonProps {
 }
 
 export function ShopComingSoon({ username }: ShopComingSoonProps) {
+  const t = useTranslations('shop')
   return (
     <div className="min-h-[100dvh] min-h-screen bg-midnight-violet flex flex-col">
       {/* Header */}
@@ -60,11 +62,11 @@ export function ShopComingSoon({ username }: ShopComingSoonProps) {
                 animation: 'gradient-shift 3s ease infinite, fade-in 0.8s ease-out'
               }}
             >
-              Shop Coming Soon!
+              {t('comingSoon')}
             </h1>
             
             <p className="text-xl sm:text-2xl text-ivory/90 font-semibold animate-fade-in-delay">
-              Something amazing is on the way
+              {t('somethingAmazing')}
             </p>
           </div>
 
@@ -72,23 +74,22 @@ export function ShopComingSoon({ username }: ShopComingSoonProps) {
           <div className="flex items-center gap-4 sm:gap-6 mt-4 animate-fade-in-delay-2">
             <div className="flex items-center gap-2 text-lime-yellow">
               <Zap className="w-5 h-5 sm:w-6 sm:h-6 animate-pulse" />
-              <span className="text-sm sm:text-base font-semibold">Exciting Rewards</span>
+              <span className="text-sm sm:text-base font-semibold">{t('excitingRewards')}</span>
             </div>
             <div className="flex items-center gap-2 text-amber-glow">
               <Star className="w-5 h-5 sm:w-6 sm:h-6 animate-pulse" style={{ animationDelay: '0.3s' }} />
-              <span className="text-sm sm:text-base font-semibold">Exclusive Items</span>
+              <span className="text-sm sm:text-base font-semibold">{t('exclusiveItems')}</span>
             </div>
             <div className="flex items-center gap-2 text-lime-yellow">
               <Coins className="w-5 h-5 sm:w-6 sm:h-6 animate-pulse" style={{ animationDelay: '0.6s' }} />
-              <span className="text-sm sm:text-base font-semibold">Point Rewards</span>
+              <span className="text-sm sm:text-base font-semibold">{t('pointRewards')}</span>
             </div>
           </div>
 
           {/* Subtext Message */}
           <div className="text-center max-w-lg mx-auto mt-6 space-y-3 animate-fade-in-delay-3">
             <p className="text-ivory/80 text-base sm:text-lg leading-relaxed">
-              We're putting the finishing touches on an incredible shop experience. 
-              Get ready to redeem your points for exclusive rewards, badges, and more!
+              {t('finishingTouches')}
             </p>
             <div className="flex items-center justify-center gap-2 text-lime-yellow/90 pt-2">
               <div className="flex gap-1">
@@ -96,7 +97,7 @@ export function ShopComingSoon({ username }: ShopComingSoonProps) {
                 <div className="w-2 h-2 bg-lime-yellow rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
                 <div className="w-2 h-2 bg-lime-yellow rounded-full animate-bounce" style={{ animationDelay: '0.4s' }} />
               </div>
-              <span className="text-sm font-medium">Stay tuned</span>
+              <span className="text-sm font-medium">{t('stayTuned')}</span>
             </div>
           </div>
         </div>
