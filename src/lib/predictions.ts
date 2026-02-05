@@ -14,6 +14,7 @@ import {
 } from 'firebase/firestore'
 import { db } from './firebase'
 import { Prediction, MatchCardData } from '@/types/dashboard'
+import { withTimeout } from './firestore-utils'
 
 /**
  * Prediction entry structure in Firestore
@@ -176,7 +177,11 @@ export async function getUserPrediction(
     }
 
     const entryRef = doc(db, 'predictions', String(fixtureId), 'entries', uid)
-    const entryDoc = await getDoc(entryRef)
+    const entryDoc = await withTimeout(
+      getDoc(entryRef),
+      10000,
+      'Failed to load user prediction - request timed out'
+    )
 
     if (entryDoc.exists()) {
       const data = entryDoc.data() as PredictionEntry
@@ -252,7 +257,11 @@ export async function getGameweekPlayerCount(
     const fetchPromises = fixtureIds.map(async (fixtureId) => {
       try {
         const entriesRef = collection(db, 'predictions', String(fixtureId), 'entries')
-        const entriesSnapshot = await getDocs(entriesRef)
+        const entriesSnapshot = await withTimeout(
+          getDocs(entriesRef),
+          10000,
+          'Failed to load prediction entries - request timed out'
+        )
         
         entriesSnapshot.forEach((entryDoc) => {
           // The document ID is the user's UID

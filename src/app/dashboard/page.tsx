@@ -236,13 +236,17 @@ export default function DashboardPage() {
   const [showOnboarding, setShowOnboarding] = useState(false)
 
   useEffect(() => {
+    const abortController = new AbortController()
+    
     if (user) {
       // Fetch display name from Firestore
       getUserDisplayName(user)
         .then((displayName) => {
+          if (abortController.signal.aborted) return
           setUsername(displayName)
         })
         .catch((error) => {
+          if (abortController.signal.aborted) return
           console.error('Error fetching display name:', error)
           setUsername(user.displayName || undefined)
         })
@@ -253,12 +257,14 @@ export default function DashboardPage() {
       
       hasSeenOnboardingIntro(user)
         .then((hasSeen) => {
+          if (abortController.signal.aborted) return
           if (!hasSeen || needsDisplayName) {
             // Show onboarding - it will handle displayName step if needed
             setShowOnboarding(true)
           }
         })
         .catch((error) => {
+          if (abortController.signal.aborted) return
           console.error('Error checking onboarding status:', error)
           // If there's an error but user needs displayName, still show onboarding
           if (needsDisplayName) {
@@ -269,9 +275,15 @@ export default function DashboardPage() {
       setUsername(undefined)
       setShowOnboarding(false)
     }
+    
+    return () => {
+      abortController.abort()
+    }
   }, [user])
 
   useEffect(() => {
+    const abortController = new AbortController()
+    
     async function fetchActiveGameweek() {
       try {
         setLoadingGameweek(true)
@@ -280,8 +292,11 @@ export default function DashboardPage() {
         // STEP 1: Fetch critical data first (gameweek and fixtures)
         const activeGameweek = await getActiveGameweek()
         
+        if (abortController.signal.aborted) return
+        
         if (!activeGameweek) {
           // No active gameweek found, use mock data as fallback
+          if (abortController.signal.aborted) return
           setGameweek(mockGameweek)
           setInitialMatches(mockMatches)
           setGameweekId(null)
@@ -291,11 +306,14 @@ export default function DashboardPage() {
         
         // Convert admin gameweek to dashboard format (without player count initially)
         const convertedGameweek = convertGameweekData(activeGameweek)
+        if (abortController.signal.aborted) return
         setGameweekId(activeGameweek.gameweekId)
         setGameweek({ ...convertedGameweek, playerCount: 0 }) // Set playerCount to 0 initially
         
         // Fetch fixtures for the gameweek (critical - needed to show matches)
         const fixtures = await getGameweekFixtures(activeGameweek.gameweekId)
+        
+        if (abortController.signal.aborted) return
         
         // Extract standings from gameweek data (stored during creation)
         const teamPositions = new Map<number, number>()
@@ -326,6 +344,8 @@ export default function DashboardPage() {
           a.date.getTime() - b.date.getTime()
         )
         
+        if (abortController.signal.aborted) return
+        
         // Show matches immediately (with standings if available)
         setInitialMatches(sortedMatches)
         setLoadingGameweek(false) // Critical data loaded, show page
@@ -336,6 +356,7 @@ export default function DashboardPage() {
         if (activeGameweek.fixtureIds && activeGameweek.fixtureIds.length > 0) {
           getGameweekPlayerCount(activeGameweek.fixtureIds)
             .then((playerCount) => {
+              if (abortController.signal.aborted) return
               setGameweek((prev) => prev ? { ...prev, playerCount } : null)
             })
             .catch((err) => {
@@ -350,6 +371,8 @@ export default function DashboardPage() {
             const fixtureIds = sortedMatches.map((match) => match.fixtureId)
             const predictions = await getUserPredictions(user.uid, fixtureIds)
             
+            if (abortController.signal.aborted) return
+            
             // Merge predictions into match data
             setInitialMatches((prevMatches) => {
               return prevMatches.map((match) => ({
@@ -360,10 +383,13 @@ export default function DashboardPage() {
           } catch (err) {
             // Continue without predictions if loading fails
           } finally {
-            setLoadingPredictions(false)
+            if (!abortController.signal.aborted) {
+              setLoadingPredictions(false)
+            }
           }
         }
       } catch (err: any) {
+        if (abortController.signal.aborted) return
         console.error('Error fetching active gameweek:', err)
         setError(err.message || 'Failed to load gameweek data')
         // Fallback to mock data on error
@@ -376,6 +402,10 @@ export default function DashboardPage() {
     }
     
     fetchActiveGameweek()
+    
+    return () => {
+      abortController.abort()
+    }
   }, [user])
 
   // Use fetched data or fallback to mock data

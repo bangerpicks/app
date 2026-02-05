@@ -6,6 +6,7 @@ import { DynamicLang } from '@/components/DynamicLang'
 import { AuthProvider } from '@/lib/AuthProvider'
 import { LanguageProvider } from '@/lib/LanguageProvider'
 import { IntlProvider } from '@/lib/IntlProvider'
+import { ErrorBoundary } from '@/components/ErrorBoundary'
 
 export const metadata: Metadata = {
   title: 'Banger Picks - Football Predictions',
@@ -44,13 +45,15 @@ export default function RootLayout({
           strategy="lazyOnload"
         />
         <AuthProvider>
-          <LanguageProvider>
-            <DynamicLang />
-            <IntlProvider>
-              <ViewportTracker />
-              {children}
-            </IntlProvider>
-          </LanguageProvider>
+          <ErrorBoundary>
+            <LanguageProvider>
+              <DynamicLang />
+              <IntlProvider>
+                <ViewportTracker />
+                {children}
+              </IntlProvider>
+            </LanguageProvider>
+          </ErrorBoundary>
         </AuthProvider>
       </body>
     </html>

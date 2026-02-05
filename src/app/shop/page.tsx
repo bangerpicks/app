@@ -108,23 +108,35 @@ export default function ShopPage() {
   const { user, loading: authLoading } = useAuth()
   const [username, setUsername] = useState<string | undefined>(undefined)
   const [userPoints, setUserPoints] = useState<number>(0)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    const abortController = new AbortController()
+    
     if (user) {
       // Fetch display name and referral points from Firestore in a single call
       getUserData(user)
         .then(({ displayName, referralPoints }) => {
+          if (abortController.signal.aborted) return
           setUsername(displayName)
           setUserPoints(referralPoints)
+          setError(null) // Clear error on success
         })
         .catch((error) => {
+          if (abortController.signal.aborted) return
           console.error('Error fetching user data:', error)
+          setError('Failed to load user data. Please try refreshing.')
           setUsername(user.displayName || undefined)
           setUserPoints(0)
         })
     } else {
       setUsername(undefined)
       setUserPoints(0)
+      setError(null)
+    }
+    
+    return () => {
+      abortController.abort()
     }
   }, [user])
 
@@ -140,6 +152,23 @@ export default function ShopPage() {
   // Show not signed in page if user is not authenticated
   if (!user) {
     return <NotSignedIn />
+  }
+
+  // Show error state if data failed to load
+  if (error) {
+    return (
+      <div className="min-h-[100dvh] min-h-screen bg-midnight-violet flex items-center justify-center">
+        <div className="text-center text-ivory p-8">
+          <p className="text-lg mb-4">{error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 bg-lime-yellow text-midnight-violet rounded font-bold"
+          >
+            Refresh Page
+          </button>
+        </div>
+      </div>
+    )
   }
 
   // Check if coming soon mode is enabled via environment variable

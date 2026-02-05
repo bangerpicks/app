@@ -28,22 +28,32 @@ export default function RankingsPage() {
   const [weeklyError, setWeeklyError] = useState<string | null>(null)
 
   useEffect(() => {
+    const abortController = new AbortController()
+    
     if (user) {
       // Fetch display name from Firestore
       getUserDisplayName(user)
         .then((displayName) => {
+          if (abortController.signal.aborted) return
           setUsername(displayName)
         })
         .catch((error) => {
+          if (abortController.signal.aborted) return
           console.error('Error fetching display name:', error)
           setUsername(user.displayName || undefined)
         })
     } else {
       setUsername(undefined)
     }
+    
+    return () => {
+      abortController.abort()
+    }
   }, [user])
 
   useEffect(() => {
+    const abortController = new AbortController()
+    
     // Fetch all rankings data when user is available
     // Parallelize all-time rankings with weekly rankings for better performance
     const fetchAllRankings = async () => {
@@ -59,7 +69,9 @@ export default function RankingsPage() {
         const [rankingsResult, currentGameweek] = await Promise.all([
           getAllTimeRankings(user, 100).catch((error) => {
             console.error('Error fetching all-time rankings:', error)
-            setRankingsError('Failed to load rankings. Please try again later.')
+            if (!abortController.signal.aborted) {
+              setRankingsError('Failed to load rankings. Please try again later.')
+            }
             return []
           }),
           getCurrentGameweek().catch((error) => {
@@ -68,6 +80,8 @@ export default function RankingsPage() {
           }),
         ])
 
+        if (abortController.signal.aborted) return
+        
         allTimeRankingsResult = rankingsResult
 
         // Set all-time rankings immediately
@@ -86,6 +100,8 @@ export default function RankingsPage() {
         // Get fixture details
         const fixtures = await getGameweekFixtureDetails(currentGameweek.gameweekId)
         
+        if (abortController.signal.aborted) return
+        
         if (fixtures.length === 0) {
           // No fixtures found, disable weekly view
           setWeeklyRankings(undefined)
@@ -103,10 +119,13 @@ export default function RankingsPage() {
           ),
         ])
 
+        if (abortController.signal.aborted) return
+
         setGameweekData(transformedData)
         setWeeklyRankings(rankings)
         setWeeklyLoading(false)
       } catch (error) {
+        if (abortController.signal.aborted) return
         console.error('Error fetching rankings:', error)
         // Ensure loading states are cleared on error
         setRankingsLoading(false)
@@ -129,6 +148,10 @@ export default function RankingsPage() {
       setGameweekData(undefined)
       setRankingsLoading(false)
       setWeeklyLoading(false)
+    }
+    
+    return () => {
+      abortController.abort()
     }
   }, [user])
 

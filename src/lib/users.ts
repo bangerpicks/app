@@ -6,6 +6,7 @@ import { doc, getDoc, setDoc, serverTimestamp, Timestamp, collection, query, ord
 import { User } from 'firebase/auth'
 import { db } from './firebase'
 import { RankingEntry } from '@/types/dashboard'
+import { withTimeout } from './firestore-utils'
 
 /**
  * User document structure in Firestore
@@ -50,7 +51,11 @@ export async function getUserDisplayName(user: User): Promise<string> {
     }
 
     const userRef = doc(db, 'users', user.uid)
-    const userDoc = await getDoc(userRef)
+    const userDoc = await withTimeout(
+      getDoc(userRef),
+      10000,
+      'Failed to load user display name - request timed out'
+    )
 
     if (userDoc.exists()) {
       const data = userDoc.data() as UserDocument
@@ -85,7 +90,11 @@ export async function isDisplayNameAvailable(displayName: string, excludeUserId?
     // Query all users to check for case-insensitive matches
     // Note: Firestore doesn't support case-insensitive queries, so we fetch and filter
     const usersRef = collection(db, 'users')
-    const querySnapshot = await getDocs(usersRef)
+    const querySnapshot = await withTimeout(
+      getDocs(usersRef),
+      10000,
+      'Failed to check display name availability - request timed out'
+    )
     
     // Check each user's displayName (case-insensitive)
     for (const docSnapshot of querySnapshot.docs) {
@@ -492,7 +501,11 @@ export async function hasSeenOnboardingIntro(user: User): Promise<boolean> {
     }
 
     const userRef = doc(db, 'users', user.uid)
-    const userDoc = await getDoc(userRef)
+    const userDoc = await withTimeout(
+      getDoc(userRef),
+      10000,
+      'Failed to check onboarding status - request timed out'
+    )
 
     if (userDoc.exists()) {
       const data = userDoc.data() as UserDocument
@@ -523,7 +536,11 @@ export async function getAllTimeRankings(
   try {
     const usersRef = collection(db, 'users')
     const q = query(usersRef, orderBy('points', 'desc'), limit(limitCount))
-    const querySnapshot = await getDocs(q)
+    const querySnapshot = await withTimeout(
+      getDocs(q),
+      10000,
+      'Failed to load all-time rankings - request timed out'
+    )
 
     if (querySnapshot.empty) {
       return []

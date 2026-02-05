@@ -10,7 +10,8 @@ import { auth } from '@/lib/firebase'
 import { Header } from './Header'
 import { BottomNavigation } from './BottomNavigation'
 import { UserDocument } from '@/lib/users'
-import { User as UserIcon, Trophy, Target, Coins, LogOut, Settings } from 'lucide-react'
+import { useIsAdmin } from '@/lib/useIsAdmin'
+import { User as UserIcon, Trophy, Target, Coins, LogOut, Settings, Shield } from 'lucide-react'
 
 interface ProfileClientProps {
   user: User
@@ -21,6 +22,8 @@ export function ProfileClient({ user, userData }: ProfileClientProps) {
   const router = useRouter()
   const t = useTranslations('profile')
   const tCommon = useTranslations('common')
+  const tAdmin = useTranslations('admin')
+  const { isAdmin } = useIsAdmin()
   const [isSigningOut, setIsSigningOut] = useState(false)
 
   const handleSignOut = async () => {
@@ -36,6 +39,10 @@ export function ProfileClient({ user, userData }: ProfileClientProps) {
 
   const handleSettingsClick = () => {
     router.push('/settings')
+  }
+
+  const handleAdminClick = () => {
+    router.push('/admin')
   }
 
   const displayName = userData.displayName || user.displayName || 'Player'
@@ -148,6 +155,17 @@ export function ProfileClient({ user, userData }: ProfileClientProps) {
             <Settings className="w-5 h-5" />
             <span className="font-semibold">{tCommon('settings')}</span>
           </button>
+
+          {/* Admin Button - Only show if user is admin */}
+          {isAdmin && (
+            <button
+              onClick={handleAdminClick}
+              className="w-full bg-lime-yellow/20 border border-lime-yellow/40 rounded-lg px-4 py-3 flex items-center justify-center gap-2 text-lime-yellow hover:bg-lime-yellow/30 transition-colors"
+            >
+              <Shield className="w-5 h-5" />
+              <span className="font-semibold">{tAdmin('adminDashboard')}</span>
+            </button>
+          )}
 
           {/* Sign Out Button */}
           <button

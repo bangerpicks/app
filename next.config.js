@@ -3,6 +3,7 @@ const nextConfig = {
   reactStrictMode: true,
   productionBrowserSourceMaps: true,
   output: 'export',
+  trailingSlash: true,
   images: {
     unoptimized: true,
     domains: ['api-football.com', 'media.api-sports.io'],

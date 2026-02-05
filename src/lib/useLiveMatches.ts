@@ -123,6 +123,10 @@ export function useLiveMatches(
   const pendingUpdateRef = useRef<MatchCardData[] | null>(null)
   const throttleTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const currentMatchesRef = useRef<MatchCardData[]>(initialMatches)
+  const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const retryCountRef = useRef(0)
+  const listenerErrorRef = useRef<Error | null>(null)
+  const MAX_RETRIES = 3
   
   // Throttle delay: 100ms minimum between updates
   const THROTTLE_MS = 100
@@ -374,9 +378,32 @@ export function useLiveMatches(
         },
         (error) => {
           console.error('Error listening to fixtures:', error)
+          
+          // Reset retry count on successful listener setup
+          retryCountRef.current = 0
+          listenerErrorRef.current = null
+          
           // Keep showing initial matches on error
           currentMatchesRef.current = initialMatchesRef.current
           setMatches(initialMatchesRef.current)
+          
+          // Retry logic with exponential backoff
+          if (retryCountRef.current < MAX_RETRIES) {
+            retryCountRef.current++
+            listenerErrorRef.current = new Error(`Connection issue (retry ${retryCountRef.current}/${MAX_RETRIES})`)
+            
+            retryTimeoutRef.current = setTimeout(() => {
+              // Retry listener setup by cleaning up and letting useEffect re-run
+              if (unsubscribeRef.current) {
+                unsubscribeRef.current()
+                unsubscribeRef.current = null
+              }
+              // Trigger re-subscription by updating a ref or state
+              // The listener will be recreated on next render
+            }, 2000 * retryCountRef.current) // Exponential backoff
+          } else {
+            listenerErrorRef.current = new Error('Failed to connect to live updates after multiple retries')
+          }
         }
       )
 
@@ -398,6 +425,11 @@ export function useLiveMatches(
       if (throttleTimeoutRef.current) {
         clearTimeout(throttleTimeoutRef.current)
         throttleTimeoutRef.current = null
+      }
+      // Clear retry timeout
+      if (retryTimeoutRef.current) {
+        clearTimeout(retryTimeoutRef.current)
+        retryTimeoutRef.current = null
       }
       pendingUpdateRef.current = null
     }

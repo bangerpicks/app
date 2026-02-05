@@ -19,6 +19,7 @@ import {
 } from 'firebase/firestore'
 import { db } from './firebase'
 import { APIFootballFixture, getStandings } from './api-football'
+import { withTimeout } from './firestore-utils'
 
 /**
  * Generate cache key for fixture search
@@ -52,7 +53,11 @@ export async function getCachedFixtureSearch(
   try {
     const cacheKey = generateCacheKey(from, to, league)
     
-    const cacheDoc = await getDoc(doc(db, 'fixture_searches', cacheKey))
+    const cacheDoc = await withTimeout(
+      getDoc(doc(db, 'fixture_searches', cacheKey)),
+      10000,
+      'Failed to load cached fixture search - request timed out'
+    )
     
     if (cacheDoc.exists()) {
       const data = cacheDoc.data()
@@ -236,7 +241,11 @@ export async function updateGameweek(
 ): Promise<void> {
   try {
     const gameweekRef = doc(db, 'gameweeks', gameweekId)
-    const gameweekDoc = await getDoc(gameweekRef)
+    const gameweekDoc = await withTimeout(
+      getDoc(gameweekRef),
+      10000,
+      'Failed to load gameweek - request timed out'
+    )
     
     if (!gameweekDoc.exists()) {
       throw new Error('Gameweek not found')
@@ -302,7 +311,11 @@ export async function deleteGameweek(gameweekId: string): Promise<void> {
     
     // Delete all fixtures in subcollection
     const fixturesRef = collection(db, 'gameweeks', gameweekId, 'fixtures')
-    const fixturesSnapshot = await getDocs(fixturesRef)
+    const fixturesSnapshot = await withTimeout(
+      getDocs(fixturesRef),
+      10000,
+      'Failed to load fixtures for deletion - request timed out'
+    )
     
     fixturesSnapshot.forEach((fixtureDoc) => {
       batch.delete(fixtureDoc.ref)
@@ -346,7 +359,11 @@ export async function getAllGameweeks(filters?: {
     }
     
     const q = query(collection(db, 'gameweeks'), ...constraints)
-    const snapshot = await getDocs(q)
+    const snapshot = await withTimeout(
+      getDocs(q),
+      10000,
+      'Failed to load gameweeks - request timed out'
+    )
     
     return snapshot.docs.map((doc) => ({
       ...doc.data(),
@@ -368,7 +385,11 @@ export async function getGameweekById(
   gameweekId: string
 ): Promise<AdminGameweekData | null> {
   try {
-    const gameweekDoc = await getDoc(doc(db, 'gameweeks', gameweekId))
+    const gameweekDoc = await withTimeout(
+      getDoc(doc(db, 'gameweeks', gameweekId)),
+      10000,
+      'Failed to load gameweek - request timed out'
+    )
     
     if (!gameweekDoc.exists()) {
       return null
@@ -396,7 +417,11 @@ export async function getActiveGameweek(): Promise<AdminGameweekData | null> {
       where('status', '==', 'active'),
       orderBy('startDate', 'desc')
     )
-    const snapshot = await getDocs(q)
+    const snapshot = await withTimeout(
+      getDocs(q),
+      10000,
+      'Failed to load gameweek data - request timed out'
+    )
     
     if (snapshot.empty) {
       return null
@@ -526,7 +551,11 @@ export async function saveGameweekFixtures(
   try {
     // Get existing fixtures to find ones that need to be deleted
     const fixturesRef = collection(db, 'gameweeks', gameweekId, 'fixtures')
-    const existingSnapshot = await getDocs(fixturesRef)
+    const existingSnapshot = await withTimeout(
+      getDocs(fixturesRef),
+      10000,
+      'Failed to load existing fixtures - request timed out'
+    )
     
     // Create a Set of new fixture IDs for quick lookup
     const newFixtureIds = new Set(fixtures.map((f) => f.fixture.id))
@@ -605,7 +634,11 @@ export async function getGameweekFixtures(
 ): Promise<GameweekFixtureData[]> {
   try {
     const fixturesRef = collection(db, 'gameweeks', gameweekId, 'fixtures')
-    const snapshot = await getDocs(fixturesRef)
+    const snapshot = await withTimeout(
+      getDocs(fixturesRef),
+      10000,
+      'Failed to load gameweek fixtures - request timed out'
+    )
     
     return snapshot.docs.map((doc) => doc.data() as GameweekFixtureData)
   } catch (error) {
@@ -636,7 +669,11 @@ export interface AppSettings {
  */
 export async function getAppSettings(): Promise<AppSettings | null> {
   try {
-    const settingsDoc = await getDoc(doc(db, 'settings', 'app'))
+    const settingsDoc = await withTimeout(
+      getDoc(doc(db, 'settings', 'app')),
+      10000,
+      'Failed to load app settings - request timed out'
+    )
     
     if (!settingsDoc.exists()) {
       return null

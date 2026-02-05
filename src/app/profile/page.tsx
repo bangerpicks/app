@@ -22,8 +22,11 @@ export default function ProfilePage() {
   const { user, loading: authLoading } = useAuth()
   const [userData, setUserData] = useState<Partial<UserDocument> | null>(null)
   const [loadingUserData, setLoadingUserData] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    const abortController = new AbortController()
+    
     if (user) {
       // Show optimistic UI immediately with auth user data
       setUserData({
@@ -42,6 +45,7 @@ export default function ProfilePage() {
       const userRef = doc(db, 'users', user.uid)
       getDoc(userRef)
         .then((userDoc) => {
+          if (abortController.signal.aborted) return
           if (userDoc.exists()) {
             const data = userDoc.data() as UserDocument
             // Update with Firestore data when ready
@@ -66,13 +70,19 @@ export default function ProfilePage() {
           setLoadingUserData(false)
         })
         .catch((error) => {
+          if (abortController.signal.aborted) return
           console.error('Error fetching user data:', error)
+          setError('Failed to load user data. Please try refreshing.')
           // Keep optimistic UI on error (already set above)
           setLoadingUserData(false)
         })
     } else {
       setUserData(null)
       setLoadingUserData(false)
+    }
+    
+    return () => {
+      abortController.abort()
     }
   }, [user])
 
@@ -88,6 +98,23 @@ export default function ProfilePage() {
   // Show not signed in page if user is not authenticated
   if (!user) {
     return <NotSignedIn />
+  }
+
+  // Show error state if data failed to load
+  if (error) {
+    return (
+      <div className="min-h-[100dvh] min-h-screen bg-midnight-violet flex items-center justify-center">
+        <div className="text-center text-ivory p-8">
+          <p className="text-lg mb-4">{error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 bg-lime-yellow text-midnight-violet rounded font-bold"
+          >
+            Refresh Page
+          </button>
+        </div>
+      </div>
+    )
   }
 
   // Render with optimistic UI (userData is set immediately from auth data)

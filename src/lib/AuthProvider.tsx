@@ -19,12 +19,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    let timeoutId: NodeJS.Timeout | null = null
+    
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      if (timeoutId) {
+        clearTimeout(timeoutId)
+        timeoutId = null
+      }
       setUser(currentUser)
       setLoading(false)
     })
-
-    return () => unsubscribe()
+    
+    // Timeout after 5 seconds if auth state doesn't resolve
+    timeoutId = setTimeout(() => {
+      console.warn('Auth state check timed out - assuming unauthenticated')
+      setUser(null)
+      setLoading(false)
+      unsubscribe() // Clean up listener
+    }, 5000)
+    
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId)
+      unsubscribe()
+    }
   }, [])
 
   return (

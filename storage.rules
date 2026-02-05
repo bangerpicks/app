@@ -1,0 +1,33 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Helper function to check if user is admin
+    // Checks both settings/app.adminUids and users/{uid}.isAdmin
+    function isAdmin() {
+      return request.auth != null && (
+        // Check users/{uid}.isAdmin field
+        (firestore.exists(/databases/(default)/documents/users/$(request.auth.uid)) &&
+         firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.isAdmin == true) ||
+        // Check settings/app.adminUids array
+        (firestore.exists(/databases/(default)/documents/settings/app) &&
+         firestore.get(/databases/(default)/documents/settings/app).data.adminUids.hasAny([request.auth.uid]))
+      );
+    }
+    
+    // Shop items images - admin only write, authenticated read
+    match /shop-items/{itemId}/{allPaths=**} {
+      // Allow read for authenticated users
+      allow read: if request.auth != null;
+      
+      // Allow write (create, update, delete) only for admins
+      // TEMPORARY: Allow all authenticated users for testing - remove this line and uncomment below after verifying admin setup
+      allow write: if request.auth != null;
+      // allow write: if isAdmin();
+    }
+    
+    // Default: deny all other access
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

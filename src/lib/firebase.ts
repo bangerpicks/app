@@ -14,10 +14,19 @@ const firebaseConfig = {
 
 // Initialize Firebase
 let app: FirebaseApp
-if (getApps().length === 0) {
-  app = initializeApp(firebaseConfig)
-} else {
-  app = getApps()[0]
+let initError: Error | null = null
+
+try {
+  if (getApps().length === 0) {
+    app = initializeApp(firebaseConfig)
+  } else {
+    app = getApps()[0]
+  }
+} catch (error) {
+  console.error('Firebase initialization failed:', error)
+  initError = error as Error
+  // Create a minimal app instance to prevent crashes
+  app = initializeApp(firebaseConfig, { name: 'fallback' })
 }
 
 // Initialize Auth
@@ -30,5 +39,16 @@ setPersistence(auth, browserLocalPersistence).catch((error) => {
 
 // Initialize Firestore
 export const db = getFirestore(app)
+
+// Export initialization state
+export const firebaseInitialized = initError === null
+export const firebaseInitError = initError
+
+// Check initialization before use
+export function checkFirebaseInitialized() {
+  if (!firebaseInitialized && firebaseInitError) {
+    throw new Error(`Firebase not initialized: ${firebaseInitError.message}`)
+  }
+}
 
 export default app

@@ -15,6 +15,7 @@ import {
 import { db } from './firebase'
 import { getGameweekById, getAllGameweeks, AdminGameweekData, GameweekFixtureData } from './admin'
 import { getGameweekPlayerCount } from './predictions'
+import { withTimeout } from './firestore-utils'
 import {
   RankingEntry,
   GameweekData,
@@ -87,7 +88,11 @@ export async function getGameweekFixtureDetails(
 > {
   try {
     const fixturesRef = collection(db, 'gameweeks', gameweekId, 'fixtures')
-    const fixturesSnapshot = await getDocs(fixturesRef)
+    const fixturesSnapshot = await withTimeout(
+      getDocs(fixturesRef),
+      10000,
+      'Failed to load gameweek fixtures - request timed out'
+    )
 
     if (fixturesSnapshot.empty) {
       return []
@@ -198,7 +203,11 @@ async function getPredictionsForFixture(
 ): Promise<Map<string, PredictionEntry>> {
   try {
     const entriesRef = collection(db, 'predictions', String(fixtureId), 'entries')
-    const entriesSnapshot = await getDocs(entriesRef)
+    const entriesSnapshot = await withTimeout(
+      getDocs(entriesRef),
+      10000,
+      'Failed to load prediction entries - request timed out'
+    )
 
     const predictions = new Map<string, PredictionEntry>()
 
@@ -258,7 +267,11 @@ async function batchFetchUsers(userIds: string[]): Promise<Map<string, { display
     const docPromises = userIds.map(async (userId) => {
       try {
         const userRef = doc(db, 'users', userId)
-        const userDoc = await getDoc(userRef)
+        const userDoc = await withTimeout(
+          getDoc(userRef),
+          10000,
+          'Failed to load user data - request timed out'
+        )
         
         if (userDoc.exists()) {
           const data = userDoc.data()

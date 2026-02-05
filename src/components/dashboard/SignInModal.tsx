@@ -178,7 +178,21 @@ export function SignInModal({ isOpen, onClose }: SignInModalProps) {
       setConfirmationResult(confirmation)
       setStep('code')
     } catch (err: any) {
-      const errorMessage = err.message || 'Failed to send verification code'
+      let errorMessage = 'Failed to send verification code'
+      
+      // Provide more helpful error messages
+      if (err.code === 'auth/invalid-app-credential') {
+        errorMessage = 'Phone authentication is not properly configured. Please contact support or try signing in with a different method.'
+      } else if (err.code === 'auth/invalid-phone-number') {
+        errorMessage = 'Invalid phone number. Please check the format and try again.'
+      } else if (err.code === 'auth/too-many-requests') {
+        errorMessage = 'Too many attempts. Please wait a few minutes and try again.'
+      } else if (err.code === 'auth/quota-exceeded') {
+        errorMessage = 'SMS quota exceeded. Please try again later.'
+      } else if (err.message) {
+        errorMessage = err.message
+      }
+      
       setError(errorMessage)
       console.error('Phone auth error:', err)
       

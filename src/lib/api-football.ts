@@ -322,6 +322,7 @@ export function getMajorLeagues(): Array<{ id: number; name: string; country: st
     { id: 78, name: 'Bundesliga', country: 'Germany' },
     { id: 135, name: 'Serie A', country: 'Italy' },
     { id: 61, name: 'Ligue 1', country: 'France' },
+    { id: 2, name: 'UEFA Champions League', country: 'Europe' },
     { id: 203, name: 'Süper Lig', country: 'Turkey' },
     { id: 262, name: 'Liga MX', country: 'Mexico' },
     { id: 253, name: 'MLS', country: 'USA' },
