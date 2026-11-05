@@ -169,12 +169,15 @@ export function useLiveMatches(
     // If we have an active listener and initialMatches has data, trigger a re-conversion
     // by updating the matches state with the current matches but using the updated refs
     if (gameweekId && initialMatches.length > 0 && currentMatchesRef.current.length > 0) {
-      // Re-convert current matches with updated refs
+      // Re-convert current matches with updated refs (positions, forms, and user predictions)
+      // Per fix-user-predictions-not-showing-on-dashboard.md: when initialMatches gains predictions,
+      // we must re-apply them so the displayed matches show the user's picks
       const reConvertedMatches = currentMatchesRef.current.map((match) => {
         const homePosition = teamPositionsRef.current.get(match.homeTeam.id) || match.homeTeam.position
         const homeForm = teamFormsRef.current.get(match.homeTeam.id) || match.homeTeam.form
         const awayPosition = teamPositionsRef.current.get(match.awayTeam.id) || match.awayTeam.position
         const awayForm = teamFormsRef.current.get(match.awayTeam.id) || match.awayTeam.form
+        const userPrediction = userPredictionsRef.current.get(match.fixtureId) ?? null
         
         return {
           ...match,
@@ -188,17 +191,19 @@ export function useLiveMatches(
             position: awayPosition,
             form: awayForm,
           },
+          userPrediction,
         }
       })
       
-      // Only update if positions/forms actually changed
+      // Only update if positions/forms/predictions actually changed
       const hasChanges = reConvertedMatches.some((match, i) => {
         const original = currentMatchesRef.current[i]
         return (
           match.homeTeam.position !== original.homeTeam.position ||
           match.awayTeam.position !== original.awayTeam.position ||
           JSON.stringify(match.homeTeam.form) !== JSON.stringify(original.homeTeam.form) ||
-          JSON.stringify(match.awayTeam.form) !== JSON.stringify(original.awayTeam.form)
+          JSON.stringify(match.awayTeam.form) !== JSON.stringify(original.awayTeam.form) ||
+          match.userPrediction !== original.userPrediction
         )
       })
       

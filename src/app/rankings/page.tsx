@@ -8,6 +8,7 @@ import { getUserDisplayName, getAllTimeRankings } from '@/lib/users'
 import {
   RankingEntry,
   GameweekRankingData,
+  PastGameweekOption,
 } from '@/types/dashboard'
 import {
   getCurrentGameweek,
@@ -15,6 +16,9 @@ import {
   transformGameweekData,
   getGameweekFixtureDetails,
 } from '@/lib/rankings'
+import { getAllGameweeks, getGameweekById } from '@/lib/admin'
+
+const PAST_GAMEWEEKS_LIMIT = 10
 
 export default function RankingsPage() {
   const { user, loading: authLoading } = useAuth()
@@ -22,6 +26,12 @@ export default function RankingsPage() {
   const [allTimeRankings, setAllTimeRankings] = useState<RankingEntry[]>([])
   const [weeklyRankings, setWeeklyRankings] = useState<RankingEntry[] | undefined>(undefined)
   const [gameweekData, setGameweekData] = useState<GameweekRankingData | undefined>(undefined)
+  const [currentGameweekId, setCurrentGameweekId] = useState<string | null>(null)
+  const [currentGameweekData, setCurrentGameweekData] = useState<GameweekRankingData | undefined>(undefined)
+  const [currentWeeklyRankings, setCurrentWeeklyRankings] = useState<RankingEntry[] | undefined>(undefined)
+  const [completedGameweeks, setCompletedGameweeks] = useState<PastGameweekOption[]>([])
+  const [selectedGameweekId, setSelectedGameweekId] = useState<string | null>(null)
+  const [latestCompletedGameweekId, setLatestCompletedGameweekId] = useState<string | null>(null)
   const [rankingsLoading, setRankingsLoading] = useState(true)
   const [weeklyLoading, setWeeklyLoading] = useState(true)
   const [rankingsError, setRankingsError] = useState<string | null>(null)
@@ -65,8 +75,8 @@ export default function RankingsPage() {
       let allTimeRankingsResult: RankingEntry[] = []
       
       try {
-        // Start fetching all-time rankings and current gameweek in parallel
-        const [rankingsResult, currentGameweek] = await Promise.all([
+        // Fetch all-time rankings, current gameweek, and latest completed gameweek (for "last week" badge)
+        const [rankingsResult, currentGameweek, completedGameweeks] = await Promise.all([
           getAllTimeRankings(user, 100).catch((error) => {
             console.error('Error fetching all-time rankings:', error)
             if (!abortController.signal.aborted) {
@@ -78,11 +88,26 @@ export default function RankingsPage() {
             console.error('Error fetching current gameweek:', error)
             return null
           }),
+          getAllGameweeks({ sortBy: 'date', sortOrder: 'desc' }).catch((err) => {
+            console.error('Error fetching gameweeks for past weeks:', err)
+            return []
+          }),
         ])
 
         if (abortController.signal.aborted) return
-        
+
         allTimeRankingsResult = rankingsResult
+        const completedOnly = completedGameweeks.filter(
+          (gw) => gw.status === 'completed' || gw.status === 'archived'
+        )
+        const latestCompleted = completedOnly.length > 0 ? completedOnly[0].gameweekId : null
+        setLatestCompletedGameweekId(latestCompleted)
+
+        // Past gameweeks list: show all gameweeks (any status) so past weeks always appear
+        const pastOptions: PastGameweekOption[] = completedGameweeks
+          .slice(0, PAST_GAMEWEEKS_LIMIT)
+          .map((gw) => ({ gameweekId: gw.gameweekId, name: gw.name }))
+        setCompletedGameweeks(pastOptions)
 
         // Set all-time rankings immediately
         setAllTimeRankings(allTimeRankingsResult)
@@ -91,8 +116,12 @@ export default function RankingsPage() {
         // Handle weekly rankings if gameweek is available
         if (!currentGameweek) {
           // No gameweek available, disable weekly view
+          setCurrentGameweekId(null)
+          setCurrentGameweekData(undefined)
+          setCurrentWeeklyRankings(undefined)
           setWeeklyRankings(undefined)
           setGameweekData(undefined)
+          setSelectedGameweekId(null)
           setWeeklyLoading(false)
           return
         }
@@ -104,8 +133,12 @@ export default function RankingsPage() {
         
         if (fixtures.length === 0) {
           // No fixtures found, disable weekly view
+          setCurrentGameweekId(null)
+          setCurrentGameweekData(undefined)
+          setCurrentWeeklyRankings(undefined)
           setWeeklyRankings(undefined)
           setGameweekData(undefined)
+          setSelectedGameweekId(null)
           setWeeklyLoading(false)
           return
         }
@@ -121,8 +154,12 @@ export default function RankingsPage() {
 
         if (abortController.signal.aborted) return
 
+        setCurrentGameweekId(currentGameweek.gameweekId)
+        setCurrentGameweekData(transformedData)
+        setCurrentWeeklyRankings(rankings)
         setGameweekData(transformedData)
         setWeeklyRankings(rankings)
+        setSelectedGameweekId(currentGameweek.gameweekId)
         setWeeklyLoading(false)
       } catch (error) {
         if (abortController.signal.aborted) return
@@ -135,8 +172,12 @@ export default function RankingsPage() {
           setRankingsError('Failed to load rankings. Please try again later.')
         }
         setWeeklyError('Failed to load weekly rankings. Please try again later.')
+        setCurrentGameweekId(null)
+        setCurrentGameweekData(undefined)
+        setCurrentWeeklyRankings(undefined)
         setWeeklyRankings(undefined)
         setGameweekData(undefined)
+        setSelectedGameweekId(null)
       }
     }
 
@@ -146,6 +187,12 @@ export default function RankingsPage() {
       setAllTimeRankings([])
       setWeeklyRankings(undefined)
       setGameweekData(undefined)
+      setCurrentGameweekId(null)
+      setCurrentGameweekData(undefined)
+      setCurrentWeeklyRankings(undefined)
+      setCompletedGameweeks([])
+      setSelectedGameweekId(null)
+      setLatestCompletedGameweekId(null)
       setRankingsLoading(false)
       setWeeklyLoading(false)
     }
@@ -155,8 +202,66 @@ export default function RankingsPage() {
     }
   }, [user])
 
-  // Show loading state (or nothing) while checking authentication
-  if (authLoading || rankingsLoading || weeklyLoading) {
+  // Lazy-load past week when user selects a different gameweek
+  useEffect(() => {
+    if (!user || !selectedGameweekId || selectedGameweekId === currentGameweekId) return
+    const abortController = new AbortController()
+    setWeeklyLoading(true)
+    setWeeklyError(null)
+    const loadPastWeek = async () => {
+      try {
+        const gameweek = await getGameweekById(selectedGameweekId)
+        if (abortController.signal.aborted || !gameweek) {
+          setWeeklyLoading(false)
+          return
+        }
+        const fixtures = await getGameweekFixtureDetails(selectedGameweekId)
+        if (abortController.signal.aborted || fixtures.length === 0) {
+          setWeeklyRankings(undefined)
+          setGameweekData(undefined)
+          setWeeklyLoading(false)
+          return
+        }
+        const [transformedData, rankings] = await Promise.all([
+          transformGameweekData(gameweek, fixtures),
+          getWeeklyRankings(selectedGameweekId, user?.uid || null),
+        ])
+        if (abortController.signal.aborted) return
+        setGameweekData(transformedData)
+        setWeeklyRankings(rankings)
+      } catch (error) {
+        if (!abortController.signal.aborted) {
+          setWeeklyError('Failed to load weekly rankings. Please try again later.')
+          setWeeklyRankings(undefined)
+          setGameweekData(undefined)
+        }
+      } finally {
+        if (!abortController.signal.aborted) setWeeklyLoading(false)
+      }
+    }
+    loadPastWeek()
+    return () => abortController.abort()
+  }, [user, selectedGameweekId, currentGameweekId])
+
+  // When selection is current week, show current week data
+  useEffect(() => {
+    if (selectedGameweekId === currentGameweekId && currentGameweekData && currentWeeklyRankings) {
+      setGameweekData(currentGameweekData)
+      setWeeklyRankings(currentWeeklyRankings)
+    }
+  }, [selectedGameweekId, currentGameweekId, currentGameweekData, currentWeeklyRankings])
+
+  const handleSelectGameweek = (gameweekId: string | null) => {
+    setSelectedGameweekId(gameweekId)
+    if (gameweekId === currentGameweekId && currentGameweekData && currentWeeklyRankings) {
+      setGameweekData(currentGameweekData)
+      setWeeklyRankings(currentWeeklyRankings)
+    }
+  }
+
+  // Show full-page loading only for auth or initial rankings/weekly load (not when loading a past week)
+  const initialWeeklyLoading = weeklyLoading && !currentGameweekData
+  if (authLoading || rankingsLoading || initialWeeklyLoading) {
     return (
       <div className="min-h-[100dvh] min-h-screen bg-midnight-violet flex items-center justify-center">
         <div className="text-ivory">Loading...</div>
@@ -189,6 +294,12 @@ export default function RankingsPage() {
       weeklyRankings={weeklyRankings}
       gameweekData={gameweekData}
       username={username}
+      latestCompletedGameweekId={latestCompletedGameweekId}
+      completedGameweeks={completedGameweeks}
+      currentGameweekId={currentGameweekId}
+      selectedGameweekId={selectedGameweekId}
+      onSelectGameweek={handleSelectGameweek}
+      weeklyLoading={weeklyLoading}
     />
   )
 }

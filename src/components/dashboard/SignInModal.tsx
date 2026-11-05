@@ -63,6 +63,7 @@ export function SignInModal({ isOpen, onClose }: SignInModalProps) {
   const [customDisplayName, setCustomDisplayName] = useState<string>('')
   const [recommendedNames] = useState<string[]>(() => getRandomSuggestions(12))
   const [referralCode, setReferralCode] = useState<string | null>(null)
+  const [referralMessage, setReferralMessage] = useState<string | null>(null)
 
   // Capture referral code from URL on mount
   useEffect(() => {
@@ -236,14 +237,17 @@ export function SignInModal({ isOpen, onClose }: SignInModalProps) {
       if (referralCode) {
         try {
           await trackReferralSignup(user.uid, referralCode)
+          setReferralMessage('Referral applied! Your friend earned 5 points.')
         } catch (refError) {
           console.error('Error processing referral:', refError)
-          // Don't fail signup if referral processing fails
+          setReferralMessage('Referral could not be applied. Contact support if needed.')
         }
         // Clear referral code from sessionStorage
         if (typeof window !== 'undefined') {
           sessionStorage.removeItem('referralCode')
         }
+        // Show referral message briefly before closing
+        await new Promise((r) => setTimeout(r, 2000))
       }
 
       // For all users, close modal after sign-in
@@ -321,9 +325,10 @@ export function SignInModal({ isOpen, onClose }: SignInModalProps) {
       if (referralCode) {
         try {
           await trackReferralSignup(user.uid, referralCode)
+          setReferralMessage('Referral applied! Your friend earned 5 points.')
         } catch (refError) {
           console.error('Error processing referral:', refError)
-          // Don't fail signup if referral processing fails
+          setReferralMessage('Referral could not be applied. Contact support if needed.')
         }
         // Clear referral code from sessionStorage
         if (typeof window !== 'undefined') {
@@ -353,6 +358,7 @@ export function SignInModal({ isOpen, onClose }: SignInModalProps) {
     setVerificationCode('')
     setStep('phone')
     setError(null)
+    setReferralMessage(null)
     setSelectedDisplayName('')
     setCustomDisplayName('')
     setShowOnboarding(false)
@@ -393,6 +399,7 @@ export function SignInModal({ isOpen, onClose }: SignInModalProps) {
         onClose={handleOnboardingClose}
         requiresDisplayName={true}
         referralCode={referralCode}
+        referralMessage={referralMessage}
       />
     )
   }
@@ -429,6 +436,18 @@ export function SignInModal({ isOpen, onClose }: SignInModalProps) {
         {error && (
           <div className="mb-4 p-3 bg-cinnabar text-ivory rounded text-sm">
             {error}
+          </div>
+        )}
+
+        {referralMessage && (
+          <div
+            className={`mb-4 p-3 rounded text-sm ${
+              referralMessage.includes('applied')
+                ? 'bg-midnight-violet/10 text-midnight-violet border border-midnight-violet/30'
+                : 'bg-amber-100 text-amber-900 border border-amber-300'
+            }`}
+          >
+            {referralMessage}
           </div>
         )}
 

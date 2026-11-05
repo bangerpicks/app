@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { Timestamp } from 'firebase/firestore'
 import { useAuth } from '@/lib/AuthProvider'
 import { getUserDisplayName, hasSeenOnboardingIntro } from '@/lib/users'
-import { getUserPredictions, getGameweekPlayerCount } from '@/lib/predictions'
+import { getUserPredictionsForGameweek, getGameweekPlayerCount } from '@/lib/predictions'
 import { DashboardClient } from '@/components/dashboard/DashboardClient'
 import { OnboardingIntro } from '@/components/dashboard/OnboardingIntro'
 import { GameweekData, MatchCardData, GameweekStatus, FormResult } from '@/types/dashboard'
@@ -224,6 +224,8 @@ const mockMatches: MatchCardData[] = [
   },
 ]
 
+const PAST_GAMEWEEKS_LIMIT = 10
+
 export default function DashboardPage() {
   const { user, loading: authLoading } = useAuth()
   const [username, setUsername] = useState<string | undefined>(undefined)
@@ -365,11 +367,16 @@ export default function DashboardPage() {
         }
         
         // Load user predictions in background if user is authenticated
+        // Uses gameweek cache (1 read) when available, falls back to per-fixture reads
         if (user) {
           setLoadingPredictions(true)
           try {
             const fixtureIds = sortedMatches.map((match) => match.fixtureId)
-            const predictions = await getUserPredictions(user.uid, fixtureIds)
+            const predictions = await getUserPredictionsForGameweek(
+              user.uid,
+              activeGameweek.gameweekId,
+              fixtureIds
+            )
             
             if (abortController.signal.aborted) return
             

@@ -6,7 +6,7 @@ import { Header } from './Header'
 import { BottomNavigation } from './BottomNavigation'
 import { RankingsTable } from './RankingsTable'
 import { ReferralPopup } from './ReferralPopup'
-import { RankingEntry, RankingView, GameweekRankingData } from '@/types/dashboard'
+import { RankingEntry, RankingView, GameweekRankingData, PastGameweekOption } from '@/types/dashboard'
 import { Trophy, Medal, Award } from 'lucide-react'
 
 interface RankingsClientProps {
@@ -14,9 +14,37 @@ interface RankingsClientProps {
   weeklyRankings?: RankingEntry[]
   gameweekData?: GameweekRankingData
   username?: string
+  latestCompletedGameweekId?: string | null
+  completedGameweeks?: PastGameweekOption[]
+  currentGameweekId?: string | null
+  selectedGameweekId?: string | null
+  onSelectGameweek?: (gameweekId: string | null) => void
+  weeklyLoading?: boolean
 }
 
-function RankingRow({ entry, index }: { entry: RankingEntry; index: number }) {
+function ScoreMathDisplay({ entry }: { entry: RankingEntry }) {
+  const score = entry.allTimeScore ?? entry.points
+  const pts = entry.points
+  const accuracy = entry.accuracy ?? 0
+  const accuracyContribution = Math.round(accuracy * 0.5 * 10) / 10
+  if (accuracyContribution === 0 && pts === score) return null
+  return (
+    <div className="text-xs text-ivory/60 mt-0.5">
+      {score} = {pts} pts + {accuracyContribution.toFixed(1)} ({accuracy.toFixed(0)}%×0.5)
+    </div>
+  )
+}
+
+function RankingRow({
+  entry,
+  index,
+  latestCompletedGameweekId,
+}: {
+  entry: RankingEntry
+  index: number
+  latestCompletedGameweekId: string | null
+}) {
+  const t = useTranslations('rankings')
   const getRankIcon = (rank: number) => {
     if (rank === 1) return <Trophy className="w-6 h-6 text-amber-glow" />
     if (rank === 2) return <Medal className="w-6 h-6 text-ivory" />
@@ -24,18 +52,35 @@ function RankingRow({ entry, index }: { entry: RankingEntry; index: number }) {
     return null
   }
 
-  const getRankColor = (rank: number) => {
-    if (rank === 1) return 'bg-amber-glow/20 border-amber-glow/50'
-    if (rank === 2) return 'bg-ivory/10 border-ivory/30'
-    if (rank === 3) return 'bg-amber-glow/10 border-amber-glow/30'
-    return 'bg-midnight-violet/50 border-ivory/10'
+  const getCardClass = (rank: number) => {
+    if (rank === 1) return 'all-time-card all-time-card-gold'
+    if (rank === 2) return 'all-time-card all-time-card-silver'
+    if (rank === 3) return 'all-time-card all-time-card-bronze'
+    return 'all-time-card'
   }
+
+  const showLastWeekBadge =
+    latestCompletedGameweekId &&
+    entry.lastCompletedGameweekId === latestCompletedGameweekId &&
+    (entry.lastWeekPlace === 1 || entry.lastWeekPlace === 2 || entry.lastWeekPlace === 3)
+
+  const lastWeekBadgeKey =
+    entry.lastWeekPlace === 1
+      ? 'lastWeekChampion'
+      : entry.lastWeekPlace === 2
+        ? 'lastWeek2nd'
+        : entry.lastWeekPlace === 3
+          ? 'lastWeek3rd'
+          : null
+
+  const cardDelay = Math.min(index * 80, 400)
 
   return (
     <div
-      className={`flex items-center gap-4 p-4 rounded-lg border-2 ${getRankColor(
-        entry.rank
-      )} ${entry.isCurrentUser ? 'ring-2 ring-lime-yellow' : ''}`}
+      className={`flex items-center gap-4 p-4 rounded-lg border-2 ${getCardClass(entry.rank)} ${
+        entry.isCurrentUser ? 'ring-2 ring-lime-yellow' : ''
+      }`}
+      style={{ animationDelay: `${cardDelay}ms`, animationFillMode: 'both' }}
     >
       {/* Rank */}
       <div className="flex items-center justify-center w-12 h-12 flex-shrink-0">
@@ -44,9 +89,24 @@ function RankingRow({ entry, index }: { entry: RankingEntry; index: number }) {
         )}
       </div>
 
+      {/* Avatar */}
+      <div className="w-10 h-10 rounded-full bg-ivory/10 flex-shrink-0 overflow-hidden flex items-center justify-center">
+        {entry.photoURL ? (
+          <img
+            src={entry.photoURL}
+            alt=""
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          <span className="text-ivory/50 text-sm font-bold">
+            {(entry.displayName || '?').charAt(0).toUpperCase()}
+          </span>
+        )}
+      </div>
+
       {/* User Info */}
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <span
             className={`font-semibold text-ivory truncate ${
               entry.isCurrentUser ? 'text-lime-yellow' : ''
@@ -57,6 +117,11 @@ function RankingRow({ entry, index }: { entry: RankingEntry; index: number }) {
           {entry.isCurrentUser && (
             <span className="text-xs text-lime-yellow font-bold">(You)</span>
           )}
+          {showLastWeekBadge && lastWeekBadgeKey && (
+            <span className="text-xs font-medium text-amber-glow/90">
+              {t(lastWeekBadgeKey)}
+            </span>
+          )}
         </div>
         {entry.totalPredictions !== undefined && (
           <div className="text-xs text-ivory/70 mt-1">
@@ -64,14 +129,15 @@ function RankingRow({ entry, index }: { entry: RankingEntry; index: number }) {
             {entry.accuracy !== undefined && ` • ${entry.accuracy.toFixed(1)}%`}
           </div>
         )}
+        <ScoreMathDisplay entry={entry} />
       </div>
 
-      {/* Points */}
+      {/* Score (all-time: points + accuracy×0.5) */}
       <div className="flex flex-col items-end flex-shrink-0">
         <span className="text-lime-yellow font-bold text-xl">
-          {entry.points}
+          {entry.allTimeScore ?? entry.points}
         </span>
-        <span className="text-xs text-ivory/70">pts</span>
+        <span className="text-xs text-ivory/70">{t('score')}</span>
       </div>
     </div>
   )
@@ -82,18 +148,33 @@ export function RankingsClient({
   weeklyRankings,
   gameweekData,
   username,
+  latestCompletedGameweekId = null,
+  completedGameweeks = [],
+  currentGameweekId = null,
+  selectedGameweekId = null,
+  onSelectGameweek,
+  weeklyLoading = false,
 }: RankingsClientProps) {
   const t = useTranslations('rankings')
-  const [activeView, setActiveView] = useState<RankingView>('all-time')
+  const [activeView, setActiveView] = useState<RankingView>('this-week')
   const containerRef = useRef<HTMLDivElement>(null)
   const lastScrollY = useRef(0)
   const lastScrollTime = useRef(Date.now())
   const scrollVelocity = useRef(0)
 
+  const isWeeklyView = activeView === 'this-week' || activeView === 'past-weeks'
   const currentRankings =
-    activeView === 'this-week' && weeklyRankings
+    isWeeklyView && weeklyRankings
       ? weeklyRankings
       : allTimeRankings
+
+  const showWeekSelector =
+    activeView === 'past-weeks' &&
+    (currentGameweekId || completedGameweeks.length > 0) &&
+    onSelectGameweek
+
+  const canShowPastWeeks =
+    (!!weeklyRankings && !!gameweekData) || completedGameweeks.length > 0
 
   useEffect(() => {
     const handleScroll = () => {
@@ -154,7 +235,7 @@ export function RankingsClient({
         activeView === 'this-week' ? 'py-2 gap-2' : 'py-2.5 gap-5'
       }`}>
         {/* Title Section - Only show for All Time view */}
-        {activeView !== 'this-week' && (
+        {!isWeeklyView && (
           <div className="w-full flex flex-col items-center gap-2 mt-4">
             <Trophy className="w-12 h-12 text-lime-yellow mb-2" />
             <h1 className="text-3xl sm:text-4xl font-bold text-ivory">
@@ -163,14 +244,17 @@ export function RankingsClient({
             <p className="text-ivory/70 text-sm sm:text-base">
               {t('subtitle')}
             </p>
+            <p className="text-ivory/50 text-xs sm:text-sm max-w-md text-center">
+              {t('howRankingWorks')}
+            </p>
           </div>
         )}
 
         {/* View Toggle Buttons */}
-        <div className={`w-full max-w-2xl flex gap-3 ${activeView === 'this-week' ? 'mt-2' : ''}`}>
+        <div className={`w-full max-w-2xl flex gap-2 sm:gap-3 ${isWeeklyView ? 'mt-2' : ''}`}>
           <button
             onClick={() => setActiveView('all-time')}
-            className={`flex-1 py-3 px-4 rounded-lg font-semibold text-sm transition-colors ${
+            className={`flex-1 py-3 px-3 sm:px-4 rounded-lg font-semibold text-xs sm:text-sm transition-colors ${
               activeView === 'all-time'
                 ? 'bg-lime-yellow text-midnight-violet'
                 : 'bg-ivory/10 text-ivory/70 hover:bg-ivory/15'
@@ -181,7 +265,7 @@ export function RankingsClient({
           <button
             onClick={() => setActiveView('this-week')}
             disabled={!weeklyRankings || !gameweekData}
-            className={`flex-1 py-3 px-4 rounded-lg font-semibold text-sm transition-colors ${
+            className={`flex-1 py-3 px-3 sm:px-4 rounded-lg font-semibold text-xs sm:text-sm transition-colors ${
               activeView === 'this-week'
                 ? 'bg-lime-yellow text-midnight-violet'
                 : 'bg-ivory/10 text-ivory/70 hover:bg-ivory/15'
@@ -193,31 +277,100 @@ export function RankingsClient({
           >
             {t('thisWeek')}
           </button>
+          <button
+            onClick={() => setActiveView('past-weeks')}
+            disabled={!canShowPastWeeks}
+            className={`flex-1 py-3 px-3 sm:px-4 rounded-lg font-semibold text-xs sm:text-sm transition-colors ${
+              activeView === 'past-weeks'
+                ? 'bg-lime-yellow text-midnight-violet'
+                : 'bg-ivory/10 text-ivory/70 hover:bg-ivory/15'
+            } ${!canShowPastWeeks ? 'opacity-50 cursor-not-allowed' : ''}`}
+          >
+            {t('pastWeeksTab')}
+          </button>
         </div>
 
-        {/* Gameweek Banner and Table (This Week view only) */}
-        {activeView === 'this-week' &&
-        weeklyRankings &&
-        gameweekData ? (
+        {/* Gameweek Banner and Table (This Week / Past Weeks view) */}
+        {isWeeklyView &&
+        ((weeklyRankings || weeklyLoading) && (gameweekData || weeklyLoading) || (activeView === 'past-weeks' && completedGameweeks.length > 0)) ? (
           <div className="w-full max-w-2xl">
-            {/* Gameweek Banner */}
-            <div className="w-full bg-lime-yellow rounded-t-lg px-4 py-3">
-              <div className="flex flex-col items-center gap-1">
-                <h2 className="text-midnight-violet font-bold text-lg">
-                  {gameweekData.gameweek.name}
-                </h2>
-                <p className="text-midnight-violet/80 text-sm font-semibold">
-                  {gameweekData.gameweek.playerCount} {t('players')}
-                </p>
+            {/* Week selector: This week + past weeks */}
+            {showWeekSelector && (
+              <div className="w-full mb-2">
+                <p className="text-ivory/70 text-xs font-medium mb-1.5">{t('selectWeek')}</p>
+                <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-thin">
+                  {currentGameweekId && (
+                    <button
+                      type="button"
+                      onClick={() => onSelectGameweek(currentGameweekId)}
+                      className={`flex-shrink-0 py-2 px-3 rounded-lg font-semibold text-sm transition-colors ${
+                        selectedGameweekId === currentGameweekId
+                          ? 'bg-lime-yellow text-midnight-violet'
+                          : 'bg-ivory/10 text-ivory/70 hover:bg-ivory/15'
+                      }`}
+                    >
+                      {t('thisWeek')}
+                    </button>
+                  )}
+                  {completedGameweeks
+                    .filter((gw) => gw.gameweekId !== currentGameweekId)
+                    .map((gw) => (
+                      <button
+                        key={gw.gameweekId}
+                        type="button"
+                        onClick={() => onSelectGameweek(gw.gameweekId)}
+                        className={`flex-shrink-0 py-2 px-3 rounded-lg font-semibold text-sm transition-colors ${
+                          selectedGameweekId === gw.gameweekId
+                            ? 'bg-lime-yellow text-midnight-violet'
+                            : 'bg-ivory/10 text-ivory/70 hover:bg-ivory/15'
+                        }`}
+                      >
+                        {gw.name}
+                      </button>
+                    ))}
+                </div>
               </div>
-            </div>
-            {/* Table view for weekly rankings */}
-            <div className="w-full -mt-px">
-              <RankingsTable
-                rankings={weeklyRankings}
-                gameweekData={gameweekData}
-              />
-            </div>
+            )}
+            {/* Gameweek Banner */}
+            {gameweekData && (
+              <>
+                {weeklyLoading && selectedGameweekId !== currentGameweekId && (
+                  <div className="w-full mb-2 rounded-lg border border-ivory/20 bg-ivory/5 px-3 py-2 flex items-center justify-center">
+                    <p className="text-ivory/70 text-sm">{t('loadingWeek')}</p>
+                  </div>
+                )}
+                <div className="w-full bg-lime-yellow rounded-t-lg px-4 py-3">
+                  <div className="flex flex-col items-center gap-1">
+                    <h2 className="text-midnight-violet font-bold text-lg">
+                      {gameweekData.gameweek.name}
+                    </h2>
+                    <p className="text-midnight-violet/80 text-sm font-semibold">
+                      {gameweekData.gameweek.playerCount} {t('players')}
+                    </p>
+                  </div>
+                </div>
+                {/* Table view for weekly rankings */}
+                <div className="w-full -mt-px">
+                  {weeklyRankings ? (
+                    <RankingsTable
+                      rankings={weeklyRankings}
+                      gameweekData={gameweekData}
+                      latestCompletedGameweekId={latestCompletedGameweekId}
+                    />
+                  ) : null}
+                </div>
+              </>
+            )}
+            {weeklyLoading && !gameweekData && (
+              <div className="w-full rounded-lg border-2 border-ivory/20 bg-ivory/5 px-4 py-8 flex items-center justify-center">
+                <p className="text-ivory/70">{t('loadingWeek')}</p>
+              </div>
+            )}
+            {!weeklyLoading && !gameweekData && showWeekSelector && (
+              <div className="w-full rounded-lg border-2 border-ivory/20 bg-ivory/5 px-4 py-8 flex items-center justify-center">
+                <p className="text-ivory/70 text-sm text-center">{t('selectWeek')}</p>
+              </div>
+            )}
           </div>
         ) : (
           // Card view for all-time rankings
@@ -233,7 +386,12 @@ export function RankingsClient({
               </div>
             ) : (
               currentRankings.map((entry, index) => (
-                <RankingRow key={entry.userId} entry={entry} index={index} />
+                <RankingRow
+                  key={entry.userId}
+                  entry={entry}
+                  index={index}
+                  latestCompletedGameweekId={latestCompletedGameweekId}
+                />
               ))
             )}
           </div>

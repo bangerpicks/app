@@ -30,7 +30,8 @@
     "accuracy": "Precisión",
     "totalPredictions": "Predicciones totales",
     "correct": "Correctas",
-    "favoriteTeam": "Equipo favorito"
+    "favoriteTeam": "Equipo favorito",
+    "favoritePlayer": "Jugador favorito"
   },
   "navigation": {
     "dashboard": "Panel",
@@ -50,7 +51,15 @@
     "gameweekClosed": "Esta semana ya no está abierta para predicciones.",
     "home": "LOCAL",
     "draw": "EMPATE",
-    "away": "VISITA"
+    "away": "VISITA",
+    "viewPastPredictions": "Ver predicciones anteriores",
+    "pastWeeks": "Semanas anteriores",
+    "back": "Atrás",
+    "yourPredictions": "Tus predicciones",
+    "noPastGameweeks": "Aún no hay semanas anteriores. Cuando se completen las semanas aparecerán aquí.",
+    "gameweekNoteNoPicks": "Haz tus selecciones antes de que cierre la semana.",
+    "gameweekNoteHasPicks": "Haz los cambios que quieras y guarda antes de que cierre la semana.",
+    "gameweekNoteClosed": "Semana cerrada. ¡Buena suerte!"
   },
   "rankings": {
     "title": "Clasificaciones",
@@ -63,9 +72,18 @@
     "rank": "Pos",
     "user": "Usuario",
     "points": "Pts.",
+    "score": "punt.",
+    "howRankingWorks": "Posición = puntos + (precisión × 0.5). Semanal: 1.º ×1.5, 2.º ×1.3, 3.º ×1.2.",
+    "lastWeekChampion": "Campeón la semana pasada",
+    "lastWeek2nd": "2.º la semana pasada",
+    "lastWeek3rd": "3.º la semana pasada",
     "errorLoading": "Error al cargar clasificaciones",
     "failedToLoad": "Error al cargar clasificaciones. Por favor, intenta de nuevo más tarde.",
-    "failedToLoadWeekly": "Error al cargar clasificaciones semanales. Por favor, intenta de nuevo más tarde."
+    "failedToLoadWeekly": "Error al cargar clasificaciones semanales. Por favor, intenta de nuevo más tarde.",
+    "selectWeek": "Seleccionar semana",
+    "pastWeeks": "Semanas anteriores",
+    "pastWeeksTab": "Semanas anteriores",
+    "loadingWeek": "Cargando semana..."
   },
   "shop": {
     "title": "Tienda",
@@ -85,6 +103,15 @@
     "insufficientPoints": "Puntos Insuficientes",
     "pts": "pts",
     "left": "restantes",
+    "choosePlayer": "Elige tu Jugador Favorito",
+    "choosePlayerDescription": "Selecciona un jugador para añadir a tu perfil. El precio varía según el jugador.",
+    "from": "desde",
+    "favoritePlayerAdded": "¡Jugador Favorito Añadido!",
+    "favoritePlayerAddedDescription": "{name} ha sido añadido a tu perfil.",
+    "addFavoritePlayer": "Añadir Jugador Favorito",
+    "addFavoritePlayerConfirm": "¿Añadir este jugador a tu perfil como favorito?",
+    "addToProfile": "Añadir al Perfil",
+    "adding": "Añadiendo...",
     "comingSoon": "¡Tienda Próximamente!",
     "somethingAmazing": "Algo increíble está en camino",
     "excitingRewards": "Recompensas Emocionantes",

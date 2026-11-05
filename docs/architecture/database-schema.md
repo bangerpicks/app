@@ -42,14 +42,14 @@ Firestore Database
   photoURL: string | null;          // Profile photo URL
   
   // Statistics
-  points: number;                   // Total accumulated points (competitive points only)
+  points: number;                   // Total accumulated points (competitive/ranking only)
   totalPredictions: number;         // Total predictions made
-  correctPredictions: number;       // Correct predictions count
+  correctPredictions: number;       // Correct predictions count; contributes to shop balance (1 per correct, no multiplier/accuracy)
   accuracy: number;                 // Accuracy percentage (0-100)
   
   // Referral System
   referralCode: string;             // Unique referral code for this user
-  referralPoints: number;           // Shop-only points from referrals (default: 0)
+  referralPoints: number;           // Points from referrals (default: 0); shop balance = correctPredictions + referralPoints - totalRedeemed
   referredBy: string | null;        // UID of referring user (optional, for analytics)
   
   // Preferences
@@ -58,6 +58,11 @@ Firestore Database
     name: string;
     logo: string;
   } | null;
+  favoritePlayer: {
+    id: number;
+    name: string;
+    photo: string;
+  } | null;                         // Set via "Favorite Player Photo" shop redemption (API-Football player)
   
   // Metadata
   createdAt: Timestamp;
@@ -90,6 +95,20 @@ Firestore Database
   "lastLoginAt": "2024-01-15T10:30:00Z"
 }
 ```
+
+**Subcollection**: `users/{uid}/gameweek_predictions/{gameweekId}` (denormalized cache)
+
+**Description**: Fast-load cache for user predictions per gameweek. Enables 1 Firestore read instead of N reads when loading the dashboard.
+
+**Document Structure**:
+```typescript
+{
+  predictions: Record<string, 'H' | 'D' | 'A'>;  // fixtureId (string) -> pick
+  updatedAt: Timestamp;
+}
+```
+
+**Subcollection** `gameweek_predictions/{gameweekId}`: Denormalized cache for fast loading. Users can read/write only their own docs.
 
 **Security Rules**:
 - Read: Public (anyone can read)
@@ -307,7 +326,7 @@ Firestore Database
   // Digital Items
   badge?: string;                   // Badge ID (for digital items)
   theme?: string;                   // Theme ID (for digital items)
-  customization?: object;           // Profile customization (for digital items)
+  customization?: object;           // Profile customization. For "Favorite Player Photo" items: { type: 'favoritePlayer', playerOptions: [{ playerId, name, photo, pointsCost }, ...] }
   
   // Physical Items
   shippingRequired?: boolean;       // Whether shipping is required
@@ -351,7 +370,7 @@ Firestore Database
 
 **Path**: `redemptions/{redemptionId}`
 
-**Description**: User point redemptions for shop items.
+**Description**: User point redemptions for shop items. Shop points balance is **not** stored on the user; it is computed as: `correctPredictions + referralPoints - sum(redemptions.pointsCost)` for that user. No multiplier or accuracy—one point per correct prediction plus referral rewards.
 
 **Document Structure**:
 ```typescript
@@ -381,6 +400,14 @@ Firestore Database
   // Fulfillment
   fulfilledAt?: Timestamp;
   trackingNumber?: string;
+
+  // Favorite Player items: chosen player at redemption time
+  redemptionData?: {
+    playerId: number;
+    playerName: string;
+    playerPhoto: string;
+    pointsCost: number;
+  };
   
   // Metadata
   notes?: string;                   // Admin notes

@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { ShopItem, ShopItemStatus, ShopItemCategory } from '@/types/shop'
+import { useState, useEffect, useCallback } from 'react'
+import { ShopItem, ShopItemStatus, ShopItemCategory, FavoritePlayerOption, isFavoritePlayerCustomization } from '@/types/shop'
 import {
   createShopItem,
   updateShopItem,
@@ -9,12 +9,49 @@ import {
 } from '@/lib/shop'
 import { useAuth } from '@/lib/AuthProvider'
 import { ImageUpload } from './ImageUpload'
-import { X, Save, Send } from 'lucide-react'
+import { searchPlayers, getMajorLeagues } from '@/lib/api-football'
+import { X, Save, Send, Search, Plus, Trash2, Loader2 } from 'lucide-react'
 
 interface ShopItemFormProps {
   itemId?: string
   onClose: () => void
   onSuccess: () => void
+}
+
+function PlayerSearchResultRow({
+  player,
+  onAdd,
+  alreadyAdded,
+}: {
+  player: { playerId: number; name: string; photo: string; teamName?: string }
+  onAdd: (p: { playerId: number; name: string; photo: string }, pointsCost: number) => void
+  alreadyAdded: boolean
+}) {
+  const [pointsCost, setPointsCost] = useState(4)
+  return (
+    <div className="flex items-center gap-2 p-2 hover:bg-gray-700/50 rounded">
+      <img src={player.photo} alt={player.name} className="w-8 h-8 rounded-full object-cover" />
+      <div className="flex-1 min-w-0">
+        <span className="text-ivory text-sm">{player.name}</span>
+        {player.teamName && <span className="text-ivory/60 text-xs block truncate">{player.teamName}</span>}
+      </div>
+      <input
+        type="number"
+        min={1}
+        value={pointsCost}
+        onChange={(e) => setPointsCost(Number(e.target.value) || 1)}
+        className="w-14 px-1 py-0.5 bg-gray-700 border border-gray-600 rounded text-ivory text-sm"
+      />
+      <button
+        type="button"
+        onClick={() => onAdd(player, pointsCost)}
+        disabled={alreadyAdded}
+        className="p-1.5 bg-lime-yellow text-midnight-violet rounded hover:bg-lime-yellow/90 disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        <Plus size={16} />
+      </button>
+    </div>
+  )
 }
 
 export function ShopItemForm({ itemId, onClose, onSuccess }: ShopItemFormProps) {
@@ -38,11 +75,22 @@ export function ShopItemForm({ itemId, onClose, onSuccess }: ShopItemFormProps) 
   const [shippingRequired, setShippingRequired] = useState(false)
   const [stock, setStock] = useState<number | null>(null)
   const [stockUnlimited, setStockUnlimited] = useState(true)
+
+  // Favorite Player digital item
+  const [digitalItemType, setDigitalItemType] = useState<'generic' | 'favoritePlayer'>('generic')
+  const [playerOptions, setPlayerOptions] = useState<FavoritePlayerOption[]>([])
+  const [playerSearchQuery, setPlayerSearchQuery] = useState('')
+  const [playerSearchLeague, setPlayerSearchLeague] = useState<number | ''>('')
+  const [playerSearchResults, setPlayerSearchResults] = useState<Array<{ playerId: number; name: string; photo: string; teamName?: string }>>([])
+  const [playerSearchLoading, setPlayerSearchLoading] = useState(false)
+  const [playerSearchError, setPlayerSearchError] = useState<string | null>(null)
   
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loadingExisting, setLoadingExisting] = useState(isEditing)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+
+  const majorLeagues = getMajorLeagues()
 
   // Load existing item data if editing
   useEffect(() => {
@@ -66,12 +114,20 @@ export function ShopItemForm({ itemId, onClose, onSuccess }: ShopItemFormProps) 
         setStatus(item.status)
         
         if (item.category === 'digital') {
-          setBadge(item.badge || '')
-          setTheme(item.theme || '')
-          setCustomization(item.customization ? JSON.stringify(item.customization, null, 2) : '')
+          if (isFavoritePlayerCustomization(item.customization)) {
+            setDigitalItemType('favoritePlayer')
+            setPlayerOptions(item.customization.playerOptions)
+            setCustomization('')
+          } else {
+            setDigitalItemType('generic')
+            setPlayerOptions([])
+            setBadge(item.badge || '')
+            setTheme(item.theme || '')
+            setCustomization(item.customization ? JSON.stringify(item.customization, null, 2) : '')
+          }
         } else {
           setShippingRequired(item.shippingRequired ?? false)
-          setStock(item.stock)
+          setStock(item.stock ?? null)
           setStockUnlimited(item.stock === null)
         }
       } catch (err: any) {
@@ -103,9 +159,6 @@ export function ShopItemForm({ itemId, onClose, onSuccess }: ShopItemFormProps) 
         }
         return null
       case 'imageUrl':
-        if (status === 'active' && (!value || value.trim() === '')) {
-          return 'Image is required for active items'
-        }
         return null
       case 'stock':
         if (category === 'physical' && !stockUnlimited) {
@@ -129,8 +182,16 @@ export function ShopItemForm({ itemId, onClose, onSuccess }: ShopItemFormProps) 
     const descError = validateField('description', description)
     if (descError) errors.description = descError
     
-    const costError = validateField('pointsCost', pointsCost)
-    if (costError) errors.pointsCost = costError
+    if (category === 'digital' && digitalItemType === 'favoritePlayer') {
+      if (playerOptions.length === 0) {
+        errors.playerOptions = 'Add at least one player with a points cost'
+      } else if (playerOptions.some((p) => !p.playerId || !p.name || !p.photo || !Number.isInteger(p.pointsCost) || p.pointsCost < 1)) {
+        errors.playerOptions = 'Each player must have a valid points cost (1 or more)'
+      }
+    } else {
+      const costError = validateField('pointsCost', pointsCost)
+      if (costError) errors.pointsCost = costError
+    }
     
     const imageError = validateField('imageUrl', imageUrl)
     if (imageError) errors.imageUrl = imageError
@@ -162,25 +223,31 @@ export function ShopItemForm({ itemId, onClose, onSuccess }: ShopItemFormProps) 
         name: name.trim(),
         description: description.trim(),
         category,
-        pointsCost: Number(pointsCost),
         imageUrl: imageUrl.trim(),
         featured,
         status: publish ? 'active' : status,
       }
 
       if (category === 'digital') {
-        if (badge.trim()) itemData.badge = badge.trim()
-        if (theme.trim()) itemData.theme = theme.trim()
-        if (customization.trim()) {
-          try {
-            itemData.customization = JSON.parse(customization)
-          } catch {
-            setError('Invalid JSON in customization field')
-            setLoading(false)
-            return
+        if (digitalItemType === 'favoritePlayer') {
+          itemData.pointsCost = Math.min(...playerOptions.map((p) => p.pointsCost), 100000)
+          itemData.customization = { type: 'favoritePlayer', playerOptions }
+        } else {
+          itemData.pointsCost = Number(pointsCost)
+          if (badge.trim()) itemData.badge = badge.trim()
+          if (theme.trim()) itemData.theme = theme.trim()
+          if (customization.trim()) {
+            try {
+              itemData.customization = JSON.parse(customization)
+            } catch {
+              setError('Invalid JSON in customization field')
+              setLoading(false)
+              return
+            }
           }
         }
       } else {
+        itemData.pointsCost = Number(pointsCost)
         itemData.shippingRequired = shippingRequired
         itemData.stock = stockUnlimited ? null : Number(stock)
       }
@@ -215,7 +282,47 @@ export function ShopItemForm({ itemId, onClose, onSuccess }: ShopItemFormProps) 
       setBadge('')
       setTheme('')
       setCustomization('')
+      setDigitalItemType('generic')
+      setPlayerOptions([])
     }
+  }
+
+  const handlePlayerSearch = useCallback(async () => {
+    if (!playerSearchQuery.trim() || playerSearchQuery.trim().length < 3) {
+      setPlayerSearchError('Enter at least 3 characters to search')
+      return
+    }
+    setPlayerSearchLoading(true)
+    setPlayerSearchError(null)
+    try {
+      const season = new Date().getMonth() >= 7 ? new Date().getFullYear() : new Date().getFullYear() - 1
+      const leagueId = playerSearchLeague ? Number(playerSearchLeague) : undefined
+      const results = await searchPlayers(playerSearchQuery.trim(), leagueId, season)
+      setPlayerSearchResults(results)
+      if (results.length === 0) {
+        setPlayerSearchError('No players found. Try a different search or league.')
+      }
+    } catch (err: any) {
+      setPlayerSearchError(err.message || 'Search failed')
+      setPlayerSearchResults([])
+    } finally {
+      setPlayerSearchLoading(false)
+    }
+  }, [playerSearchQuery, playerSearchLeague])
+
+  const handleAddPlayer = (player: { playerId: number; name: string; photo: string }, pointsCost: number) => {
+    if (playerOptions.some((p) => p.playerId === player.playerId)) return
+    if (!Number.isInteger(pointsCost) || pointsCost < 1) return
+    setPlayerOptions((prev) => [...prev, { playerId: player.playerId, name: player.name, photo: player.photo, pointsCost }])
+  }
+
+  const handleRemovePlayer = (playerId: number) => {
+    setPlayerOptions((prev) => prev.filter((p) => p.playerId !== playerId))
+  }
+
+  const handleUpdatePlayerPoints = (playerId: number, pointsCost: number) => {
+    if (!Number.isInteger(pointsCost) || pointsCost < 1) return
+    setPlayerOptions((prev) => prev.map((p) => (p.playerId === playerId ? { ...p, pointsCost } : p)))
   }
 
   if (loadingExisting) {
@@ -308,26 +415,33 @@ export function ShopItemForm({ itemId, onClose, onSuccess }: ShopItemFormProps) 
                     <option value="physical">Physical</option>
                   </select>
                 </div>
-                <div>
-                  <label className="block text-sm text-ivory mb-2">
-                    Points Cost <span className="text-cinnabar">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    value={pointsCost}
-                    onChange={(e) => {
-                      setPointsCost(Number(e.target.value))
-                      const error = validateField('pointsCost', e.target.value)
-                      setFieldErrors({ ...fieldErrors, pointsCost: error || '' })
-                    }}
-                    min="1"
-                    max="100000"
-                    className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-[10px] text-ivory focus:outline-none focus:border-lime-yellow"
-                  />
-                  {fieldErrors.pointsCost && (
-                    <p className="text-xs text-cinnabar mt-1">{fieldErrors.pointsCost}</p>
-                  )}
-                </div>
+                {!(category === 'digital' && digitalItemType === 'favoritePlayer') && (
+                  <div>
+                    <label className="block text-sm text-ivory mb-2">
+                      Points Cost <span className="text-cinnabar">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      value={pointsCost}
+                      onChange={(e) => {
+                        setPointsCost(Number(e.target.value))
+                        const error = validateField('pointsCost', e.target.value)
+                        setFieldErrors({ ...fieldErrors, pointsCost: error || '' })
+                      }}
+                      min="1"
+                      max="100000"
+                      className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-[10px] text-ivory focus:outline-none focus:border-lime-yellow"
+                    />
+                    {fieldErrors.pointsCost && (
+                      <p className="text-xs text-cinnabar mt-1">{fieldErrors.pointsCost}</p>
+                    )}
+                  </div>
+                )}
+                {category === 'digital' && digitalItemType === 'favoritePlayer' && playerOptions.length > 0 && (
+                  <div className="text-ivory/70 text-sm">
+                    Price: from {Math.min(...playerOptions.map((p) => p.pointsCost))} pts (varies by player)
+                  </div>
+                )}
                 <div>
                   <label className="block text-sm text-ivory mb-2">Status</label>
                   <select
@@ -380,38 +494,137 @@ export function ShopItemForm({ itemId, onClose, onSuccess }: ShopItemFormProps) 
             {category === 'digital' ? (
               <div className="bg-gray-900 border border-gray-700 rounded-[10px] p-4">
                 <h3 className="text-lg font-bold text-ivory mb-4">Digital Item Settings</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm text-ivory mb-2">Badge ID</label>
-                    <input
-                      type="text"
-                      value={badge}
-                      onChange={(e) => setBadge(e.target.value)}
-                      className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-[10px] text-ivory focus:outline-none focus:border-lime-yellow"
-                      placeholder="e.g., premium"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-ivory mb-2">Theme ID</label>
-                    <input
-                      type="text"
-                      value={theme}
-                      onChange={(e) => setTheme(e.target.value)}
-                      className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-[10px] text-ivory focus:outline-none focus:border-lime-yellow"
-                      placeholder="e.g., dark"
-                    />
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className="block text-sm text-ivory mb-2">Customization (JSON)</label>
-                    <textarea
-                      value={customization}
-                      onChange={(e) => setCustomization(e.target.value)}
-                      className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-[10px] text-ivory focus:outline-none focus:border-lime-yellow font-mono text-sm"
-                      rows={4}
-                      placeholder='{"frame": "gold"}'
-                    />
-                  </div>
+                <div className="mb-4">
+                  <label className="block text-sm text-ivory mb-2">Digital Item Type</label>
+                  <select
+                    value={digitalItemType}
+                    onChange={(e) => {
+                      const v = e.target.value as 'generic' | 'favoritePlayer'
+                      setDigitalItemType(v)
+                      if (v === 'generic') setPlayerOptions([])
+                    }}
+                    className="w-full md:w-64 px-3 py-2 bg-gray-800 border border-gray-700 rounded-[10px] text-ivory focus:outline-none focus:border-lime-yellow"
+                  >
+                    <option value="generic">Generic (badge/theme/customization)</option>
+                    <option value="favoritePlayer">Favorite Player Photo</option>
+                  </select>
                 </div>
+
+                {digitalItemType === 'favoritePlayer' ? (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm text-ivory mb-2">Add Players (API-Football)</label>
+                      <p className="text-xs text-ivory/60 mb-2">Search by player name (min 3 chars). Add players with their point cost.</p>
+                      <div className="flex flex-wrap gap-2 mb-2">
+                        <input
+                          type="text"
+                          value={playerSearchQuery}
+                          onChange={(e) => {
+                            setPlayerSearchQuery(e.target.value)
+                            setPlayerSearchError(null)
+                          }}
+                          onKeyDown={(e) => e.key === 'Enter' && handlePlayerSearch()}
+                          className="flex-1 min-w-[160px] px-3 py-2 bg-gray-800 border border-gray-700 rounded-[10px] text-ivory focus:outline-none focus:border-lime-yellow"
+                          placeholder="e.g., Messi, Drogba"
+                        />
+                        <select
+                          value={playerSearchLeague}
+                          onChange={(e) => setPlayerSearchLeague(e.target.value ? Number(e.target.value) : '')}
+                          className="px-3 py-2 bg-gray-800 border border-gray-700 rounded-[10px] text-ivory focus:outline-none focus:border-lime-yellow"
+                        >
+                          <option value="">All leagues</option>
+                          {majorLeagues.map((l) => (
+                            <option key={l.id} value={l.id}>{l.name}</option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => handlePlayerSearch()}
+                          disabled={playerSearchLoading || playerSearchQuery.trim().length < 3}
+                          className="px-4 py-2 bg-lime-yellow text-midnight-violet rounded-[10px] font-medium hover:bg-lime-yellow/90 disabled:opacity-50 flex items-center gap-2"
+                        >
+                          {playerSearchLoading ? <Loader2 size={18} className="animate-spin" /> : <Search size={18} />}
+                          Search
+                        </button>
+                      </div>
+                      {playerSearchError && <p className="text-xs text-cinnabar mb-2">{playerSearchError}</p>}
+                      {playerSearchResults.length > 0 && (
+                        <div className="max-h-48 overflow-y-auto border border-gray-700 rounded-[10px] p-2 space-y-1">
+                          {playerSearchResults.map((p) => (
+                            <PlayerSearchResultRow
+                              key={p.playerId}
+                              player={p}
+                              onAdd={handleAddPlayer}
+                              alreadyAdded={playerOptions.some((o) => o.playerId === p.playerId)}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <label className="block text-sm text-ivory mb-2">Selected Players ({playerOptions.length})</label>
+                      {fieldErrors.playerOptions && <p className="text-xs text-cinnabar mb-1">{fieldErrors.playerOptions}</p>}
+                      {playerOptions.length === 0 ? (
+                        <p className="text-ivory/60 text-sm">No players added yet. Search and add players above.</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {[...playerOptions]
+                            .sort((a, b) => a.pointsCost - b.pointsCost)
+                            .map((p) => (
+                            <div key={p.playerId} className="flex items-center gap-3 p-2 bg-gray-800 rounded-[10px] border border-gray-700">
+                              <img src={p.photo} alt={p.name} className="w-10 h-10 rounded-full object-cover" />
+                              <span className="text-ivory flex-1">{p.name}</span>
+                              <input
+                                type="number"
+                                min={1}
+                                value={p.pointsCost}
+                                onChange={(e) => handleUpdatePlayerPoints(p.playerId, Number(e.target.value))}
+                                className="w-20 px-2 py-1 bg-gray-700 border border-gray-600 rounded text-ivory text-sm"
+                              />
+                              <span className="text-ivory/60 text-sm">pts</span>
+                              <button type="button" onClick={() => handleRemovePlayer(p.playerId)} className="text-cinnabar hover:text-cinnabar/80 p-1">
+                                <Trash2 size={18} />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm text-ivory mb-2">Badge ID</label>
+                      <input
+                        type="text"
+                        value={badge}
+                        onChange={(e) => setBadge(e.target.value)}
+                        className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-[10px] text-ivory focus:outline-none focus:border-lime-yellow"
+                        placeholder="e.g., premium"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-ivory mb-2">Theme ID</label>
+                      <input
+                        type="text"
+                        value={theme}
+                        onChange={(e) => setTheme(e.target.value)}
+                        className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-[10px] text-ivory focus:outline-none focus:border-lime-yellow"
+                        placeholder="e.g., dark"
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-sm text-ivory mb-2">Customization (JSON)</label>
+                      <textarea
+                        value={customization}
+                        onChange={(e) => setCustomization(e.target.value)}
+                        className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-[10px] text-ivory focus:outline-none focus:border-lime-yellow font-mono text-sm"
+                        rows={4}
+                        placeholder='{"frame": "gold"}'
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="bg-gray-900 border border-gray-700 rounded-[10px] p-4">

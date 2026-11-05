@@ -98,10 +98,11 @@ export async function getGameweekFixtureDetails(
       return []
     }
 
-    const fixtures: Array<{
+    const fixturesWithSortKey: Array<{
       fixtureId: number
       homeTeam: TeamInfo
       awayTeam: TeamInfo
+      _sortKey: number
     }> = []
 
     fixturesSnapshot.forEach((doc) => {
@@ -109,7 +110,17 @@ export async function getGameweekFixtureDetails(
       const fixtureId = data.fixtureId || parseInt(doc.id, 10)
 
       if (data.teams && data.teams.home && data.teams.away) {
-        fixtures.push({
+        // Extract date for sorting - data.fixture is the full APIFootballFixture
+        const apiFixture = (data.fixture as { fixture?: { date?: string; timestamp?: number } } | null)?.fixture
+        const dateStr = apiFixture?.date
+        const dateTs = apiFixture?.timestamp
+        const sortKey = dateStr
+          ? new Date(dateStr).getTime()
+          : dateTs
+            ? dateTs * 1000
+            : fixtureId // Fallback for legacy docs without date
+
+        fixturesWithSortKey.push({
           fixtureId,
           homeTeam: {
             id: data.teams.home.id,
@@ -125,14 +136,18 @@ export async function getGameweekFixtureDetails(
             position: 0, // Position not available in fixture data
             form: [], // Form data not available in fixture data
           },
+          _sortKey: sortKey,
         })
       }
     })
 
-    // Sort by fixtureId to maintain order
-    fixtures.sort((a, b) => a.fixtureId - b.fixtureId)
+    // Sort by game time (first game left), fallback to fixtureId for same times
+    fixturesWithSortKey.sort((a, b) => {
+      const diff = a._sortKey - b._sortKey
+      return diff !== 0 ? diff : a.fixtureId - b.fixtureId
+    })
 
-    return fixtures
+    return fixturesWithSortKey.map(({ _sortKey, ...fixture }) => fixture)
   } catch (error) {
     console.error('Error fetching gameweek fixture details:', error)
     return []
@@ -247,23 +262,29 @@ async function getPredictionsForFixture(
   }
 }
 
+interface BatchUserData {
+  displayName: string
+  points: number
+  photoURL?: string | null
+  lastWeekPlace?: 1 | 2 | 3 | null
+  lastCompletedGameweekId?: string | null
+}
+
 /**
  * Batch fetch user documents from Firestore in parallel
  * Fetches all user documents concurrently to avoid N+1 query problem
- * 
+ *
  * @param userIds - Array of user IDs to fetch
- * @returns Promise<Map<userId, { displayName: string, points: number }>>
+ * @returns Promise<Map<userId, BatchUserData>>
  */
-async function batchFetchUsers(userIds: string[]): Promise<Map<string, { displayName: string; points: number }>> {
-  const userDataMap = new Map<string, { displayName: string; points: number }>()
-  
+async function batchFetchUsers(userIds: string[]): Promise<Map<string, BatchUserData>> {
+  const userDataMap = new Map<string, BatchUserData>()
+
   if (userIds.length === 0) {
     return userDataMap
   }
 
   try {
-    // Fetch all user documents in parallel
-    // This is much faster than sequential calls (N+1 problem)
     const docPromises = userIds.map(async (userId) => {
       try {
         const userRef = doc(db, 'users', userId)
@@ -272,20 +293,27 @@ async function batchFetchUsers(userIds: string[]): Promise<Map<string, { display
           10000,
           'Failed to load user data - request timed out'
         )
-        
+
         if (userDoc.exists()) {
           const data = userDoc.data()
+          const photoURL = data.favoritePlayer?.photo || data.photoURL || null
           return {
             userId,
             displayName: data.displayName || 'Player',
             points: data.points || 0,
+            photoURL: photoURL || null,
+            lastWeekPlace: data.lastWeekPlace ?? null,
+            lastCompletedGameweekId: data.lastCompletedGameweekId ?? null,
           }
         }
-        
+
         return {
           userId,
           displayName: 'Player',
           points: 0,
+          photoURL: null,
+          lastWeekPlace: null,
+          lastCompletedGameweekId: null,
         }
       } catch (error) {
         console.error(`Error fetching user ${userId}:`, error)
@@ -293,21 +321,28 @@ async function batchFetchUsers(userIds: string[]): Promise<Map<string, { display
           userId,
           displayName: 'Player',
           points: 0,
+          photoURL: null,
+          lastWeekPlace: null,
+          lastCompletedGameweekId: null,
         }
       }
     })
-    
+
     const results = await Promise.all(docPromises)
-    
-    // Build map from results
-    results.forEach(({ userId, displayName, points }) => {
-      userDataMap.set(userId, { displayName, points })
+
+    results.forEach(({ userId, displayName, points, photoURL, lastWeekPlace, lastCompletedGameweekId }) => {
+      userDataMap.set(userId, {
+        displayName,
+        points,
+        photoURL: photoURL ?? null,
+        lastWeekPlace: lastWeekPlace ?? null,
+        lastCompletedGameweekId: lastCompletedGameweekId ?? null,
+      })
     })
 
     return userDataMap
   } catch (error) {
     console.error('Error batch fetching users:', error)
-    // Return empty map on error - fallback to defaults
     return userDataMap
   }
 }
@@ -434,17 +469,25 @@ export async function getWeeklyRankings(
 
       // Only include users who made at least one prediction
       if (matchPredictions.some((mp) => mp.prediction !== null)) {
-        // Get user data from batched map
-        const userData = userDataMap.get(userId) || { displayName: 'Player', points: 0 }
+        const userData = userDataMap.get(userId) || {
+          displayName: 'Player',
+          points: 0,
+          photoURL: null,
+          lastWeekPlace: null,
+          lastCompletedGameweekId: null,
+        }
 
         rankingEntries.push({
           userId,
           displayName: userData.displayName,
-          points: userData.points, // All-time points
-          rank: 0, // Will be calculated after sorting
+          points: userData.points,
+          rank: 0,
           weeklyPoints,
           matchPredictions,
+          photoURL: userData.photoURL ?? null,
           isCurrentUser: currentUserId ? userId === currentUserId : false,
+          lastWeekPlace: userData.lastWeekPlace ?? null,
+          lastCompletedGameweekId: userData.lastCompletedGameweekId ?? null,
         })
       }
     }

@@ -1,7 +1,7 @@
 'use client'
 
 import { useTranslations } from 'next-intl'
-import { ShopItemProps } from '@/types/shop'
+import { ShopItemProps, isFavoritePlayerCustomization } from '@/types/shop'
 import { ShoppingBag, Package } from 'lucide-react'
 import Image from 'next/image'
 
@@ -76,6 +76,9 @@ export function ShopItem({ item, userPoints, isRedeemed = false, onRedeem }: Sho
         {/* Points Cost */}
         <div className="flex items-center justify-between">
           <div className="flex items-baseline gap-1">
+            {isFavoritePlayerCustomization(item.customization) && (
+              <span className="text-ivory/70 text-sm mr-0.5">{t('from')} </span>
+            )}
             <span className="text-lime-yellow font-bold text-xl">{item.pointsCost}</span>
             <span className="text-ivory/70 text-sm">{t('pts')}</span>
           </div>

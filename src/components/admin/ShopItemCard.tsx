@@ -45,7 +45,7 @@ export function ShopItemCard({
       case 'sold_out':
         return 'SOLD OUT'
       default:
-        return status.toUpperCase()
+        return 'UNKNOWN'
     }
   }
 

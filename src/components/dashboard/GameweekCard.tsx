@@ -9,6 +9,8 @@ import { useMemo } from 'react'
 interface GameweekCardProps {
   gameweek: GameweekData
   playerCount: number
+  /** When true, user has at least one prediction (saved or pending) for this week. Used for dynamic note. */
+  hasAnyPicks?: boolean
 }
 
 interface StatusBadgeProps {
@@ -60,9 +62,11 @@ function StatusBadge({ status, deadline }: StatusBadgeProps) {
   const shouldPulse = status === 'OPEN' && (urgencyLevel === 'warning' || urgencyLevel === 'critical')
   const pulseIntensity = urgencyLevel === 'critical' ? 'animate-pulse' : 'animate-pulse-slow'
 
+  const timerSlotClass = status === 'OPEN' ? 'gameweek-timer-slot-open' : 'gameweek-timer-slot'
+
   return (
     <div
-      className={`${getStatusColor()} px-2.5 py-1.5 rounded-[10px] inline-flex items-center justify-center gap-2 transition-all duration-300 ${
+      className={`${getStatusColor()} px-2.5 py-1.5 rounded-[10px] inline-flex items-center justify-center gap-2 transition-all duration-300 ${timerSlotClass} ${
         shouldPulse ? pulseIntensity : ''
       }`}
       role="status"
@@ -88,20 +92,33 @@ function StatusBadge({ status, deadline }: StatusBadgeProps) {
   )
 }
 
-export function GameweekCard({ gameweek, playerCount }: GameweekCardProps) {
+export function GameweekCard({ gameweek, playerCount, hasAnyPicks = false }: GameweekCardProps) {
   const t = useTranslations('dashboard')
+  const isOpen = gameweek.status === 'OPEN'
+  const headerClass = isOpen
+    ? 'gameweek-card-header-glow'
+    : 'gameweek-card-header-slot'
+
+  const noteMessage =
+    !isOpen
+      ? t('gameweekNoteClosed')
+      : hasAnyPicks
+        ? t('gameweekNoteHasPicks')
+        : t('gameweekNoteNoPicks')
 
   return (
-    <div className="w-full animate-fade-in">
-      {/* Header */}
-      <div className="bg-lime-yellow h-[35px] rounded-t-[10px] px-2.5 flex items-center justify-center shadow-sm">
+    <div className="w-full gameweek-card-slot">
+      {/* Header – slot-reveal + jackpot glow when OPEN */}
+      <div
+        className={`bg-lime-yellow h-[35px] rounded-t-[10px] px-2.5 flex items-center justify-center shadow-sm ${headerClass}`}
+      >
         <h2 className="text-2xl font-black italic tracking-[0.24px] text-midnight-violet text-center">
           {gameweek.name.toUpperCase()}
         </h2>
       </div>
 
-      {/* Body */}
-      <div className="border border-lime-yellow rounded-b-[10px] px-3 py-4 flex flex-col gap-4 bg-midnight-violet/50 backdrop-blur-sm transition-all duration-300 hover:border-lime-yellow/80">
+      {/* Body – staggered slot-reveal */}
+      <div className={`border border-lime-yellow rounded-b-[10px] px-3 py-4 flex flex-col gap-4 bg-midnight-violet/50 backdrop-blur-sm transition-all duration-300 hover:border-lime-yellow/80 gameweek-card-body-slot`}>
         {/* Player Count */}
         <div className="flex items-center justify-center gap-3">
           <Users size={20} className="text-ivory transition-transform duration-200 hover:scale-110" aria-hidden="true" />
@@ -115,6 +132,11 @@ export function GameweekCard({ gameweek, playerCount }: GameweekCardProps) {
         <div className="flex justify-center">
           <StatusBadge status={gameweek.status} deadline={gameweek.deadline} />
         </div>
+
+        {/* Dynamic note */}
+        <p className="text-center text-sm text-ivory/80 italic">
+          {noteMessage}
+        </p>
       </div>
     </div>
   )

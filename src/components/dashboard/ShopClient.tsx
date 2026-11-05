@@ -8,7 +8,7 @@ import { BottomNavigation } from './BottomNavigation'
 import { ShopItem } from './ShopItem'
 import { ReferralPopup } from './ReferralPopup'
 import { RedemptionActionModal } from './RedemptionActionModal'
-import { ShopClientProps, ShopItem as ShopItemType } from '@/types/shop'
+import { ShopClientProps, ShopItem as ShopItemType, FavoritePlayerOption, isFavoritePlayerCustomization } from '@/types/shop'
 import { redeemShopItem } from '@/lib/redemptions'
 import { ShoppingBag, Coins } from 'lucide-react'
 
@@ -16,26 +16,26 @@ export function ShopClient({ items, userPoints, username }: ShopClientProps) {
   const t = useTranslations('shop')
   const tCommon = useTranslations('common')
   const { user } = useAuth()
-  const [redeemedItems, setRedeemedItems] = useState<Set<string>>(new Set())
+  const [redeemedItems, setRedeemedItems] = useState<Map<string, number>>(new Map()) // itemId -> pointsCost
   const [showConfirmation, setShowConfirmation] = useState<{
     itemId: string
     itemName: string
     pointsCost: number
+    selectedPlayer?: FavoritePlayerOption
   } | null>(null)
+  const [showPlayerPicker, setShowPlayerPicker] = useState<ShopItemType | null>(null)
   const [showActionModal, setShowActionModal] = useState(false)
   const [redeemedItem, setRedeemedItem] = useState<ShopItemType | null>(null)
   const [redemptionId, setRedemptionId] = useState<string | null>(null)
+  const [selectedPlayerForModal, setSelectedPlayerForModal] = useState<FavoritePlayerOption | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   // Calculate available points (subtract redeemed items)
   const getAvailablePoints = () => {
     let totalRedeemed = 0
-    redeemedItems.forEach((itemId) => {
-      const item = items.find((i) => i.itemId === itemId)
-      if (item) {
-        totalRedeemed += item.pointsCost
-      }
+    redeemedItems.forEach((cost) => {
+      totalRedeemed += cost
     })
     return userPoints - totalRedeemed
   }
@@ -44,14 +44,20 @@ export function ShopClient({ items, userPoints, username }: ShopClientProps) {
     const item = items.find((i) => i.itemId === itemId)
     if (!item) return
 
-    // Check if already redeemed
+    // Check if already redeemed this session
     if (redeemedItems.has(itemId)) {
       return
     }
 
-    // Check if user can afford
+    // Check if user can afford (for favorite-player, pointsCost is the minimum)
     const availablePoints = getAvailablePoints()
     if (availablePoints < item.pointsCost) {
+      return
+    }
+
+    // Favorite-player items: show player picker first
+    if (isFavoritePlayerCustomization(item.customization)) {
+      setShowPlayerPicker(item)
       return
     }
 
@@ -60,6 +66,16 @@ export function ShopClient({ items, userPoints, username }: ShopClientProps) {
       itemId: item.itemId,
       itemName: item.name,
       pointsCost: item.pointsCost,
+    })
+  }
+
+  const handlePlayerSelected = (item: ShopItemType, selectedPlayer: FavoritePlayerOption) => {
+    setShowPlayerPicker(null)
+    setShowConfirmation({
+      itemId: item.itemId,
+      itemName: item.name,
+      pointsCost: selectedPlayer.pointsCost,
+      selectedPlayer,
     })
   }
 
@@ -77,11 +93,12 @@ export function ShopClient({ items, userPoints, username }: ShopClientProps) {
     setError(null)
 
     try {
-      // Redeem the item
-      const result = await redeemShopItem(user, item)
+      // Redeem the item (with selectedPlayer for favorite-player items)
+      const result = await redeemShopItem(user, item, showConfirmation.selectedPlayer)
 
-      // Mark as redeemed locally
-      setRedeemedItems((prev) => new Set(prev).add(item.itemId))
+      // Mark as redeemed locally (store actual cost for favorite-player items)
+      const actualCost = showConfirmation.selectedPlayer?.pointsCost ?? item.pointsCost
+      setRedeemedItems((prev) => new Map(prev).set(item.itemId, actualCost))
 
       // Store redemption info for action modal
       setRedeemedItem(item)
@@ -90,9 +107,13 @@ export function ShopClient({ items, userPoints, username }: ShopClientProps) {
       // Close confirmation and show action modal
       setShowConfirmation(null)
       
-      // Check if item requires an action (like display name change)
+      // Check if item requires an action (display name change, favorite player selection)
       const itemNameLower = item.name.toLowerCase()
+      const isFavoritePlayer = isFavoritePlayerCustomization(item.customization)
       if (itemNameLower.includes('display name') || itemNameLower.includes('change name')) {
+        setShowActionModal(true)
+      } else if (isFavoritePlayer) {
+        setSelectedPlayerForModal(showConfirmation.selectedPlayer ?? null)
         setShowActionModal(true)
       } else {
         // For items that don't require action, just show success
@@ -111,6 +132,7 @@ export function ShopClient({ items, userPoints, username }: ShopClientProps) {
     setShowActionModal(false)
     setRedeemedItem(null)
     setRedemptionId(null)
+    setSelectedPlayerForModal(null)
     // Refresh user points by reloading or calling a refresh function
     // For now, the parent component should handle this
     window.location.reload() // Simple refresh - you might want to use a better approach
@@ -118,6 +140,10 @@ export function ShopClient({ items, userPoints, username }: ShopClientProps) {
 
   const cancelRedeem = () => {
     setShowConfirmation(null)
+  }
+
+  const cancelPlayerPicker = () => {
+    setShowPlayerPicker(null)
   }
 
   // Filter to only show active items
@@ -179,6 +205,49 @@ export function ShopClient({ items, userPoints, username }: ShopClientProps) {
       {/* Bottom Navigation */}
       <BottomNavigation />
 
+      {/* Player Picker Modal (for Favorite Player items) */}
+      {showPlayerPicker && isFavoritePlayerCustomization(showPlayerPicker.customization) && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-midnight-violet border-2 border-lime-yellow rounded-lg p-6 max-w-md w-full max-h-[80vh] overflow-hidden flex flex-col">
+            <h3 className="text-ivory font-bold text-xl mb-2">{t('choosePlayer')}</h3>
+            <p className="text-ivory/70 text-sm mb-4">
+              {t('choosePlayerDescription')}
+            </p>
+            <div className="flex-1 overflow-y-auto space-y-2 mb-4">
+              {[...showPlayerPicker.customization.playerOptions]
+                .sort((a, b) => a.pointsCost - b.pointsCost)
+                .map((player) => {
+                const canAfford = getAvailablePoints() >= player.pointsCost
+                return (
+                  <button
+                    key={player.playerId}
+                    onClick={() => canAfford && handlePlayerSelected(showPlayerPicker, player)}
+                    disabled={!canAfford}
+                    className={`w-full flex items-center gap-3 p-3 rounded-lg border transition-colors ${
+                      canAfford
+                        ? 'bg-gray-800/50 border-gray-600 hover:border-lime-yellow hover:bg-gray-800 text-ivory'
+                        : 'bg-gray-800/30 border-gray-700 text-ivory/50 cursor-not-allowed'
+                    }`}
+                  >
+                    <img src={player.photo} alt={player.name} className="w-12 h-12 rounded-full object-cover flex-shrink-0" />
+                    <span className="flex-1 text-left font-medium">{player.name}</span>
+                    <span className={`font-bold ${canAfford ? 'text-lime-yellow' : 'text-ivory/50'}`}>
+                      {player.pointsCost} {t('pts')}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+            <button
+              onClick={cancelPlayerPicker}
+              className="w-full py-2.5 px-4 rounded-lg font-semibold text-sm bg-ivory/10 text-ivory hover:bg-ivory/15 transition-colors"
+            >
+              {tCommon('cancel')}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Confirmation Modal */}
       {showConfirmation && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
@@ -227,6 +296,7 @@ export function ShopClient({ items, userPoints, username }: ShopClientProps) {
         isOpen={showActionModal}
         item={redeemedItem}
         redemptionId={redemptionId}
+        selectedPlayer={selectedPlayerForModal}
         onClose={onRedemptionComplete}
         onSuccess={onRedemptionComplete}
       />

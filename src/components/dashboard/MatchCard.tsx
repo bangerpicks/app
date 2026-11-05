@@ -8,6 +8,8 @@ interface MatchCardProps {
   userPrediction?: Prediction | null
   onPredictionSelect: (fixtureId: number, prediction: Prediction) => void
   disabled?: boolean
+  /** When true, show prediction and result only (no buttons) */
+  readOnly?: boolean
 }
 
 function getOrdinalSuffix(day: number): string {
@@ -45,9 +47,10 @@ export function MatchCard({
   userPrediction,
   onPredictionSelect,
   disabled = false,
+  readOnly = false,
 }: MatchCardProps) {
   const handlePredictionSelect = (prediction: Prediction) => {
-    onPredictionSelect(match.fixtureId, prediction)
+    if (!readOnly) onPredictionSelect(match.fixtureId, prediction)
   }
 
   return (
@@ -111,12 +114,24 @@ export function MatchCard({
           <TeamInfo team={match.awayTeam} />
         </div>
 
-        {/* Prediction Buttons */}
-        <PredictionButtons
-          selected={userPrediction}
-          onSelect={handlePredictionSelect}
-          disabled={disabled}
-        />
+        {/* Prediction Buttons or read-only prediction */}
+        {readOnly ? (
+          <div className="flex items-center justify-center gap-2 py-1">
+            {userPrediction ? (
+              <span className="inline-flex items-center justify-center min-w-[2rem] px-2 py-1 rounded font-bold text-sm bg-ivory/20 text-ivory prediction-result-slot">
+                {userPrediction}
+              </span>
+            ) : (
+              <span className="text-ivory/50 text-sm">—</span>
+            )}
+          </div>
+        ) : (
+          <PredictionButtons
+            selected={userPrediction}
+            onSelect={handlePredictionSelect}
+            disabled={disabled}
+          />
+        )}
       </div>
     </div>
   )

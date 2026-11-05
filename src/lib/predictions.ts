@@ -64,17 +64,29 @@ export interface PredictionEntry {
 }
 
 /**
+ * Gameweek predictions cache document structure
+ * Stored at users/{uid}/gameweek_predictions/{gameweekId} for fast single-read loading
+ */
+interface GameweekPredictionsCache {
+  predictions: Record<string, Prediction> // fixtureId (string) -> pick
+  updatedAt: ReturnType<typeof serverTimestamp>
+}
+
+/**
  * Save multiple predictions to Firestore in a batch
+ * Also updates the user's gameweek cache when gameweekId is provided (fast load path)
  * 
  * @param uid - User ID
  * @param predictions - Map of fixtureId -> prediction ('H' | 'D' | 'A')
  * @param matchData - Array of match data to extract metadata from
+ * @param gameweekId - Optional gameweek ID; when provided, updates cache for fast loading
  * @returns Promise<void>
  */
 export async function savePredictions(
   uid: string,
   predictions: Map<number, Prediction>,
-  matchData: MatchCardData[]
+  matchData: MatchCardData[],
+  gameweekId?: string | null
 ): Promise<void> {
   try {
     if (!uid) {
@@ -146,6 +158,27 @@ export async function savePredictions(
     }
 
     await batch.commit()
+
+    // Update gameweek cache for fast loading (1 read instead of N)
+    if (gameweekId) {
+      try {
+        const cacheRef = doc(db, 'users', uid, 'gameweek_predictions', gameweekId)
+        const cacheDoc = await getDoc(cacheRef)
+        const existing: Record<string, Prediction> = cacheDoc.exists()
+          ? (cacheDoc.data() as GameweekPredictionsCache).predictions || {}
+          : {}
+        const merged = { ...existing }
+        predictions.forEach((pick, fixtureId) => {
+          merged[String(fixtureId)] = pick
+        })
+        await setDoc(cacheRef, {
+          predictions: merged,
+          updatedAt: serverTimestamp(),
+        } as GameweekPredictionsCache)
+      } catch (cacheErr) {
+        console.warn('Failed to update gameweek predictions cache:', cacheErr)
+      }
+    }
   } catch (error: any) {
     console.error('Error saving predictions:', error)
     
@@ -196,7 +229,51 @@ export async function getUserPrediction(
 }
 
 /**
- * Get user predictions for multiple fixtures
+ * Get user predictions for a gameweek (fast path: 1 read instead of N)
+ * Reads from users/{uid}/gameweek_predictions/{gameweekId} when available.
+ * Falls back to per-fixture reads for cache miss or legacy data.
+ * 
+ * @param uid - User ID
+ * @param gameweekId - Gameweek ID
+ * @param fixtureIds - Array of fixture IDs
+ * @returns Promise<Map<number, Prediction>> - Map of fixtureId -> prediction
+ */
+export async function getUserPredictionsForGameweek(
+  uid: string,
+  gameweekId: string,
+  fixtureIds: number[]
+): Promise<Map<number, Prediction>> {
+  try {
+    if (!uid || !gameweekId || fixtureIds.length === 0) {
+      return new Map()
+    }
+
+    const cacheRef = doc(db, 'users', uid, 'gameweek_predictions', gameweekId)
+    const cacheDoc = await withTimeout(
+      getDoc(cacheRef),
+      5000,
+      'Failed to load predictions - request timed out'
+    )
+
+    if (cacheDoc.exists()) {
+      const data = cacheDoc.data() as GameweekPredictionsCache
+      const predictions = data.predictions || {}
+      const result = new Map<number, Prediction>()
+      fixtureIds.forEach((fixtureId) => {
+        const pick = predictions[String(fixtureId)]
+        if (pick) result.set(fixtureId, pick)
+      })
+      return result
+    }
+  } catch (error) {
+    console.warn('Gameweek predictions cache miss, falling back to per-fixture reads:', error)
+  }
+
+  return getUserPredictions(uid, fixtureIds)
+}
+
+/**
+ * Get user predictions for multiple fixtures (N reads - use getUserPredictionsForGameweek when gameweekId is available)
  * 
  * @param uid - User ID
  * @param fixtureIds - Array of fixture IDs

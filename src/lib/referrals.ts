@@ -2,8 +2,9 @@
  * Referral tracking and management functions
  */
 
-import { doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs, serverTimestamp, Timestamp, increment } from 'firebase/firestore'
-import { db } from './firebase'
+import { collection, query, where, getDocs, Timestamp } from 'firebase/firestore'
+import { httpsCallable } from 'firebase/functions'
+import { db, functions } from './firebase'
 
 /**
  * Referral document structure in Firestore
@@ -50,70 +51,24 @@ export async function validateReferralCode(code: string): Promise<{ valid: boole
 }
 
 /**
- * Tracks a referral signup and awards points to the referrer
- * 
- * @param newUserUid - The UID of the newly created user
+ * Tracks a referral signup and awards points to the referrer.
+ * Calls a Cloud Function (runs with admin privileges) since client cannot
+ * write to referrals collection or update another user's document.
+ *
+ * @param _newUserUid - Unused; caller must be the new user (auth context used server-side)
  * @param referralCode - The referral code used
  * @returns Promise<void>
  */
-export async function trackReferralSignup(newUserUid: string, referralCode: string): Promise<void> {
-  try {
-    if (!newUserUid || !referralCode) {
-      throw new Error('Invalid parameters: newUserUid and referralCode are required')
-    }
-
-    const trimmedCode = referralCode.trim().toUpperCase()
-
-    // Validate referral code and get referrer UID
-    const validation = await validateReferralCode(trimmedCode)
-    if (!validation.valid || !validation.referrerUid) {
-      throw new Error('Invalid referral code')
-    }
-
-    const referrerUid = validation.referrerUid
-
-    // Prevent self-referral
-    if (referrerUid === newUserUid) {
-      throw new Error('Self-referral is not allowed')
-    }
-
-    // Check if referral already exists
-    const referralsRef = collection(db, 'referrals')
-    const existingQuery = query(
-      referralsRef,
-      where('referrerUid', '==', referrerUid),
-      where('referredUid', '==', newUserUid)
-    )
-    const existingSnapshot = await getDocs(existingQuery)
-
-    if (!existingSnapshot.empty) {
-      throw new Error('Referral already exists')
-    }
-
-    // Create referral document
-    const referralData: ReferralDocument = {
-      referrerUid,
-      referredUid: newUserUid,
-      referralCode: trimmedCode,
-      status: 'completed',
-      pointsAwarded: 5,
-      createdAt: serverTimestamp() as any,
-      completedAt: serverTimestamp() as any,
-    }
-
-    const referralRef = doc(referralsRef)
-    await setDoc(referralRef, referralData)
-
-    // Award referral points to referrer (using increment for atomic update)
-    const referrerRef = doc(db, 'users', referrerUid)
-    await updateDoc(referrerRef, {
-      referralPoints: increment(5),
-      lastUpdated: serverTimestamp() as any,
-    })
-  } catch (error: any) {
-    console.error('Error tracking referral signup:', error)
-    throw error
+export async function trackReferralSignup(_newUserUid: string, referralCode: string): Promise<void> {
+  if (!referralCode || !referralCode.trim()) {
+    throw new Error('referralCode is required')
   }
+
+  const trackReferral = httpsCallable<{ referralCode: string }, { success: boolean }>(
+    functions,
+    'trackReferralSignup'
+  )
+  await trackReferral({ referralCode: referralCode.trim().toUpperCase() })
 }
 
 /**

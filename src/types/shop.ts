@@ -89,3 +89,35 @@ export interface ShopItemFormData {
   shippingRequired?: boolean
   stock?: number | null
 }
+
+/**
+ * Favorite player option for shop item (admin-configured)
+ */
+export interface FavoritePlayerOption {
+  playerId: number
+  name: string
+  photo: string
+  pointsCost: number
+}
+
+/**
+ * Customization for favorite-player photo shop items
+ */
+export interface FavoritePlayerCustomization {
+  type: 'favoritePlayer'
+  playerOptions: FavoritePlayerOption[]
+}
+
+/**
+ * Type guard: check if customization is favorite-player type
+ */
+export function isFavoritePlayerCustomization(
+  customization: object | undefined
+): customization is FavoritePlayerCustomization {
+  return (
+    !!customization &&
+    typeof customization === 'object' &&
+    (customization as FavoritePlayerCustomization).type === 'favoritePlayer' &&
+    Array.isArray((customization as FavoritePlayerCustomization).playerOptions)
+  )
+}

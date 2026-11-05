@@ -1,6 +1,7 @@
 import { initializeApp, getApps, FirebaseApp } from 'firebase/app'
-import { getAuth, Auth, setPersistence, browserLocalPersistence } from 'firebase/auth'
-import { getFirestore, Firestore } from 'firebase/firestore'
+import { getAuth, setPersistence, browserLocalPersistence } from 'firebase/auth'
+import { getFirestore } from 'firebase/firestore'
+import { getFunctions } from 'firebase/functions'
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "AIzaSyDuSXcug9nzMGQilm5377mo7TPnMJOrBSE",
@@ -39,6 +40,9 @@ setPersistence(auth, browserLocalPersistence).catch((error) => {
 
 // Initialize Firestore
 export const db = getFirestore(app)
+
+// Initialize Functions (for callable functions like trackReferralSignup)
+export const functions = getFunctions(app)
 
 // Export initialization state
 export const firebaseInitialized = initError === null

@@ -18,7 +18,7 @@ import {
 } from 'firebase/firestore'
 import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage'
 import { db } from './firebase'
-import { ShopItem, CreateShopItemData, ShopItemFilters } from '@/types/shop'
+import { ShopItem, CreateShopItemData, ShopItemFilters, isFavoritePlayerCustomization } from '@/types/shop'
 import { withTimeout } from './firestore-utils'
 
 /**
@@ -49,12 +49,15 @@ function validateShopItemData(data: Partial<CreateShopItemData>, isUpdate: boole
     }
   }
 
+  const isFavoritePlayer = data.category === 'digital' && isFavoritePlayerCustomization(data.customization)
   if (!isUpdate || data.pointsCost !== undefined) {
-    if (data.pointsCost === undefined || data.pointsCost === null) {
+    if (!isFavoritePlayer && (data.pointsCost === undefined || data.pointsCost === null)) {
       throw new Error('Points cost is required')
     }
-    if (!Number.isInteger(data.pointsCost) || data.pointsCost < 1 || data.pointsCost > 100000) {
-      throw new Error('Points cost must be an integer between 1 and 100000')
+    if (!isFavoritePlayer && data.pointsCost != null) {
+      if (!Number.isInteger(data.pointsCost) || data.pointsCost < 1 || data.pointsCost > 100000) {
+        throw new Error('Points cost must be an integer between 1 and 100000')
+      }
     }
   }
 
@@ -64,21 +67,28 @@ function validateShopItemData(data: Partial<CreateShopItemData>, isUpdate: boole
     }
   }
 
-  // Validate image URL for active items
-  if (data.status === 'active' && (!data.imageUrl || data.imageUrl.trim() === '')) {
-    throw new Error('Image URL is required for active items')
-  }
-
   // Category-specific validation
   if (data.category === 'digital') {
-    // Digital items should have at least one of badge, theme, or customization
-    if (
-      (!data.badge || data.badge.trim() === '') &&
-      (!data.theme || data.theme.trim() === '') &&
-      (!data.customization || Object.keys(data.customization).length === 0)
-    ) {
-      // Only warn, don't throw - allow flexibility
-      console.warn('Digital item should have at least one of: badge, theme, or customization')
+    if (isFavoritePlayer) {
+      const opts = (data.customization as { playerOptions?: Array<{ playerId: number; name: string; photo: string; pointsCost: number }> })?.playerOptions
+      if (!opts || !Array.isArray(opts) || opts.length === 0) {
+        throw new Error('Favorite player item must have at least one player option')
+      }
+      for (const p of opts) {
+        if (!Number.isInteger(p.pointsCost) || p.pointsCost < 1) {
+          throw new Error(`Invalid points cost for player ${p.name || p.playerId}`)
+        }
+      }
+    } else {
+      // Digital items should have at least one of badge, theme, or customization
+      if (
+        (!data.badge || data.badge.trim() === '') &&
+        (!data.theme || data.theme.trim() === '') &&
+        (!data.customization || Object.keys(data.customization).length === 0)
+      ) {
+        // Only warn, don't throw - allow flexibility
+        console.warn('Digital item should have at least one of: badge, theme, or customization')
+      }
     }
   } else if (data.category === 'physical') {
     // Physical items: validate stock

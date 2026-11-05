@@ -43,7 +43,7 @@ export interface MatchCardData {
   }
 }
 
-export type RankingView = 'all-time' | 'this-week'
+export type RankingView = 'all-time' | 'this-week' | 'past-weeks'
 
 export interface MatchPrediction {
   fixtureId: number
@@ -62,6 +62,13 @@ export interface RankingEntry {
   correctPredictions?: number
   accuracy?: number // Percentage (0-100)
   isCurrentUser?: boolean
+  /** Profile/favorite player photo URL for avatar display */
+  photoURL?: string | null
+  // All-time: composite score for sort/display
+  allTimeScore?: number
+  // Last week podium (for "Last week champion" etc.); only show when lastCompletedGameweekId === latest completed gameweek
+  lastWeekPlace?: 1 | 2 | 3 | null
+  lastCompletedGameweekId?: string | null
   // Weekly rankings fields
   matchPredictions?: MatchPrediction[]
   weeklyPoints?: number
@@ -74,4 +81,9 @@ export interface GameweekRankingData {
     homeTeam: TeamInfo
     awayTeam: TeamInfo
   }>
+}
+
+export interface PastGameweekOption {
+  gameweekId: string
+  name: string
 }

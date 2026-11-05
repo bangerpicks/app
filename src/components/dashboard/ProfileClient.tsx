@@ -46,7 +46,8 @@ export function ProfileClient({ user, userData }: ProfileClientProps) {
   }
 
   const displayName = userData.displayName || user.displayName || 'Player'
-  const photoURL = userData.photoURL || user.photoURL
+  // Prefer favorite player photo (from shop redemption) over auth photoURL
+  const photoURL = userData.favoritePlayer?.photo || userData.photoURL || user.photoURL
   const points = userData.points || 0
   const totalPredictions = userData.totalPredictions || 0
   const correctPredictions = userData.correctPredictions || 0
@@ -125,6 +126,25 @@ export function ProfileClient({ user, userData }: ProfileClientProps) {
             </span>
           </div>
         </div>
+
+        {/* Favorite Player Section */}
+        {userData.favoritePlayer && (
+          <div className="w-full max-w-2xl mx-auto mb-6 bg-ivory/5 border border-ivory/10 rounded-lg px-4 py-3">
+            <h3 className="text-ivory font-semibold text-sm mb-2">{t('favoritePlayer')}</h3>
+            <div className="flex items-center gap-3">
+              {userData.favoritePlayer.photo && (
+                <Image
+                  src={userData.favoritePlayer.photo}
+                  alt={userData.favoritePlayer.name}
+                  width={40}
+                  height={40}
+                  className="w-10 h-10 rounded-full object-cover"
+                />
+              )}
+              <span className="text-ivory font-medium">{userData.favoritePlayer.name}</span>
+            </div>
+          </div>
+        )}
 
         {/* Favorite Team Section */}
         {userData.favoriteTeam && (

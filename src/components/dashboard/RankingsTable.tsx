@@ -7,11 +7,44 @@ import { RankingEntry, GameweekRankingData } from '@/types/dashboard'
 interface RankingsTableProps {
   rankings: RankingEntry[]
   gameweekData: GameweekRankingData
+  latestCompletedGameweekId?: string | null
+}
+
+function MultiplierBadge({
+  multiplier,
+  variant,
+  animationDelayMs,
+}: {
+  multiplier: string
+  variant: 'gold' | 'silver' | 'bronze'
+  animationDelayMs: number
+}) {
+  const variantClass =
+    variant === 'gold'
+      ? 'multiplier-badge-gold'
+      : variant === 'silver'
+        ? 'multiplier-badge-silver'
+        : 'multiplier-badge-bronze'
+  const colorClass =
+    variant === 'gold'
+      ? 'bg-amber-glow/90 text-midnight-violet'
+      : variant === 'silver'
+        ? 'bg-ivory/90 text-midnight-violet'
+        : 'bg-amber-700/90 text-ivory'
+  return (
+    <span
+      className={`inline-flex items-center justify-center min-w-[2.25rem] px-1.5 py-0.5 rounded text-xs font-bold ${variantClass} ${colorClass}`}
+      style={{ animationDelay: `${animationDelayMs}ms`, animationFillMode: 'both' }}
+    >
+      ×{multiplier}
+    </span>
+  )
 }
 
 export function RankingsTable({
   rankings,
   gameweekData,
+  latestCompletedGameweekId = null,
 }: RankingsTableProps) {
   const t = useTranslations('rankings')
   const { fixtures } = gameweekData
@@ -115,7 +148,23 @@ export function RankingsTable({
 
           {/* Body */}
           <tbody>
-            {rankings.map((entry) => (
+            {rankings.map((entry, rowIndex) => {
+              const showLastWeekBadge =
+                latestCompletedGameweekId &&
+                entry.lastCompletedGameweekId === latestCompletedGameweekId &&
+                (entry.lastWeekPlace === 1 || entry.lastWeekPlace === 2 || entry.lastWeekPlace === 3)
+              const lastWeekBadgeKey =
+                entry.lastWeekPlace === 1
+                  ? 'lastWeekChampion'
+                  : entry.lastWeekPlace === 2
+                    ? 'lastWeek2nd'
+                    : entry.lastWeekPlace === 3
+                      ? 'lastWeek3rd'
+                      : null
+              const multiplierStagger =
+                entry.rank === 1 ? 0 : entry.rank === 2 ? 100 : entry.rank === 3 ? 200 : 0
+
+              return (
               <tr
                 key={entry.userId}
                 className="border-b border-ivory/10 hover:bg-ivory/5"
@@ -129,13 +178,38 @@ export function RankingsTable({
 
                 {/* User */}
                 <td className="sticky left-12 z-10 bg-midnight-violet px-2 py-2 min-w-[90px] max-w-[100px]">
-                  <span
-                    className={`font-semibold text-sm truncate block ${
-                      entry.isCurrentUser ? 'text-lime-yellow' : 'text-ivory'
-                    }`}
-                  >
-                    {entry.displayName}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-full bg-ivory/10 flex-shrink-0 overflow-hidden flex items-center justify-center">
+                      {entry.photoURL ? (
+                        <Image
+                          src={entry.photoURL}
+                          alt=""
+                          width={28}
+                          height={28}
+                          className="w-full h-full object-cover"
+                          unoptimized
+                        />
+                      ) : (
+                        <span className="text-ivory/50 text-xs font-bold">
+                          {(entry.displayName || '?').charAt(0).toUpperCase()}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex flex-col gap-0.5 min-w-0">
+                      <span
+                        className={`font-semibold text-sm truncate block ${
+                          entry.isCurrentUser ? 'text-lime-yellow' : 'text-ivory'
+                        }`}
+                      >
+                        {entry.displayName}
+                      </span>
+                      {showLastWeekBadge && lastWeekBadgeKey && (
+                        <span className="text-xs font-medium text-amber-glow/90">
+                          {t(lastWeekBadgeKey)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 </td>
 
                 {/* Match Predictions */}
@@ -197,12 +271,23 @@ export function RankingsTable({
 
                 {/* Points */}
                 <td className="sticky right-0 z-10 bg-midnight-violet px-2 py-2 text-right w-14">
-                  <span className="text-lime-yellow font-bold text-sm">
-                    {entry.weeklyPoints ?? entry.points}
-                  </span>
+                  <div className="flex flex-col items-end gap-1">
+                    <span className="text-lime-yellow font-bold text-sm">
+                      {entry.weeklyPoints ?? entry.points}
+                    </span>
+                    {entry.rank === 1 && (
+                      <MultiplierBadge multiplier="1.5" variant="gold" animationDelayMs={multiplierStagger} />
+                    )}
+                    {entry.rank === 2 && (
+                      <MultiplierBadge multiplier="1.3" variant="silver" animationDelayMs={multiplierStagger} />
+                    )}
+                    {entry.rank === 3 && (
+                      <MultiplierBadge multiplier="1.2" variant="bronze" animationDelayMs={multiplierStagger} />
+                    )}
+                  </div>
                 </td>
               </tr>
-            ))}
+            )})}
           </tbody>
         </table>
     </div>

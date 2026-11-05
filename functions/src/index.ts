@@ -508,3 +508,187 @@ export const autoScoring = functions.pubsub
       throw error
     }
   })
+
+/** Weekly placement bonus multipliers: 1st +50%, 2nd +30%, 3rd +20% of that week's points */
+const BONUS_MULTIPLIERS = [0.5, 0.3, 0.2] as const
+
+/**
+ * When a gameweek is marked completed, compute weekly rankings for that gameweek,
+ * apply placement bonuses to top 3 (×1.5, ×1.3, ×1.2), and update user docs.
+ */
+export const onGameweekUpdate = functions.firestore
+  .document('gameweeks/{gameweekId}')
+  .onUpdate(async (change, context) => {
+    const db = admin.firestore()
+    const gameweekId = context.params.gameweekId as string
+    const before = change.before.data()
+    const after = change.after.data()
+
+    const prevStatus = before?.status
+    const newStatus = after?.status
+
+    if (newStatus !== 'completed' || prevStatus === 'completed') {
+      return null
+    }
+
+    const fixtureIds: number[] = after?.fixtureIds || []
+    if (fixtureIds.length === 0) {
+      return null
+    }
+
+    try {
+      // Aggregate weekly points per user from predictions (awarded points only)
+      const weeklyPointsByUid = new Map<string, number>()
+
+      for (const fixtureId of fixtureIds) {
+        const entriesSnapshot = await db
+          .collection('predictions')
+          .doc(String(fixtureId))
+          .collection('entries')
+          .get()
+
+        entriesSnapshot.docs.forEach((docSnap) => {
+          const data = docSnap.data()
+          const uid = data.uid || docSnap.id
+          if (data.awarded === true && typeof data.points === 'number') {
+            const current = weeklyPointsByUid.get(uid) || 0
+            weeklyPointsByUid.set(uid, current + data.points)
+          }
+        })
+      }
+
+      // Build sorted array and assign ranks (tie handling)
+      const entries: { uid: string; weeklyPoints: number }[] = []
+      weeklyPointsByUid.forEach((weeklyPoints, uid) => {
+        entries.push({ uid, weeklyPoints })
+      })
+      entries.sort((a, b) => b.weeklyPoints - a.weeklyPoints)
+
+      let currentRank = 1
+      let previousPoints: number | null = null
+      let usersAtCurrentRank = 0
+      const rankByUid = new Map<string, number>()
+
+      entries.forEach(({ uid, weeklyPoints }) => {
+        if (previousPoints === null) {
+          currentRank = 1
+          usersAtCurrentRank = 1
+        } else if (weeklyPoints < previousPoints) {
+          currentRank += usersAtCurrentRank
+          usersAtCurrentRank = 1
+        } else {
+          usersAtCurrentRank++
+        }
+        rankByUid.set(uid, currentRank)
+        previousPoints = weeklyPoints
+      })
+
+      // Top 3 by rank (rank 1, 2, 3) get bonuses
+      const podium: { uid: string; rank: 1 | 2 | 3; weeklyPoints: number }[] = []
+      entries.forEach(({ uid, weeklyPoints }) => {
+        const rank = rankByUid.get(uid)
+        if (rank === 1 || rank === 2 || rank === 3) {
+          podium.push({ uid, rank: rank as 1 | 2 | 3, weeklyPoints })
+        }
+      })
+
+      for (const { uid, rank, weeklyPoints } of podium) {
+        const bonusFraction = BONUS_MULTIPLIERS[rank - 1]
+        const bonus = Math.round(weeklyPoints * bonusFraction)
+
+        const userRef = db.collection('users').doc(uid)
+        const updates: Record<string, unknown> = {
+          points: admin.firestore.FieldValue.increment(bonus),
+          lastWeekPlace: rank,
+          lastCompletedGameweekId: gameweekId,
+        }
+        if (rank === 1) {
+          updates.weekWins1st = admin.firestore.FieldValue.increment(1)
+        } else if (rank === 2) {
+          updates.weekWins2nd = admin.firestore.FieldValue.increment(1)
+        } else {
+          updates.weekWins3rd = admin.firestore.FieldValue.increment(1)
+        }
+
+        await userRef.update(updates)
+      }
+
+      return null
+    } catch (error: any) {
+      console.error(`[onGameweekUpdate] Error processing gameweek ${gameweekId}:`, error)
+      throw error
+    }
+  })
+
+/**
+ * Callable function to track a referral signup and award 5 points to the referrer.
+ * Runs with admin privileges to create referrals docs and update the referrer's user doc.
+ * Only the newly signed-up user (authenticated caller) can trigger this.
+ */
+export const trackReferralSignup = functions.https.onCall(async (data: { referralCode?: string }, context: functions.https.CallableContext) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Must be signed in to process referral')
+  }
+
+  const referralCode = typeof data?.referralCode === 'string' ? data.referralCode.trim() : ''
+  if (!referralCode) {
+    throw new functions.https.HttpsError('invalid-argument', 'referralCode is required')
+  }
+
+  const trimmedCode = referralCode.toUpperCase()
+  const newUserUid = context.auth.uid
+  const db = admin.firestore()
+
+  try {
+    // Validate referral code and get referrer UID
+    const usersSnapshot = await db.collection('users').where('referralCode', '==', trimmedCode).limit(1).get()
+    if (usersSnapshot.empty) {
+      throw new functions.https.HttpsError('invalid-argument', 'Invalid referral code')
+    }
+
+    const referrerDoc = usersSnapshot.docs[0]
+    const referrerUid = referrerDoc.id
+
+    // Prevent self-referral
+    if (referrerUid === newUserUid) {
+      throw new functions.https.HttpsError('invalid-argument', 'Self-referral is not allowed')
+    }
+
+    // Check if referral already exists
+    const existingSnapshot = await db
+      .collection('referrals')
+      .where('referrerUid', '==', referrerUid)
+      .where('referredUid', '==', newUserUid)
+      .limit(1)
+      .get()
+
+    if (!existingSnapshot.empty) {
+      throw new functions.https.HttpsError('already-exists', 'Referral already exists')
+    }
+
+    // Create referral document
+    await db.collection('referrals').add({
+      referrerUid,
+      referredUid: newUserUid,
+      referralCode: trimmedCode,
+      status: 'completed',
+      pointsAwarded: 5,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      completedAt: admin.firestore.FieldValue.serverTimestamp(),
+    })
+
+    // Award 5 referral points to the referrer (atomic increment)
+    await db.collection('users').doc(referrerUid).update({
+      referralPoints: admin.firestore.FieldValue.increment(5),
+      lastUpdated: admin.firestore.FieldValue.serverTimestamp(),
+    })
+
+    return { success: true }
+  } catch (error: any) {
+    if (error instanceof functions.https.HttpsError) {
+      throw error
+    }
+    console.error('[trackReferralSignup] Error:', error)
+    throw new functions.https.HttpsError('internal', 'Failed to process referral')
+  }
+})

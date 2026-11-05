@@ -1,12 +1,13 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { ShopItem } from '@/types/shop'
+import { useTranslations } from 'next-intl'
+import { ShopItem, FavoritePlayerOption, isFavoritePlayerCustomization } from '@/types/shop'
 import { useAuth } from '@/lib/AuthProvider'
 import { updateProfile } from 'firebase/auth'
 import { updateDoc, doc, serverTimestamp } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
-import { isDisplayNameAvailable } from '@/lib/users'
+import { isDisplayNameAvailable, updateUserFavoritePlayer } from '@/lib/users'
 import { updateRedemptionStatus } from '@/lib/redemptions'
 import { X, Loader2, Check } from 'lucide-react'
 
@@ -14,6 +15,7 @@ interface RedemptionActionModalProps {
   isOpen: boolean
   item: ShopItem | null
   redemptionId: string | null
+  selectedPlayer?: FavoritePlayerOption | null
   onClose: () => void
   onSuccess: () => void
 }
@@ -22,9 +24,11 @@ export function RedemptionActionModal({
   isOpen,
   item,
   redemptionId,
+  selectedPlayer,
   onClose,
   onSuccess,
 }: RedemptionActionModalProps) {
+  const t = useTranslations('shop')
   const { user } = useAuth()
   const [step, setStep] = useState<'action' | 'success'>('action')
   const [loading, setLoading] = useState(false)
@@ -110,6 +114,28 @@ export function RedemptionActionModal({
     }
   }
 
+  const handleFavoritePlayerAdd = async () => {
+    if (!user || !selectedPlayer || !redemptionId) return
+
+    setLoading(true)
+    setError(null)
+
+    try {
+      await updateUserFavoritePlayer(user.uid, {
+        id: selectedPlayer.playerId,
+        name: selectedPlayer.name,
+        photo: selectedPlayer.photo,
+      })
+      await updateRedemptionStatus(redemptionId, 'fulfilled')
+      setStep('success')
+    } catch (err: any) {
+      console.error('Error adding favorite player:', err)
+      setError(err.message || 'Failed to add favorite player. Please try again.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const handleClose = () => {
     // If user closes without completing action, still mark as fulfilled
     // (points were already deducted, redemption is complete)
@@ -124,16 +150,14 @@ export function RedemptionActionModal({
 
   // Determine which action modal to show based on item
   const getActionType = (): string | null => {
-    if (!item.name) return null
-    
-    const nameLower = item.name.toLowerCase()
+    if (!item) return null
+    if (isFavoritePlayerCustomization(item.customization) && selectedPlayer) {
+      return 'favoritePlayer'
+    }
+    const nameLower = item.name?.toLowerCase() ?? ''
     if (nameLower.includes('display name') || nameLower.includes('change name')) {
       return 'displayName'
     }
-    // Add more action types here as needed
-    // if (nameLower.includes('theme')) return 'theme'
-    // if (nameLower.includes('badge')) return 'badge'
-    
     return null
   }
 
@@ -162,6 +186,95 @@ export function RedemptionActionModal({
           >
             Close
           </button>
+        </div>
+      </div>
+    )
+  }
+
+  // Favorite Player Modal
+  if (actionType === 'favoritePlayer' && selectedPlayer) {
+    if (step === 'success') {
+      return (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-midnight-violet border-2 border-lime-yellow rounded-lg p-6 max-w-md w-full">
+            <div className="flex flex-col items-center text-center mb-4">
+              <img
+                src={selectedPlayer.photo}
+                alt={selectedPlayer.name}
+                className="w-20 h-20 rounded-full object-cover mb-4 border-2 border-lime-yellow"
+              />
+              <h3 className="text-ivory font-bold text-xl mb-2">{t('favoritePlayerAdded')}</h3>
+              <p className="text-ivory/70">
+                {t('favoritePlayerAddedDescription', { name: selectedPlayer.name })}
+              </p>
+            </div>
+            <button
+              onClick={handleClose}
+              className="w-full py-2.5 px-4 rounded-lg font-semibold text-sm bg-lime-yellow text-midnight-violet hover:bg-lime-yellow/90 transition-colors"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      )
+    }
+
+    return (
+      <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+        <div className="bg-midnight-violet border-2 border-lime-yellow rounded-lg p-6 max-w-md w-full">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-ivory font-bold text-xl">{t('addFavoritePlayer')}</h3>
+            <button
+              onClick={onClose}
+              className="text-ivory hover:text-lime-yellow transition-colors"
+              disabled={loading}
+            >
+              <X size={24} />
+            </button>
+          </div>
+
+          <div className="flex flex-col items-center text-center mb-4">
+            <img
+              src={selectedPlayer.photo}
+              alt={selectedPlayer.name}
+              className="w-24 h-24 rounded-full object-cover mb-3 border-2 border-lime-yellow"
+            />
+            <p className="text-ivory font-semibold text-lg">{selectedPlayer.name}</p>
+            <p className="text-ivory/70 text-sm">
+              {t('addFavoritePlayerConfirm')}
+            </p>
+          </div>
+
+          {error && (
+            <div className="mb-4 p-3 bg-cinnabar bg-opacity-20 border border-cinnabar rounded-lg">
+              <p className="text-sm text-cinnabar">{error}</p>
+            </div>
+          )}
+
+          <div className="flex gap-3">
+            <button
+              onClick={handleClose}
+              disabled={loading}
+              className="flex-1 py-2.5 px-4 rounded-lg font-semibold text-sm bg-ivory/10 text-ivory hover:bg-ivory/15 transition-colors disabled:opacity-50"
+              title="Close (redemption will still be marked complete)"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleFavoritePlayerAdd}
+              disabled={loading}
+              className="flex-1 py-2.5 px-4 rounded-lg font-semibold text-sm bg-lime-yellow text-midnight-violet hover:bg-lime-yellow/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="animate-spin" size={18} />
+                  {t('adding')}
+                </>
+              ) : (
+                t('addToProfile')
+              )}
+            </button>
+          </div>
         </div>
       </div>
     )

@@ -2,7 +2,7 @@
  * User utility functions for Firestore operations
  */
 
-import { doc, getDoc, setDoc, serverTimestamp, Timestamp, collection, query, orderBy, limit, getDocs, where } from 'firebase/firestore'
+import { doc, getDoc, setDoc, updateDoc, serverTimestamp, Timestamp, collection, query, orderBy, limit, getDocs, where } from 'firebase/firestore'
 import { User } from 'firebase/auth'
 import { db } from './firebase'
 import { RankingEntry } from '@/types/dashboard'
@@ -34,6 +34,13 @@ export interface UserDocument {
   referralPoints?: number
   referredBy?: string | null
   hasSeenOnboardingIntro?: boolean
+  // Weekly placement counts (1st / 2nd / 3rd in completed gameweeks)
+  weekWins1st?: number
+  weekWins2nd?: number
+  weekWins3rd?: number
+  // Most recently completed gameweek in which user placed 1/2/3
+  lastWeekPlace?: 1 | 2 | 3 | null
+  lastCompletedGameweekId?: string | null
   createdAt: Timestamp
   lastUpdated: Timestamp
 }
@@ -243,18 +250,21 @@ export async function getUserReferralPoints(user: User): Promise<number> {
 }
 
 /**
- * Gets user data (display name and referral points) from Firestore in a single call
- * Optimized version that fetches the user document once instead of multiple calls
- * 
+ * Gets user data (display name, referral points, correct predictions) from Firestore in a single call.
+ * Shop points = correctPredictions + referralPoints (no multiplier/accuracy); balance is this minus redemptions.
+ *
  * @param user - The Firebase Auth user object
- * @returns Promise<{ displayName: string, referralPoints: number }> - User data
+ * @returns Promise<{ displayName: string; referralPoints: number; correctPredictions: number }> - User data
  */
-export async function getUserData(user: User): Promise<{ displayName: string; referralPoints: number }> {
+export async function getUserData(
+  user: User
+): Promise<{ displayName: string; referralPoints: number; correctPredictions: number }> {
   try {
     if (!user || !user.uid) {
       return {
         displayName: user?.displayName || 'Player',
         referralPoints: 0,
+        correctPredictions: 0,
       }
     }
 
@@ -266,6 +276,7 @@ export async function getUserData(user: User): Promise<{ displayName: string; re
       return {
         displayName: data.displayName || user.displayName || 'Player',
         referralPoints: data.referralPoints || 0,
+        correctPredictions: data.correctPredictions ?? 0,
       }
     }
 
@@ -273,6 +284,7 @@ export async function getUserData(user: User): Promise<{ displayName: string; re
     return {
       displayName: user.displayName || 'Player',
       referralPoints: 0,
+      correctPredictions: 0,
     }
   } catch (error) {
     console.error('Error fetching user data:', error)
@@ -280,6 +292,7 @@ export async function getUserData(user: User): Promise<{ displayName: string; re
     return {
       displayName: user.displayName || 'Player',
       referralPoints: 0,
+      correctPredictions: 0,
     }
   }
 }
@@ -343,6 +356,38 @@ export async function updateUserLanguage(user: User, language: 'en' | 'es-MX'): 
       throw new Error('User not authenticated. Please log in again.')
     }
     
+    throw error
+  }
+}
+
+/**
+ * Updates the user's favorite player in Firestore
+ *
+ * @param uid - User ID
+ * @param favoritePlayer - Favorite player { id, name, photo } or null to clear
+ */
+export async function updateUserFavoritePlayer(
+  uid: string,
+  favoritePlayer: { id: number; name: string; photo: string } | null
+): Promise<void> {
+  try {
+    if (!uid) {
+      throw new Error('Invalid user ID')
+    }
+
+    const userRef = doc(db, 'users', uid)
+    await updateDoc(userRef, {
+      favoritePlayer: favoritePlayer ?? null,
+      lastUpdated: serverTimestamp() as any,
+    })
+  } catch (error: any) {
+    console.error(`Error updating favorite player for ${uid}:`, error)
+    if (error.code === 'permission-denied') {
+      throw new Error('Permission denied. Please check your authentication status.')
+    }
+    if (error.code === 'unauthenticated') {
+      throw new Error('User not authenticated. Please log in again.')
+    }
     throw error
   }
 }
@@ -522,12 +567,21 @@ export async function hasSeenOnboardingIntro(user: User): Promise<boolean> {
 }
 
 /**
+ * Computes all-time display score: points + (accuracy × 0.5).
+ * Accuracy is 0–100 (percentage).
+ */
+export function computeAllTimeScore(points: number, accuracy: number): number {
+  return points + (accuracy * 0.5)
+}
+
+/**
  * Gets all-time rankings from Firestore, ordered by points descending.
- * Calculates ranks with proper tie handling (users with same points get same rank).
- * 
+ * Computes allTimeScore = points + (accuracy × 0.5), sorts by allTimeScore desc,
+ * and assigns ranks with tie handling (same allTimeScore → same rank).
+ *
  * @param currentUser - Optional Firebase Auth user object to mark current user in results
  * @param limitCount - Maximum number of users to return (default: 100)
- * @returns Promise<RankingEntry[]> - Array of ranking entries sorted by points
+ * @returns Promise<RankingEntry[]> - Array of ranking entries sorted by allTimeScore
  */
 export async function getAllTimeRankings(
   currentUser: User | null = null,
@@ -547,56 +601,66 @@ export async function getAllTimeRankings(
     }
 
     const rankings: RankingEntry[] = []
-    let currentRank = 1
-    let previousPoints: number | null = null
-    let usersAtCurrentRank = 0
 
-    querySnapshot.forEach((doc) => {
-      const data = doc.data() as UserDocument
-      const userId = doc.id
+    querySnapshot.forEach((docSnap) => {
+      const data = docSnap.data() as UserDocument
+      const userId = docSnap.id
       const points = data.points || 0
-
-      // Calculate rank with tie handling
-      if (previousPoints === null) {
-        // First user - always rank 1
-        currentRank = 1
-        usersAtCurrentRank = 1
-      } else if (points < previousPoints) {
-        // Points decreased, so we've moved to a new rank tier
-        // New rank = previous rank + number of users at that rank
-        currentRank += usersAtCurrentRank
-        usersAtCurrentRank = 1
-      } else if (points === previousPoints) {
-        // Same points as previous user, same rank
-        usersAtCurrentRank++
-      }
-      // Note: points > previousPoints shouldn't happen with desc order, but if it does, treat as new rank
 
       // Calculate accuracy if we have the data
       let accuracy = data.accuracy || 0
       if (!accuracy && data.totalPredictions && data.totalPredictions > 0 && data.correctPredictions !== undefined) {
         accuracy = (data.correctPredictions / data.totalPredictions) * 100
       }
+      const accuracyRounded = Math.round(accuracy * 10) / 10
+      const allTimeScore = computeAllTimeScore(points, accuracy)
+
+      const photoURL = data.favoritePlayer?.photo || data.photoURL || null
 
       const entry: RankingEntry = {
         userId,
         displayName: data.displayName || 'Player',
         points,
-        rank: currentRank,
+        rank: 0, // Assigned after sort
+        photoURL,
         totalPredictions: data.totalPredictions || 0,
         correctPredictions: data.correctPredictions || 0,
-        accuracy: Math.round(accuracy * 10) / 10, // Round to 1 decimal place
+        accuracy: accuracyRounded,
+        allTimeScore,
+        lastWeekPlace: data.lastWeekPlace ?? null,
+        lastCompletedGameweekId: data.lastCompletedGameweekId ?? null,
         isCurrentUser: currentUser ? userId === currentUser.uid : false,
       }
 
       rankings.push(entry)
-      previousPoints = points
+    })
+
+    // Sort by allTimeScore descending
+    rankings.sort((a, b) => (b.allTimeScore ?? b.points) - (a.allTimeScore ?? a.points))
+
+    // Assign ranks with tie handling (same allTimeScore → same rank)
+    let currentRank = 1
+    let previousScore: number | null = null
+    let usersAtCurrentRank = 0
+
+    rankings.forEach((entry) => {
+      const score = entry.allTimeScore ?? entry.points
+      if (previousScore === null) {
+        currentRank = 1
+        usersAtCurrentRank = 1
+      } else if (score < previousScore) {
+        currentRank += usersAtCurrentRank
+        usersAtCurrentRank = 1
+      } else {
+        usersAtCurrentRank++
+      }
+      entry.rank = currentRank
+      previousScore = score
     })
 
     return rankings
   } catch (error) {
     console.error('Error fetching all-time rankings:', error)
-    // Return empty array on error
     return []
   }
 }

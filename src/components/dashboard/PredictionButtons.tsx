@@ -33,12 +33,12 @@ export function PredictionButtons({
             onClick={() => !disabled && onSelect(button.value)}
             disabled={disabled}
             className={`
-              flex-1 min-w-0 max-w-[100px] min-h-[44px] bg-ivory rounded-[10px] 
-              text-sm sm:text-base font-bold italic tracking-[0.16px] text-midnight-violet
+              flex-1 min-w-0 max-w-[100px] min-h-[44px] rounded-[10px] 
+              text-sm sm:text-base font-bold italic tracking-[0.16px]
               transition-all
               ${isSelected 
-                ? 'ring-2 ring-lime-yellow ring-offset-2 ring-offset-midnight-violet !opacity-100'
-                : ''
+                ? 'bg-lime-yellow text-midnight-violet ring-2 ring-lime-yellow ring-offset-2 ring-offset-midnight-violet !opacity-100 prediction-result-slot'
+                : 'bg-ivory text-midnight-violet'
               }
               ${disabled && !isSelected
                 ? 'opacity-50 cursor-not-allowed'

@@ -436,3 +436,108 @@ export async function refreshMajorLeaguesFixtures(
     errors,
   }
 }
+
+/**
+ * Player data structure from API-Football
+ */
+export interface APIFootballPlayer {
+  player: {
+    id: number
+    name: string
+    firstname: string
+    lastname: string
+    age: number
+    birth: { date: string; place: string; country: string }
+    nationality: string
+    height: string
+    weight: string
+    injured: boolean
+    photo: string // https://media.api-sports.io/football/players/{id}.png
+  }
+  statistics?: Array<{
+    team: { id: number; name: string; logo: string }
+    league: { id: number; name: string; country: string; logo: string }
+  }>
+}
+
+/**
+ * Simplified player result for shop/admin use
+ */
+export interface PlayerSearchResult {
+  playerId: number
+  name: string
+  photo: string
+  teamName?: string
+}
+
+/**
+ * Search for players by name (minimum 3 characters)
+ * Optionally narrow by league and season
+ *
+ * @param query - Player name (last name) - min 3 chars
+ * @param league - Optional league ID
+ * @param season - Optional season year (e.g., 2024)
+ * @returns Promise<PlayerSearchResult[]>
+ */
+export async function searchPlayers(
+  query: string,
+  league?: number,
+  season?: number
+): Promise<PlayerSearchResult[]> {
+  try {
+    const trimmed = query?.trim()
+    if (!trimmed || trimmed.length < 3) {
+      return []
+    }
+
+    const params: Record<string, any> = { search: trimmed }
+    if (league) params.league = league
+    if (season) params.season = season
+
+    const response = await apiRequest('/players', params)
+    const items = response.response || []
+
+    const results: PlayerSearchResult[] = items.map((item: APIFootballPlayer) => ({
+      playerId: item.player.id,
+      name: item.player.name,
+      photo: item.player.photo || `https://media.api-sports.io/football/players/${item.player.id}.png`,
+      teamName: item.statistics?.[0]?.team?.name,
+    }))
+
+    // Dedupe by playerId (same player can appear for multiple teams)
+    const seen = new Set<number>()
+    return results.filter((r) => {
+      if (seen.has(r.playerId)) return false
+      seen.add(r.playerId)
+      return true
+    })
+  } catch (error) {
+    console.error('[api-football] Error searching players:', error)
+    throw error
+  }
+}
+
+/**
+ * Get a single player by API-Football ID
+ *
+ * @param playerId - API-Football player ID
+ * @returns Promise<PlayerSearchResult | null>
+ */
+export async function getPlayerById(playerId: number): Promise<PlayerSearchResult | null> {
+  try {
+    const response = await apiRequest('/players', { id: playerId })
+    const items = response.response || []
+    if (items.length === 0) return null
+
+    const item = items[0] as APIFootballPlayer
+    return {
+      playerId: item.player.id,
+      name: item.player.name,
+      photo: item.player.photo || `https://media.api-sports.io/football/players/${item.player.id}.png`,
+      teamName: item.statistics?.[0]?.team?.name,
+    }
+  } catch (error) {
+    console.error('[api-football] Error fetching player:', error)
+    throw error
+  }
+}

@@ -30,7 +30,8 @@
     "accuracy": "Accuracy",
     "totalPredictions": "Total Predictions",
     "correct": "Correct",
-    "favoriteTeam": "Favorite Team"
+    "favoriteTeam": "Favorite Team",
+    "favoritePlayer": "Favorite Player"
   },
   "navigation": {
     "dashboard": "Dashboard",
@@ -50,7 +51,15 @@
     "gameweekClosed": "This gameweek is no longer open for predictions.",
     "home": "HOME",
     "draw": "DRAW",
-    "away": "AWAY"
+    "away": "AWAY",
+    "viewPastPredictions": "View past predictions",
+    "pastWeeks": "Past weeks",
+    "back": "Back",
+    "yourPredictions": "Your predictions",
+    "noPastGameweeks": "No past gameweeks yet. When gameweeks are completed they will appear here.",
+    "gameweekNoteNoPicks": "Make your selections before the week closes.",
+    "gameweekNoteHasPicks": "Make any changes and save before the week closes.",
+    "gameweekNoteClosed": "Gameweek closed. Good luck!"
   },
   "rankings": {
     "title": "Rankings",
@@ -63,9 +72,18 @@
     "rank": "Rnk",
     "user": "User",
     "points": "Pts.",
+    "score": "score",
+    "howRankingWorks": "Rank = points + (accuracy × 0.5). Weekly: 1st ×1.5, 2nd ×1.3, 3rd ×1.2.",
+    "lastWeekChampion": "Last week champion",
+    "lastWeek2nd": "Last week 2nd",
+    "lastWeek3rd": "Last week 3rd",
     "errorLoading": "Error loading rankings",
     "failedToLoad": "Failed to load rankings. Please try again later.",
-    "failedToLoadWeekly": "Failed to load weekly rankings. Please try again later."
+    "failedToLoadWeekly": "Failed to load weekly rankings. Please try again later.",
+    "selectWeek": "Select week",
+    "pastWeeks": "Past Weeks",
+    "pastWeeksTab": "Past Weeks",
+    "loadingWeek": "Loading week..."
   },
   "shop": {
     "title": "Shop",
@@ -85,6 +103,15 @@
     "insufficientPoints": "Insufficient Points",
     "pts": "pts",
     "left": "left",
+    "choosePlayer": "Choose Your Favorite Player",
+    "choosePlayerDescription": "Select a player to add to your profile. Price varies by player.",
+    "from": "from",
+    "favoritePlayerAdded": "Favorite Player Added!",
+    "favoritePlayerAddedDescription": "{name} has been added to your profile.",
+    "addFavoritePlayer": "Add Favorite Player",
+    "addFavoritePlayerConfirm": "Add this player to your profile as your favorite?",
+    "addToProfile": "Add to Profile",
+    "adding": "Adding...",
     "comingSoon": "Shop Coming Soon!",
     "somethingAmazing": "Something amazing is on the way",
     "excitingRewards": "Exciting Rewards",

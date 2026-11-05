@@ -129,8 +129,8 @@ export function DashboardClient({
       await ensureUserDocument(user, username || user.displayName || 'Player')
       // Note: We don't need to check isNewUser here since this is just ensuring the document exists
 
-      // Save predictions
-      await savePredictions(user.uid, pendingPredictions, matches)
+      // Save predictions (pass gameweekId for cache - enables fast 1-read loading)
+      await savePredictions(user.uid, pendingPredictions, matches, gameweek.gameweekId)
 
       // Move pending predictions to saved
       setSavedPredictions((prev) => {
@@ -177,6 +177,7 @@ export function DashboardClient({
   }, [])
 
   const hasPendingPredictions = pendingPredictions.size > 0
+  const hasAnyPicks = matches.some((m) => getDisplayPrediction(m.fixtureId) != null)
 
   return (
     <div ref={containerRef} className="min-h-[100dvh] min-h-screen bg-midnight-violet flex flex-col">
@@ -189,7 +190,7 @@ export function DashboardClient({
         <IntroSection />
 
         {/* Gameweek Card */}
-        <GameweekCard gameweek={gameweek} playerCount={playerCount} />
+        <GameweekCard gameweek={gameweek} playerCount={playerCount} hasAnyPicks={hasAnyPicks} />
 
         {/* Match Cards */}
         <div className="w-full flex flex-col gap-5">

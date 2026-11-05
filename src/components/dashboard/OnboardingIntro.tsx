@@ -16,9 +16,10 @@ interface OnboardingIntroProps {
   onClose: () => void
   requiresDisplayName?: boolean // If true, show displayName step first
   referralCode?: string | null
+  referralMessage?: string | null
 }
 
-export function OnboardingIntro({ isOpen, onClose, requiresDisplayName = false, referralCode = null }: OnboardingIntroProps) {
+export function OnboardingIntro({ isOpen, onClose, requiresDisplayName = false, referralCode = null, referralMessage = null }: OnboardingIntroProps) {
   const t = useTranslations('onboarding')
   const tCommon = useTranslations('common')
   const tSettings = useTranslations('settings')
@@ -28,6 +29,7 @@ export function OnboardingIntro({ isOpen, onClose, requiresDisplayName = false, 
   const [selectedDisplayName, setSelectedDisplayName] = useState<string>('')
   const [customDisplayName, setCustomDisplayName] = useState<string>('')
   const [error, setError] = useState<string | null>(null)
+  const [referralStatus, setReferralStatus] = useState<string | null>(null)
   const [recommendedNames] = useState<string[]>(() => getRandomSuggestions(12))
   const router = useRouter()
   const pathname = usePathname()
@@ -38,7 +40,7 @@ export function OnboardingIntro({ isOpen, onClose, requiresDisplayName = false, 
     return () => setMounted(false)
   }, [])
 
-  // Reset step when modal opens/closes
+  // Reset step when modal opens/closes; show referral message from parent if provided
   useEffect(() => {
     if (isOpen) {
       // If requiresDisplayName is true, ALWAYS start with displayName step
@@ -46,13 +48,15 @@ export function OnboardingIntro({ isOpen, onClose, requiresDisplayName = false, 
       const initialStep = requiresDisplayName ? 'displayName' : 'instructions'
       setStep(initialStep)
       setError(null)
+      setReferralStatus(referralMessage || null)
       setSelectedDisplayName('')
       setCustomDisplayName('')
     } else {
       // Reset to initial state when closed
       setStep(requiresDisplayName ? 'displayName' : 'instructions')
+      setReferralStatus(null)
     }
-  }, [isOpen, requiresDisplayName])
+  }, [isOpen, requiresDisplayName, referralMessage])
 
   const validateDisplayName = (name: string): string | null => {
     if (!name || name.trim().length === 0) {
@@ -117,9 +121,10 @@ export function OnboardingIntro({ isOpen, onClose, requiresDisplayName = false, 
       if (referralCode) {
         try {
           await trackReferralSignup(user.uid, referralCode)
+          setReferralStatus('Referral applied! Your friend earned 5 points.')
         } catch (refError) {
           console.error('Error processing referral:', refError)
-          // Don't fail signup if referral processing fails
+          setReferralStatus('Referral could not be applied. Contact support if needed.')
         }
       }
 
@@ -287,6 +292,17 @@ export function OnboardingIntro({ isOpen, onClose, requiresDisplayName = false, 
         {/* Instructions Step */}
         {currentStep === 'instructions' && (
           <>
+            {referralStatus && (
+              <div
+                className={`mb-6 p-3 rounded text-sm ${
+                  referralStatus.includes('applied')
+                    ? 'bg-lime-yellow/20 text-lime-yellow border border-lime-yellow/40'
+                    : 'bg-amber-500/20 text-amber-200 border border-amber-500/40'
+                }`}
+              >
+                {referralStatus}
+              </div>
+            )}
             <p className="text-ivory/80 text-base sm:text-lg mb-8 leading-relaxed">
               {t('howItWorks')}
             </p>
