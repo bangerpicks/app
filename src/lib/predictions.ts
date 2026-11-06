@@ -117,6 +117,7 @@ export async function savePredictions(
       : {}
     const mergedPredictions: Record<string, Prediction> = { ...existingPredictions }
     let wrote = 0
+    let firstNewFixtureId: string | null = null
 
     // Process each prediction
     for (const [fixtureId, pick] of predictions.entries()) {
@@ -132,6 +133,7 @@ export async function savePredictions(
       if (entrySnap.exists()) {
         batch.set(parentRef, { exists: true }, { merge: true })
       } else {
+        if (firstNewFixtureId == null) firstNewFixtureId = String(fixtureId)
         batch.set(parentRef, { exists: true, playerCount: increment(1) }, { merge: true })
       }
 
@@ -180,12 +182,14 @@ export async function savePredictions(
       return
     }
 
+    const creatingCache = !cacheSnap.exists()
     batch.set(cacheRef, {
       predictions: mergedPredictions,
       updatedAt: serverTimestamp(),
+      // Proves the gameweek +1 is tied to a new entry, not an empty cache.
+      ...(creatingCache && firstNewFixtureId ? { joinedFixtureId: firstNewFixtureId } : {}),
     })
-    // Unique gameweek total. +1 only the first time this user saves in the week.
-    if (!cacheSnap.exists()) {
+    if (creatingCache && firstNewFixtureId) {
       batch.update(doc(db, 'gameweeks', gameweekId), { playerCount: increment(1) })
     }
 

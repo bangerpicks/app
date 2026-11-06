@@ -9,14 +9,23 @@
 function parseMigrateArgs(argv) {
   let apply = false
   let dryRun = false
+  let allowSkips = false
   let project = null
+  let out = null
 
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i]
     if (arg === '--apply') {
       apply = true
+    } else if (arg === '--allow-skips') {
+      allowSkips = true
     } else if (arg === '--dry-run') {
       dryRun = true
+    } else if (arg === '--out') {
+      out = argv[i + 1]
+      i += 1
+    } else if (arg.startsWith('--out=')) {
+      out = arg.slice('--out='.length)
     } else if (arg === '--project') {
       project = argv[i + 1]
       i += 1
@@ -33,7 +42,7 @@ function parseMigrateArgs(argv) {
     throw new Error('Pass only one of --dry-run or --apply')
   }
 
-  return { help: false, apply, project }
+  return { help: false, apply, allowSkips, project, out }
 }
 
 function assertMigrateAllowed({ apply, project }) {

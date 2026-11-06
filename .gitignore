@@ -48,6 +48,7 @@ Thumbs.db
 
 # firebase
 .firebase/
+/backups/
 .firebaserc
 firebase-debug.log
 firestore-debug.log

@@ -461,6 +461,7 @@ describe('predictions', () => {
     batch.set(doc(database, 'users', USER, 'gameweek_predictions', GAMEWEEK_ID), {
       predictions: { [String(FIXTURE_ID)]: 'H' },
       updatedAt: serverTimestamp(),
+      joinedFixtureId: String(FIXTURE_ID),
     })
     batch.update(doc(database, 'gameweeks', GAMEWEEK_ID), { playerCount: increment(1) })
     await assertSucceeds(batch.commit())
@@ -473,6 +474,107 @@ describe('predictions', () => {
     await assertDenied(
       updateDoc(doc(dbAs(OTHER), 'gameweeks', GAMEWEEK_ID), { playerCount: increment(1) })
     )
+
+    const other = dbAs(OTHER)
+    const inflate = writeBatch(other)
+    inflate.set(doc(other, 'users', OTHER, 'gameweek_predictions', GAMEWEEK_ID), {
+      predictions: { [String(FIXTURE_ID)]: 'H' },
+      updatedAt: serverTimestamp(),
+    })
+    inflate.update(doc(other, 'gameweeks', GAMEWEEK_ID), { playerCount: increment(1) })
+    await assertDenied(inflate.commit())
+    const afterInflate = await getDoc(doc(dbAnon(), 'gameweeks', GAMEWEEK_ID))
+    assert.equal(afterInflate.data().playerCount, 1)
+  })
+
+  it('denies picks and redemptions while maintenance is on', async () => {
+    await seedPlayableFixture()
+    await seed(async (db) => {
+      await setDoc(
+        doc(db, 'settings', 'app'),
+        { maintenance: true, shopEnabled: true, minRedemptionPoints: 0, adminUids: [ADMIN] },
+        { merge: true }
+      )
+      await setDoc(doc(db, 'users', USER), {
+        uid: USER,
+        displayName: 'Player One',
+        pointsSpent: 0,
+        correctPredictions: 100,
+        referralPoints: 0,
+      })
+      await setDoc(doc(db, 'users', ADMIN), { uid: ADMIN, displayName: 'Admin', isAdmin: true, pointsSpent: 0 })
+      await setDoc(doc(db, 'shopItems', 'item-badge'), {
+        itemId: 'item-badge',
+        name: 'Premium Badge',
+        pointsCost: 50,
+        status: 'active',
+      })
+    })
+    await assertDenied(savePick(dbAs(USER), USER, 'H'))
+    const buyer = dbAs(USER)
+    const redemptionId = `${USER}_item-badge_maint`
+    const blocked = writeBatch(buyer)
+    blocked.set(doc(buyer, 'redemptions', redemptionId), {
+      redemptionId,
+      userId: USER,
+      itemId: 'item-badge',
+      itemName: 'Premium Badge',
+      pointsCost: 50,
+      redeemedAt: Timestamp.now(),
+      status: 'pending',
+      updatedAt: Timestamp.now(),
+    })
+    blocked.update(doc(buyer, 'users', USER), {
+      pointsSpent: increment(50),
+      lastShopRedemptionId: redemptionId,
+    })
+    await assertDenied(blocked.commit())
+    await assertSucceeds(
+      setDoc(doc(dbAs(ADMIN), 'redemptions', 'admin-maint'), {
+        redemptionId: 'admin-maint',
+        userId: ADMIN,
+        itemId: 'item-badge',
+        itemName: 'Premium Badge',
+        pointsCost: 50,
+        status: 'pending',
+      })
+    )
+  })
+
+  it('denies a redemption when pointsSpent is not an integer', async () => {
+    await seed(async (db) => {
+      await setDoc(doc(db, 'users', USER), {
+        uid: USER,
+        displayName: 'Player One',
+        pointsSpent: 40.5,
+        correctPredictions: 100,
+        referralPoints: 0,
+      })
+      await setDoc(doc(db, 'shopItems', 'item-badge'), {
+        itemId: 'item-badge',
+        name: 'Premium Badge',
+        pointsCost: 10,
+        status: 'active',
+      })
+    })
+    const buyer = dbAs(USER)
+    const redemptionId = `${USER}_item-badge_float`
+    const batch = writeBatch(buyer)
+    batch.set(doc(buyer, 'redemptions', redemptionId), {
+      redemptionId,
+      userId: USER,
+      itemId: 'item-badge',
+      itemName: 'Premium Badge',
+      pointsCost: 10,
+      redeemedAt: Timestamp.now(),
+      status: 'pending',
+      updatedAt: Timestamp.now(),
+    })
+    batch.update(doc(buyer, 'users', USER), {
+      pointsSpent: increment(10),
+      lastShopRedemptionId: redemptionId,
+    })
+    await assertDenied(batch.commit())
   })
 
   it('denies a pick on a draft gameweek', async () => {

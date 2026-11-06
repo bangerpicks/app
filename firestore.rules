@@ -67,6 +67,10 @@ service cloud.firestore {
         || settingsData().get('shopEnabled', true) != false;
     }
 
+    function maintenanceOn() {
+      return settingsExist() && settingsData().get('maintenance', false) == true;
+    }
+
     function isPublicGameweekStatus(status) {
       return status in ['active', 'completed', 'archived'];
     }
@@ -223,9 +227,10 @@ service cloud.firestore {
       let path = /databases/$(database)/documents/redemptions/$(redemptionId);
       return resource != null
         && isOwner(userId)
+        && !maintenanceOn()
         && resource.data.keys().hasAny(['pointsSpent'])
         && changedKeys().hasOnly(['pointsSpent', 'lastShopRedemptionId'])
-        && spentBefore is number
+        && spentBefore is int
         && spentAfter is int
         && redemptionId is string
         && redemptionId.size() <= 160
@@ -388,6 +393,7 @@ service cloud.firestore {
       let redemptionId = request.resource.data.lastRedemptionId;
       return resource != null
         && isSignedIn()
+        && !maintenanceOn()
         && resource.data.get('stock', null) is int
         && resource.data.stock > 0
         && request.resource.data.stock == resource.data.stock - 1
@@ -422,7 +428,7 @@ service cloud.firestore {
       let earned = after.get('correctPredictions', 0) + after.get('referralPoints', 0);
       let minimum = settingsExist() ? settingsData().get('minRedemptionPoints', 0) : 0;
       return before.keys().hasAny(['pointsSpent'])
-        && spentBefore is number
+        && spentBefore is int
         && spentAfter is int
         && cost is int
         && cost > 0
@@ -467,6 +473,7 @@ service cloud.firestore {
       let item = get(/databases/$(database)/documents/shopItems/$(request.resource.data.itemId)).data;
       let cost = request.resource.data.pointsCost;
       return shopIsEnabled()
+        && !maintenanceOn()
         && isSignedIn()
         && redemptionIdMatches(redemptionId, request.resource.data.itemId)
         && request.resource.data.redemptionId == redemptionId
@@ -523,13 +530,33 @@ service cloud.firestore {
 
       match /gameweek_predictions/{gameweekId} {
         allow read: if isOwner(userId);
-        allow create, update: if isOwner(userId)
+        allow create: if cacheCreateOk(userId);
+        allow update: if isOwner(userId)
           && request.resource.data.keys().hasOnly(['predictions', 'updatedAt'])
           && request.resource.data.predictions is map
           && request.resource.data.predictions.size() <= 10
           && request.resource.data.updatedAt is timestamp;
         allow delete: if false;
       }
+    }
+
+    function cacheCreateOk(userId) {
+      let joined = request.resource.data.joinedFixtureId;
+      return isOwner(userId)
+        && request.resource.data.predictions is map
+        && request.resource.data.predictions.size() > 0
+        && request.resource.data.predictions.size() <= 10
+        && request.resource.data.updatedAt is timestamp
+        && (
+          request.resource.data.keys().hasOnly(['predictions', 'updatedAt'])
+          || (
+            request.resource.data.keys().hasOnly(['predictions', 'updatedAt', 'joinedFixtureId'])
+            && joined is string
+            && joined.matches('^[0-9]+$')
+            && !exists(/databases/$(database)/documents/predictions/$(joined)/entries/$(userId))
+            && existsAfter(/databases/$(database)/documents/predictions/$(joined)/entries/$(userId))
+          )
+        );
     }
 
     function predictionEntryPath(fixtureId) {
@@ -573,26 +600,39 @@ service cloud.firestore {
 
     match /predictions/{fixtureId} {
       allow read: if true;
-      allow create: if parentCreateWithCount(fixtureId);
-      allow update: if parentCountBump(fixtureId) || parentTouch(fixtureId);
+      allow create: if isAdmin() || (parentCreateWithCount(fixtureId) && !maintenanceOn());
+      allow update: if isAdmin() || ((parentCountBump(fixtureId) || parentTouch(fixtureId)) && !maintenanceOn());
       allow delete: if false;
 
       match /entries/{entryUid} {
         // Rankings list entries while signed in. Signed-out player count fails closed.
         allow read: if isSignedIn();
-        allow create: if validPredictionWrite(entryUid, fixtureId);
-        allow update: if resource != null
+        allow create: if isAdmin() || (validPredictionWrite(entryUid, fixtureId) && !maintenanceOn());
+        allow update: if isAdmin() || (
+          resource != null
           && validPredictionWrite(entryUid, fixtureId)
-          && resource.data.get('awarded', false) != true;
+          && !maintenanceOn()
+          && resource.data.get('awarded', false) != true
+        );
         allow delete: if false;
       }
     }
 
-    // Unique predictors. +1 only when this user creates their gameweek cache
-    // in the same batch. playerCount must already exist (migration or create).
+    function cacheProvesNewEntry(cache) {
+      let fixtureId = getAfter(cache).data.joinedFixtureId;
+      return fixtureId is string
+        && fixtureId.matches('^[0-9]+$')
+        && !exists(/databases/$(database)/documents/predictions/$(fixtureId)/entries/$(request.auth.uid))
+        && existsAfter(/databases/$(database)/documents/predictions/$(fixtureId)/entries/$(request.auth.uid));
+    }
+
+    // +1 only when this batch creates the user's first entry, proved by
+    // joinedFixtureId on the new gameweek cache. A cache write alone cannot
+    // increment the count. playerCount must already exist.
     function isPredictorJoin(gameweekId) {
       let cache = /databases/$(database)/documents/users/$(request.auth.uid)/gameweek_predictions/$(gameweekId);
       return isSignedIn()
+        && !maintenanceOn()
         && resource != null
         && resource.data.keys().hasAny(['playerCount'])
         && resource.data.playerCount is int
@@ -600,9 +640,7 @@ service cloud.firestore {
         && request.resource.data.playerCount == resource.data.playerCount + 1
         && !exists(cache)
         && existsAfter(cache)
-        && getAfter(cache).data.predictions is map
-        && getAfter(cache).data.predictions.size() > 0
-        && getAfter(cache).data.predictions.size() <= 10;
+        && cacheProvesNewEntry(cache);
     }
 
     match /gameweeks/{gameweekId} {

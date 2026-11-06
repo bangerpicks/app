@@ -15,24 +15,71 @@
 
 const { parseMigrateArgs, assertMigrateAllowed } = require('./migrate-guard')
 
-function computedSpend(redemptions) {
+function parseCost(raw) {
+  if (typeof raw === 'number' && Number.isInteger(raw)) {
+    if (raw > 0) return { cost: raw }
+    return { skip: `non-positive integer cost ${raw}` }
+  }
+  if (typeof raw === 'string') {
+    const trimmed = raw.trim()
+    const asNumber = Number(trimmed)
+    if (trimmed === '' || !Number.isFinite(asNumber)) {
+      return { skip: `invalid string cost ${JSON.stringify(raw)}` }
+    }
+    if (Number.isInteger(asNumber)) {
+      if (asNumber <= 0) return { skip: `non-positive string cost ${JSON.stringify(raw)}` }
+      return {
+        cost: asNumber,
+        warning: `string cost ${JSON.stringify(raw)} coerced with Number() to integer ${asNumber}`,
+      }
+    }
+    const rounded = Math.round(asNumber)
+    if (rounded <= 0) return { skip: `string cost ${JSON.stringify(raw)} rounds to ${rounded}` }
+    return {
+      cost: rounded,
+      warning: `string cost ${JSON.stringify(raw)} rounded to integer ${rounded}`,
+    }
+  }
+  if (typeof raw === 'number' && Number.isFinite(raw)) {
+    const rounded = Math.round(raw)
+    if (rounded <= 0) return { skip: `cost ${raw} rounds to ${rounded}` }
+    return { cost: rounded, warning: `non-integer cost ${raw} rounded to integer ${rounded}` }
+  }
+  return { skip: `invalid cost ${JSON.stringify(raw)}` }
+}
+
+function classifyRedemptions(redemptions) {
   const spentByUser = new Map()
+  const skipped = []
+  const warnings = []
   redemptions.forEach((snapshot) => {
     const data = snapshot.data() || {}
     if (data.status === 'cancelled') return
     const uid = data.userId
-    const cost = data.pointsCost
-    if (typeof uid !== 'string' || uid.length === 0) return
-    if (typeof cost !== 'number' || !Number.isFinite(cost) || cost <= 0) return
-    spentByUser.set(uid, (spentByUser.get(uid) || 0) + cost)
+    if (typeof uid !== 'string' || uid.length === 0) {
+      skipped.push({ id: snapshot.id, reason: 'missing userId' })
+      return
+    }
+    const parsed = parseCost(data.pointsCost)
+    if (parsed.skip) {
+      skipped.push({ id: snapshot.id, userId: uid, reason: parsed.skip })
+      return
+    }
+    if (parsed.warning) warnings.push({ id: snapshot.id, userId: uid, warning: parsed.warning })
+    spentByUser.set(uid, (spentByUser.get(uid) || 0) + parsed.cost)
   })
-  return spentByUser
+  return { spentByUser, skipped, warnings }
 }
 
-async function migratePointsSpent({ db, apply, log = console.log }) {
+function failureCode(result, allowSkips) {
+  const problems = (result.skipped || []).length + (result.orphans || []).length
+  return problems > 0 && !allowSkips ? 1 : 0
+}
+
+async function migratePointsSpent({ db, apply, allowSkips = false, log = console.log }) {
   const redemptions = await db.collection('redemptions').get()
   const users = await db.collection('users').get()
-  const spentByUser = computedSpend(redemptions)
+  const { spentByUser, skipped, warnings } = classifyRedemptions(redemptions)
   const userIds = new Set(users.docs.map((snapshot) => snapshot.id))
   const orphans = []
 
@@ -43,6 +90,19 @@ async function migratePointsSpent({ db, apply, log = console.log }) {
   for (const uid of orphans) {
     log(`ORPHAN redemptions for missing user ${uid} computed=${spentByUser.get(uid)} skipped`)
   }
+  for (const item of skipped) {
+    log(`SKIP redemption ${item.id} user=${item.userId || '-'} ${item.reason}`)
+  }
+  for (const item of warnings) {
+    log(`WARNING redemption ${item.id} ${item.warning}`)
+  }
+
+  const blocked = failureCode({ skipped, orphans }, allowSkips) === 1
+  if (blocked) {
+    log(
+      `REFUSING to ${apply ? 'apply' : 'treat this as a clean dry-run'}: ${skipped.length} invalid redemption(s), ${orphans.length} orphan user id(s). Re-run with --allow-skips to proceed.`
+    )
+  }
 
   const changes = []
   let batch = db.batch()
@@ -50,7 +110,7 @@ async function migratePointsSpent({ db, apply, log = console.log }) {
 
   async function queue(ref, pointsSpent) {
     changes.push({ id: ref.id, pointsSpent })
-    if (!apply) return
+    if (!apply || blocked) return
     batch.set(ref, { pointsSpent }, { merge: true })
     pending += 1
     if (pending === 400) {
@@ -83,14 +143,23 @@ async function migratePointsSpent({ db, apply, log = console.log }) {
     await queue(snapshot.ref, next)
   }
 
-  if (apply && pending > 0) {
+  if (apply && !blocked && pending > 0) {
     await batch.commit()
   }
 
+  const result = {
+    changes: blocked ? [] : changes,
+    orphans,
+    skipped,
+    warnings,
+    applied: apply && !blocked,
+    users: users.size,
+    redemptions: redemptions.size,
+  }
   log(
-    `${apply ? 'APPLY' : 'DRY-RUN'} pointsSpent changes=${changes.length} orphans=${orphans.length} users=${users.size} redemptions=${redemptions.size}`
+    `${result.applied ? 'APPLY' : 'DRY-RUN'} pointsSpent changes=${result.changes.length} orphans=${orphans.length} skipped=${skipped.length} warnings=${warnings.length} users=${users.size} redemptions=${redemptions.size}`
   )
-  return { changes, orphans, users: users.size, redemptions: redemptions.size }
+  return result
 }
 
 async function main() {
@@ -104,7 +173,14 @@ async function main() {
   if (!admin.apps.length) {
     admin.initializeApp({ projectId: args.project || process.env.GCLOUD_PROJECT || 'demo-banger-picks' })
   }
-  await migratePointsSpent({ db: admin.firestore(), apply: args.apply })
+  const result = await migratePointsSpent({
+    db: admin.firestore(),
+    apply: args.apply,
+    allowSkips: args.allowSkips,
+  })
+  if (failureCode(result, args.allowSkips) !== 0) {
+    process.exitCode = 1
+  }
 }
 
 if (require.main === module) {
@@ -114,4 +190,4 @@ if (require.main === module) {
   })
 }
 
-module.exports = { migratePointsSpent, computedSpend }
+module.exports = { migratePointsSpent, parseCost, classifyRedemptions, failureCode }

@@ -7,9 +7,13 @@ import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
 import { after, before, describe, it } from 'node:test'
 import { assertMigrateAllowed, parseMigrateArgs } from '../scripts/migrate-guard.js'
-import { migratePointsSpent } from '../scripts/migrate-points-spent.js'
+import { failureCode, migratePointsSpent } from '../scripts/migrate-points-spent.js'
 import { migrateShopOptionsById } from '../scripts/migrate-shop-options-by-id.js'
 import { migratePlayerCounts } from '../scripts/migrate-player-counts.js'
+import { backupFirestore } from '../scripts/backup-firestore.js'
+import { mkdtempSync, readFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
 const require = createRequire(import.meta.url)
 const admin = require('../functions/node_modules/firebase-admin')
@@ -84,13 +88,17 @@ describe('pointsSpent migration', () => {
     await db.collection('redemptions').doc('r3').set({ userId: 'ghost', pointsCost: 20, status: 'pending' })
     await db.collection('redemptions').doc('r4').set({ userId: 'mig-high', pointsCost: 5, status: 'fulfilled' })
 
-    const dry = await migratePointsSpent({ db, apply: false, log: silent })
+    const refused = await migratePointsSpent({ db, apply: true, log: silent })
+    assert.equal(refused.applied, false)
+    assert.equal((await db.collection('users').doc('mig-user').get()).data().pointsSpent, undefined)
+    assert.deepEqual(refused.orphans, ['ghost'])
+
+    const dry = await migratePointsSpent({ db, apply: false, allowSkips: true, log: silent })
     assert.equal((await db.collection('users').doc('mig-user').get()).data().pointsSpent, undefined)
     assert.ok(dry.changes.some((change) => change.id === 'mig-user' && change.pointsSpent === 15))
     assert.equal((await db.collection('users').doc('ghost').get()).exists, false)
-    assert.deepEqual(dry.orphans, ['ghost'])
 
-    await migratePointsSpent({ db, apply: true, log: silent })
+    await migratePointsSpent({ db, apply: true, allowSkips: true, log: silent })
     assert.equal((await db.collection('users').doc('mig-user').get()).data().pointsSpent, 15)
     assert.equal((await db.collection('users').doc('mig-zero').get()).data().pointsSpent, 0)
     assert.equal((await db.collection('users').doc('mig-high').get()).data().pointsSpent, 100)
@@ -98,16 +106,46 @@ describe('pointsSpent migration', () => {
 
     await db.collection('users').doc('mig-user').update({ pointsSpent: 30 })
     await db.collection('redemptions').doc('r5').set({ userId: 'mig-user', pointsCost: 15, status: 'pending' })
-    await migratePointsSpent({ db, apply: true, log: silent })
+    await migratePointsSpent({ db, apply: true, allowSkips: true, log: silent })
     assert.equal((await db.collection('users').doc('mig-user').get()).data().pointsSpent, 30)
 
     await db.collection('users').doc('mig-user').update({ pointsSpent: 10 })
-    const raised = await migratePointsSpent({ db, apply: true, log: silent })
+    const raised = await migratePointsSpent({ db, apply: true, allowSkips: true, log: silent })
     assert.equal((await db.collection('users').doc('mig-user').get()).data().pointsSpent, 30)
     assert.ok(raised.changes.some((change) => change.id === 'mig-user' && change.pointsSpent === 30))
 
-    const again = await migratePointsSpent({ db, apply: true, log: silent })
+    const again = await migratePointsSpent({ db, apply: true, allowSkips: true, log: silent })
     assert.equal(again.changes.length, 0)
+  })
+
+  it('coerces a string cost and refuses to apply when a cost is invalid', async () => {
+    await wipe()
+    await db.collection('users').doc('string-user').set({ displayName: 'S' })
+    await db.collection('redemptions').doc('string-cost').set({
+      userId: 'string-user',
+      pointsCost: '40',
+      status: 'pending',
+    })
+    const coerced = await migratePointsSpent({ db, apply: true, log: silent })
+    assert.equal(coerced.applied, true)
+    assert.equal(coerced.skipped.length, 0)
+    assert.ok(coerced.warnings.some((item) => item.warning.includes('40') && item.warning.includes('coerced')))
+    assert.equal((await db.collection('users').doc('string-user').get()).data().pointsSpent, 40)
+
+    await db.collection('redemptions').doc('bad-cost').set({
+      userId: 'string-user',
+      pointsCost: 'nope',
+      status: 'pending',
+    })
+    const refused = await migratePointsSpent({ db, apply: true, log: silent })
+    assert.equal(refused.applied, false)
+    assert.equal(failureCode(refused, false), 1)
+    assert.ok(refused.skipped.some((item) => item.id === 'bad-cost'))
+    assert.equal((await db.collection('users').doc('string-user').get()).data().pointsSpent, 40)
+
+    const allowed = await migratePointsSpent({ db, apply: true, allowSkips: true, log: silent })
+    assert.equal(allowed.applied, true)
+    assert.equal((await db.collection('users').doc('string-user').get()).data().pointsSpent, 40)
   })
 })
 
@@ -140,6 +178,31 @@ describe('optionsById migration', () => {
 
     const again = await migrateShopOptionsById({ db, apply: true, log: silent })
     assert.equal(again.changes.length, 0)
+  })
+})
+
+describe('firestore backup', () => {
+  before(wipe)
+  after(wipe)
+
+  it('writes a local JSON dump and does not modify Firestore', async () => {
+    await db.collection('users').doc('backup-user').set({ displayName: 'Backup', pointsSpent: 3 })
+    await db.collection('settings').doc('app').set({ shopEnabled: false, maintenance: true })
+    const dir = mkdtempSync(join(tmpdir(), 'banger-backup-'))
+    const outPath = join(dir, 'firestore.json')
+    const result = await backupFirestore({
+      db,
+      outPath,
+      projectId: 'demo-banger-picks',
+      log: silent,
+    })
+    const dumped = JSON.parse(readFileSync(outPath, 'utf8'))
+    assert.equal(dumped.readOnly, true)
+    assert.equal(dumped.users['backup-user'].displayName, 'Backup')
+    assert.equal(dumped.users['backup-user'].pointsSpent, 3)
+    assert.equal(dumped.settings.app.maintenance, true)
+    assert.equal(result.counts.users, 1)
+    assert.equal((await db.collection('users').doc('backup-user').get()).data().pointsSpent, 3)
   })
 })
 
