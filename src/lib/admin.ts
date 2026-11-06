@@ -341,12 +341,17 @@ export async function getAllGameweeks(filters?: {
   status?: 'draft' | 'active' | 'completed' | 'archived'
   sortBy?: 'date' | 'name'
   sortOrder?: 'asc' | 'desc'
+  // Admin lists pass true. Everyone else must exclude drafts: an unfiltered
+  // query fails rules once any draft exists.
+  includeDrafts?: boolean
 }): Promise<AdminGameweekData[]> {
   try {
     const constraints: QueryConstraint[] = []
     
     if (filters?.status) {
       constraints.push(where('status', '==', filters.status))
+    } else if (!filters?.includeDrafts) {
+      constraints.push(where('status', 'in', ['active', 'completed', 'archived']))
     }
     
     if (filters?.sortBy === 'date') {

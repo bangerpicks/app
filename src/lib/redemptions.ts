@@ -5,7 +5,6 @@
 import {
   collection,
   doc,
-  setDoc,
   getDoc,
   getDocs,
   query,
@@ -13,6 +12,8 @@ import {
   Timestamp,
   updateDoc,
   increment,
+  serverTimestamp,
+  writeBatch,
 } from 'firebase/firestore'
 import { User } from 'firebase/auth'
 import { db } from './firebase'
@@ -27,6 +28,8 @@ export interface FavoritePlayerRedemptionData {
   playerName: string
   playerPhoto: string
   pointsCost: number
+  /** String key into shopItems customization.optionsById */
+  playerKey: string
 }
 
 /**
@@ -145,8 +148,10 @@ export async function redeemShopItem(
       throw new Error('Insufficient points')
     }
 
-    // Create redemption record (we do not deduct from user doc; balance = earned - redeemed)
-    const redemptionId = `redemption-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+    // Id is uid_itemId_nonce so rules can require this redemption in the same
+    // batch as a stock decrement (existsAfter on a known path).
+    const nonce = Date.now().toString(36)
+    const redemptionId = `${user.uid}_${item.itemId}_${nonce}`
     const now = Timestamp.now()
 
     const redemptionDoc: RedemptionDocument = {
@@ -164,21 +169,27 @@ export async function redeemShopItem(
           playerName: selectedPlayer.name,
           playerPhoto: selectedPlayer.photo,
           pointsCost: selectedPlayer.pointsCost,
+          playerKey: String(selectedPlayer.playerId),
         },
       }),
     }
 
-    const redemptionRef = doc(db, 'redemptions', redemptionId)
-    await setDoc(redemptionRef, redemptionDoc)
+    const batch = writeBatch(db)
+    batch.set(doc(db, 'redemptions', redemptionId), redemptionDoc)
 
-    // Update stock if physical item
+    // Stock can drop only in this batch, paired with the new redemption.
     if (item.category === 'physical' && item.stock !== null) {
-      const itemRef = doc(db, 'shopItems', item.itemId)
-      await updateDoc(itemRef, {
+      batch.update(doc(db, 'shopItems', item.itemId), {
         stock: increment(-1),
-        updatedAt: Timestamp.now(),
+        updatedAt: serverTimestamp(),
+      })
+      batch.set(doc(db, 'shopItems', item.itemId, 'decrementLocks', user.uid), {
+        redemptionId,
+        createdAt: serverTimestamp(),
       })
     }
+
+    await batch.commit()
 
     const pointsRemaining = currentBalance - actualPointsCost
 

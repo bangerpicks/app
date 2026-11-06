@@ -121,12 +121,15 @@ export function RedemptionActionModal({
     setError(null)
 
     try {
-      await updateUserFavoritePlayer(user.uid, {
-        id: selectedPlayer.playerId,
-        name: selectedPlayer.name,
-        photo: selectedPlayer.photo,
-      })
-      await updateRedemptionStatus(redemptionId, 'fulfilled')
+      await updateUserFavoritePlayer(
+        user.uid,
+        {
+          id: selectedPlayer.playerId,
+          name: selectedPlayer.name,
+          photo: selectedPlayer.photo,
+        },
+        redemptionId
+      )
       setStep('success')
     } catch (err: any) {
       console.error('Error adding favorite player:', err)

@@ -24,6 +24,7 @@ export interface PredictionEntry {
   // User & Fixture Info
   uid: string
   fixtureId: number
+  gameweekId?: string
 
   // Prediction
   pick: 'H' | 'D' | 'A'
@@ -97,6 +98,10 @@ export async function savePredictions(
       return
     }
 
+    if (!gameweekId) {
+      throw new Error('gameweekId is required')
+    }
+
     // Create a map of fixtureId -> matchData for quick lookup
     const matchDataMap = new Map<number, MatchCardData>()
     matchData.forEach((match) => {
@@ -123,6 +128,7 @@ export async function savePredictions(
       const entryData: Partial<PredictionEntry> = {
         uid,
         fixtureId,
+        gameweekId,
         pick,
         createdAt: serverTimestamp() as any,
         awarded: false,

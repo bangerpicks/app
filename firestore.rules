@@ -3,24 +3,11 @@ rules_version = '2';
 // Banger Picks Firestore rules.
 //
 // Cloud Functions (updateLiveFixtures, autoScoring, onGameweekUpdate,
-// trackReferralSignup) use the Admin SDK and bypass these rules.
-//
-// Prediction lock: the gameweek deadline lives on gameweeks/{id}.deadline
-// (forceOpenForTesting bypasses it in the client). Prediction parents only
-// store { exists: true } and entries do not store gameweekId. Rules cannot
-// query gameweeks by fixtureIds, and entries.fixtureDate is that match's
-// kickoff — not the gameweek deadline (offset minutes after the first
-// kickoff, applied to every fixture). Enforcing fixtureDate would reject
-// legitimate saves for the opening match during the post-kickoff window.
-// Deadline enforcement stays in the client until writes also store a
-// gameweek id or deadline.
-//
-// Redemption balance (correctPredictions + referralPoints - sum of
-// redemptions.pointsCost) cannot be enforced: rules cannot aggregate a
-// collection. Any signed-in user can also decrement shopItems.stock by 1
-// without creating a redemption, or create a redemption without decrementing
-// stock. Favorite-player prices are checked against the first 32
-// customization.playerOptions entries.
+// trackReferralSignup) use the Admin SDK and bypass these rules. They still
+// own awarding points, week-placement bonuses, referral rewards, and refreshing
+// fixture status. Rules treat the stored fixture status and user.points as
+// given; they do not recompute the shop balance
+// (correctPredictions + referralPoints - sum of redemption costs).
 
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -52,9 +39,43 @@ service cloud.firestore {
       return request.resource.data.diff(resource.data).affectedKeys();
     }
 
-    // Owner creates from ensureUserDocument. Stat fields are zero, isAdmin is absent.
+    function settingsExist() {
+      return exists(/databases/$(database)/documents/settings/app);
+    }
+
+    function settingsData() {
+      return get(/databases/$(database)/documents/settings/app).data;
+    }
+
+    function registrationsOpen() {
+      return !settingsExist()
+        || settingsData().get('allowRegistrations', true) != false;
+    }
+
+    function shopIsEnabled() {
+      return !settingsExist()
+        || settingsData().get('shopEnabled', true) != false;
+    }
+
+    function isPublicGameweekStatus(status) {
+      return status in ['active', 'completed', 'archived'];
+    }
+
+    function gameweekReadable(gameweekId) {
+      return isAdmin()
+        || (
+          exists(/databases/$(database)/documents/gameweeks/$(gameweekId))
+          && isPublicGameweekStatus(get(/databases/$(database)/documents/gameweeks/$(gameweekId)).data.get('status', ''))
+        );
+    }
+
+    function displayNameOk(value) {
+      return value is string && value.matches('^[A-Za-z0-9 _-]{2,30}$');
+    }
+
     function validUserCreate(userId) {
-      return isOwner(userId)
+      return registrationsOpen()
+        && isOwner(userId)
         && request.resource.data.keys().hasOnly([
           'uid',
           'displayName',
@@ -68,21 +89,71 @@ service cloud.firestore {
           'lastUpdated'
         ])
         && request.resource.data.uid == userId
-        && request.resource.data.displayName is string
-        && (request.resource.data.photoURL == null || request.resource.data.photoURL is string)
+        && displayNameOk(request.resource.data.displayName)
+        && (
+          request.resource.data.photoURL == null
+          || (request.resource.data.photoURL is string
+            && request.resource.data.photoURL.size() > 0
+            && request.resource.data.photoURL.size() <= 2048)
+        )
         && request.resource.data.points == 0
         && request.resource.data.referralCode is string
+        && request.resource.data.referralCode.matches('^[A-Z0-9]{4,16}$')
         && request.resource.data.referralPoints == 0
-        && (request.resource.data.referredBy == null || request.resource.data.referredBy is string)
+        && (
+          request.resource.data.referredBy == null
+          || (request.resource.data.referredBy is string && request.resource.data.referredBy.size() <= 128)
+        )
         && request.resource.data.hasSeenOnboardingIntro == false
         && request.resource.data.createdAt is timestamp
         && request.resource.data.lastUpdated is timestamp;
     }
 
-    // Fields written by users.ts and RedemptionActionModal.
-    // points, correctPredictions, totalPredictions, accuracy, isAdmin,
-    // weekWins*, referralPoints, lastWeekPlace, lastCompletedGameweekId,
-    // referredBy, and createdAt are not in this set, so clients cannot change them.
+    function favoritePlayerShapeOk() {
+      let player = request.resource.data.favoritePlayer;
+      return player is map
+        && player.keys().hasOnly(['id', 'name', 'photo'])
+        && player.id is int
+        && player.name is string
+        && player.name.size() > 0
+        && player.name.size() <= 80
+        && player.photo is string
+        && player.photo.size() > 0
+        && player.photo.size() <= 2048;
+    }
+
+    function favoritePlayerOptionMatches(player, redemption) {
+      let item = get(/databases/$(database)/documents/shopItems/$(redemption.itemId)).data;
+      let playerKey = redemption.redemptionData.playerKey;
+      return item.keys().hasAny(['customization'])
+        && item.customization is map
+        && item.customization.get('type', '') == 'favoritePlayer'
+        && item.customization.optionsById is map
+        && playerKey is string
+        && item.customization.optionsById.keys().hasAny([playerKey])
+        && item.customization.optionsById[playerKey].playerId == player.id
+        && item.customization.optionsById[playerKey].name == player.name
+        && item.customization.optionsById[playerKey].photo == player.photo
+        && item.customization.optionsById[playerKey].pointsCost == redemption.pointsCost
+        && redemption.redemptionData.playerId == player.id
+        && redemption.redemptionData.playerName == player.name
+        && redemption.redemptionData.playerPhoto == player.photo;
+    }
+
+    // Setting a favorite player requires that player's redemption, already
+    // fulfilled or fulfilled in this batch (getAfter). Clearing it does not.
+    function favoritePlayerBackedByRedemption() {
+      let player = request.resource.data.favoritePlayer;
+      let redemptionId = request.resource.data.favoritePlayerRedemptionId;
+      let redemption = getAfter(/databases/$(database)/documents/redemptions/$(redemptionId)).data;
+      return redemptionId is string
+        && redemption.userId == request.auth.uid
+        && redemption.status == 'fulfilled'
+        && redemption.keys().hasAny(['redemptionData'])
+        && redemption.redemptionData is map
+        && favoritePlayerOptionMatches(player, redemption);
+    }
+
     function validOwnerProfileUpdate(userId) {
       return resource != null
         && isOwner(userId)
@@ -92,105 +163,243 @@ service cloud.firestore {
           'referralCode',
           'language',
           'favoritePlayer',
+          'favoritePlayerRedemptionId',
           'hasSeenOnboardingIntro',
           'lastUpdated'
         ])
-        && (!changedKeys().hasAny(['displayName']) || request.resource.data.displayName is string)
-        && (!changedKeys().hasAny(['photoURL']) || request.resource.data.photoURL == null || request.resource.data.photoURL is string)
+        && (!changedKeys().hasAny(['displayName']) || displayNameOk(request.resource.data.displayName))
+        && (
+          !changedKeys().hasAny(['photoURL'])
+          || request.resource.data.photoURL == null
+          || (request.resource.data.photoURL is string
+            && request.resource.data.photoURL.size() > 0
+            && request.resource.data.photoURL.size() <= 2048)
+        )
         && (!changedKeys().hasAny(['language']) || request.resource.data.language in ['en', 'es-MX'])
+        && (!changedKeys().hasAny(['hasSeenOnboardingIntro']) || request.resource.data.hasSeenOnboardingIntro is bool)
         && (!changedKeys().hasAny(['lastUpdated']) || request.resource.data.lastUpdated is timestamp)
-        && (!changedKeys().hasAny(['referralCode'])
-          || !resource.data.keys().hasAny(['referralCode'])
-          || resource.data.referralCode == null)
-        && (!changedKeys().hasAny(['favoritePlayer'])
+        && (
+          !changedKeys().hasAny(['referralCode'])
+          || (
+            (!resource.data.keys().hasAny(['referralCode']) || resource.data.referralCode == null)
+            && request.resource.data.referralCode is string
+            && request.resource.data.referralCode.matches('^[A-Z0-9]{4,16}$')
+          )
+        )
+        && (
+          !changedKeys().hasAny(['favoritePlayerRedemptionId'])
+          || (
+            changedKeys().hasAny(['favoritePlayer'])
+            && request.resource.data.favoritePlayer is map
+            && request.resource.data.favoritePlayerRedemptionId is string
+            && request.resource.data.favoritePlayerRedemptionId.size() <= 160
+          )
+        )
+        && (
+          !changedKeys().hasAny(['favoritePlayer'])
           || request.resource.data.favoritePlayer == null
-          || (request.resource.data.favoritePlayer is map
-            && request.resource.data.favoritePlayer.keys().hasOnly(['id', 'name', 'photo'])));
+          || (favoritePlayerShapeOk() && favoritePlayerBackedByRedemption())
+        );
+    }
+
+    function teamOk(team) {
+      return team is map
+        && team.keys().hasOnly(['id', 'name', 'logo'])
+        && team.id is int
+        && team.name is string
+        && team.name.size() > 0
+        && team.name.size() <= 80
+        && team.logo is string
+        && team.logo.size() <= 2000;
+    }
+
+    function leagueOk(league) {
+      return league is map
+        && league.keys().hasOnly(['id', 'name', 'country', 'logo'])
+        && league.id is int
+        && league.name is string
+        && league.name.size() <= 80
+        && league.country is string
+        && league.country.size() <= 60
+        && league.logo is string
+        && league.logo.size() <= 2000;
+    }
+
+    function resultOk() {
+      return request.resource.data.result == null
+        || (
+          request.resource.data.result is map
+          && request.resource.data.result.keys().hasOnly(['homeGoals', 'awayGoals'])
+          && request.resource.data.result.homeGoals is int
+          && request.resource.data.result.awayGoals is int
+        );
+    }
+
+    function fixturePath(gameweekId, fixtureId) {
+      return /databases/$(database)/documents/gameweeks/$(gameweekId)/fixtures/$(fixtureId);
+    }
+
+    function gameweekPath(gameweekId) {
+      return /databases/$(database)/documents/gameweeks/$(gameweekId);
+    }
+
+    function gameweekStillOpen(gameweekId) {
+      let gameweek = get(gameweekPath(gameweekId)).data;
+      return gameweek.get('forceOpenForTesting', false) == true
+        || (gameweek.deadline is timestamp && request.time < gameweek.deadline);
+    }
+
+    function fixtureNotStarted(gameweekId, fixtureId) {
+      let fixture = get(fixturePath(gameweekId, fixtureId)).data;
+      return fixture.fixture.fixture.status.short in ['NS', 'TBD'];
+    }
+
+    // forceOpenForTesting skips the deadline only. Finished fixtures stay locked.
+    function picksOpen(gameweekId, fixtureId) {
+      return exists(gameweekPath(gameweekId))
+        && exists(fixturePath(gameweekId, fixtureId))
+        && fixtureNotStarted(gameweekId, fixtureId)
+        && gameweekStillOpen(gameweekId);
+    }
+
+    function scoringFieldsFresh() {
+      return request.resource.data.awarded == false
+        && request.resource.data.points == 0
+        && request.resource.data.correct == null
+        && (
+          resource == null
+          || (
+            resource.data.get('awarded', false) == false
+            && resource.data.get('points', 0) == 0
+            && resource.data.get('correct', null) == null
+          )
+        );
     }
 
     function validPredictionWrite(entryUid, fixtureId) {
       return isOwner(entryUid)
+        && fixtureId.matches('^[0-9]+$')
+        && request.resource.data.keys().hasOnly([
+          'uid',
+          'fixtureId',
+          'gameweekId',
+          'pick',
+          'createdAt',
+          'awarded',
+          'points',
+          'correct',
+          'homeTeam',
+          'awayTeam',
+          'league',
+          'fixtureDate',
+          'status',
+          'result'
+        ])
         && request.resource.data.uid == entryUid
         && request.resource.data.fixtureId == int(fixtureId)
+        && request.resource.data.gameweekId is string
+        && request.resource.data.gameweekId.matches('^[A-Za-z0-9_-]{1,80}$')
         && request.resource.data.pick in ['H', 'D', 'A']
-        && request.resource.data.awarded == false
-        && request.resource.data.points == 0
-        && request.resource.data.correct == null;
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.awarded is bool
+        && request.resource.data.points is int
+        && request.resource.data.status is string
+        && request.resource.data.status.size() <= 12
+        && request.resource.data.fixtureDate is timestamp
+        && teamOk(request.resource.data.homeTeam)
+        && teamOk(request.resource.data.awayTeam)
+        && leagueOk(request.resource.data.league)
+        && resultOk()
+        && scoringFieldsFresh()
+        && picksOpen(request.resource.data.gameweekId, fixtureId);
     }
 
-    // Signed-in stock write from redeemShopItem: increment(-1) plus updatedAt.
-    // Not tied to a redemption document. See file header.
-    function isStockDecrement() {
+    function redemptionPath(redemptionId) {
+      return /databases/$(database)/documents/redemptions/$(redemptionId);
+    }
+
+    function redemptionIdMatches(redemptionId, itemId) {
+      return redemptionId is string
+        && redemptionId.size() <= 160
+        && redemptionId.matches('^' + request.auth.uid + '_' + itemId + '_[A-Za-z0-9]+$');
+    }
+
+    function newRedemptionForItem(itemId, redemptionId) {
+      let path = redemptionPath(redemptionId);
+      return redemptionIdMatches(redemptionId, itemId)
+        && !exists(path)
+        && existsAfter(path)
+        && getAfter(path).data.itemId == itemId
+        && getAfter(path).data.userId == request.auth.uid
+        && getAfter(path).data.status == 'pending';
+    }
+
+    function isStockDecrement(itemId) {
+      let lockPath = /databases/$(database)/documents/shopItems/$(itemId)/decrementLocks/$(request.auth.uid);
       return resource != null
         && isSignedIn()
-        && resource.data.get('stock', null) is number
+        && resource.data.get('stock', null) is int
         && resource.data.stock > 0
         && request.resource.data.stock == resource.data.stock - 1
         && changedKeys().hasOnly(['stock', 'updatedAt'])
-        && (!changedKeys().hasAny(['updatedAt']) || request.resource.data.updatedAt is timestamp);
+        && request.resource.data.updatedAt == request.time
+        && existsAfter(lockPath)
+        && newRedemptionForItem(itemId, getAfter(lockPath).data.redemptionId);
+    }
+
+    function validDecrementLock(itemId) {
+      return request.resource.data.keys().hasOnly(['redemptionId', 'createdAt'])
+        && request.resource.data.createdAt == request.time
+        && newRedemptionForItem(itemId, request.resource.data.redemptionId);
+    }
+
+    function payerCanAfford(cost) {
+      let points = get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('points', 0);
+      let minimum = settingsExist() ? settingsData().get('minRedemptionPoints', 0) : 0;
+      return points is number
+        && cost is int
+        && cost > 0
+        && points >= cost
+        && points >= minimum;
+    }
+
+    function favoriteOptionMatches(item, cost) {
+      let data = request.resource.data.redemptionData;
+      return data is map
+        && data.keys().hasOnly(['playerId', 'playerName', 'playerPhoto', 'pointsCost', 'playerKey'])
+        && data.playerKey is string
+        && data.playerKey.matches('^[0-9]{1,12}$')
+        && data.playerId is int
+        && data.playerName is string
+        && data.playerName.size() > 0
+        && data.playerName.size() <= 80
+        && data.playerPhoto is string
+        && data.playerPhoto.size() > 0
+        && data.playerPhoto.size() <= 2048
+        && data.pointsCost == cost
+        && item.customization.optionsById is map
+        && item.customization.optionsById.keys().hasAny([data.playerKey])
+        && item.customization.optionsById[data.playerKey].playerId == data.playerId
+        && item.customization.optionsById[data.playerKey].name == data.playerName
+        && item.customization.optionsById[data.playerKey].photo == data.playerPhoto
+        && item.customization.optionsById[data.playerKey].pointsCost == cost;
     }
 
     function isFavoritePlayerItem(item) {
       return item.keys().hasAny(['customization'])
         && item.customization is map
         && item.customization.get('type', '') == 'favoritePlayer'
-        && item.customization.keys().hasAny(['playerOptions'])
-        && item.customization.playerOptions is list;
+        && item.customization.keys().hasAny(['optionsById'])
+        && item.customization.optionsById is map;
     }
 
-    function optionMatches(options, i, cost) {
-      return options.size() > i
-        && options[i] is map
-        && options[i].get('pointsCost', -1) == cost
-        && options[i].get('playerId', -1) == request.resource.data.redemptionData.get('playerId', -2);
-    }
-
-    function optionsMatch(options, cost) {
-      return optionMatches(options, 0, cost)
-        || optionMatches(options, 1, cost)
-        || optionMatches(options, 2, cost)
-        || optionMatches(options, 3, cost)
-        || optionMatches(options, 4, cost)
-        || optionMatches(options, 5, cost)
-        || optionMatches(options, 6, cost)
-        || optionMatches(options, 7, cost)
-        || optionMatches(options, 8, cost)
-        || optionMatches(options, 9, cost)
-        || optionMatches(options, 10, cost)
-        || optionMatches(options, 11, cost)
-        || optionMatches(options, 12, cost)
-        || optionMatches(options, 13, cost)
-        || optionMatches(options, 14, cost)
-        || optionMatches(options, 15, cost)
-        || optionMatches(options, 16, cost)
-        || optionMatches(options, 17, cost)
-        || optionMatches(options, 18, cost)
-        || optionMatches(options, 19, cost)
-        || optionMatches(options, 20, cost)
-        || optionMatches(options, 21, cost)
-        || optionMatches(options, 22, cost)
-        || optionMatches(options, 23, cost)
-        || optionMatches(options, 24, cost)
-        || optionMatches(options, 25, cost)
-        || optionMatches(options, 26, cost)
-        || optionMatches(options, 27, cost)
-        || optionMatches(options, 28, cost)
-        || optionMatches(options, 29, cost)
-        || optionMatches(options, 30, cost)
-        || optionMatches(options, 31, cost);
-    }
-
-    function favoriteOptionMatches(item, cost) {
-      return request.resource.data.keys().hasAny(['redemptionData'])
-        && request.resource.data.redemptionData is map
-        && request.resource.data.redemptionData.get('pointsCost', -1) == cost
-        && optionsMatch(item.customization.playerOptions, cost);
-    }
-
-    function validRedemptionCreate() {
+    function validRedemptionCreate(redemptionId) {
       let item = get(/databases/$(database)/documents/shopItems/$(request.resource.data.itemId)).data;
       let cost = request.resource.data.pointsCost;
-      return isSignedIn()
+      return shopIsEnabled()
+        && isSignedIn()
+        && redemptionIdMatches(redemptionId, request.resource.data.itemId)
+        && request.resource.data.redemptionId == redemptionId
         && request.resource.data.keys().hasOnly([
           'redemptionId',
           'userId',
@@ -205,29 +414,38 @@ service cloud.firestore {
         && request.resource.data.userId == request.auth.uid
         && request.resource.data.status == 'pending'
         && request.resource.data.itemId is string
-        && request.resource.data.itemId.matches('^[A-Za-z0-9_-]+$')
+        && request.resource.data.itemId.matches('^[A-Za-z0-9_-]{1,80}$')
+        && request.resource.data.itemName is string
+        && request.resource.data.itemName.size() <= 100
         && request.resource.data.itemName == item.name
-        && cost is number
+        && item.status == 'active'
         && request.resource.data.redeemedAt is timestamp
         && request.resource.data.updatedAt is timestamp
-        && (isFavoritePlayerItem(item)
-          ? favoriteOptionMatches(item, cost)
-          : cost == item.pointsCost);
+        && payerCanAfford(cost)
+        && (
+          isFavoritePlayerItem(item)
+            ? favoriteOptionMatches(item, cost)
+            : cost == item.pointsCost && !request.resource.data.keys().hasAny(['redemptionData'])
+        );
     }
 
-    // updateRedemptionStatus(..., 'fulfilled') writes status, updatedAt, fulfilledAt.
+    // Owner fulfillment is pending -> fulfilled only. cancelled stays terminal.
     function ownerFulfillsRedemption() {
       return resource != null
         && isSignedIn()
         && resource.data.userId == request.auth.uid
+        && resource.data.status == 'pending'
         && request.resource.data.status == 'fulfilled'
         && changedKeys().hasOnly(['status', 'updatedAt', 'fulfilledAt'])
-        && (!changedKeys().hasAny(['updatedAt']) || request.resource.data.updatedAt is timestamp)
-        && (!changedKeys().hasAny(['fulfilledAt']) || request.resource.data.fulfilledAt is timestamp);
+        && request.resource.data.updatedAt is timestamp
+        && request.resource.data.fulfilledAt is timestamp;
     }
 
     match /users/{userId} {
-      allow read: if true;
+      // Whole documents are readable by any signed-in user (rankings, referral
+      // codes, display names). isAdmin therefore rides along; rules cannot hide
+      // one field. Anonymous reads are denied.
+      allow read: if isSignedIn();
       allow create: if validUserCreate(userId);
       allow update: if isAdmin() || validOwnerProfileUpdate(userId);
       allow delete: if false;
@@ -237,6 +455,7 @@ service cloud.firestore {
         allow create, update: if isOwner(userId)
           && request.resource.data.keys().hasOnly(['predictions', 'updatedAt'])
           && request.resource.data.predictions is map
+          && request.resource.data.predictions.size() <= 10
           && request.resource.data.updatedAt is timestamp;
         allow delete: if false;
       }
@@ -245,10 +464,13 @@ service cloud.firestore {
     match /predictions/{fixtureId} {
       allow read: if true;
       allow create: if isSignedIn()
+        && fixtureId.matches('^[0-9]+$')
         && request.resource.data.keys().hasOnly(['exists'])
         && request.resource.data.exists == true;
       allow update: if resource != null
         && isSignedIn()
+        && fixtureId.matches('^[0-9]+$')
+        && request.resource.data.keys().hasOnly(['exists'])
         && request.resource.data.exists == true
         && changedKeys().hasOnly(['exists']);
       allow delete: if false;
@@ -264,11 +486,13 @@ service cloud.firestore {
     }
 
     match /gameweeks/{gameweekId} {
-      allow read: if true;
+      // Drafts are admin-only. Public list queries must constrain status to
+      // active, completed, or archived (rules are not filters).
+      allow read: if isAdmin() || isPublicGameweekStatus(resource.data.status);
       allow create, update, delete: if isAdmin();
 
       match /fixtures/{fixtureId} {
-        allow read: if true;
+        allow read: if gameweekReadable(gameweekId);
         allow create, update, delete: if isAdmin();
       }
     }
@@ -276,18 +500,26 @@ service cloud.firestore {
     match /shopItems/{itemId} {
       allow read: if true;
       allow create, delete: if isAdmin();
-      allow update: if isAdmin() || isStockDecrement();
+      allow update: if isAdmin() || isStockDecrement(itemId);
+
+      match /decrementLocks/{uid} {
+        allow read: if isAdmin() || isOwner(uid);
+        allow create, update: if isOwner(uid) && validDecrementLock(itemId);
+        allow delete: if false;
+      }
     }
 
     match /settings/{docId} {
-      allow read: if true;
+      // adminUids lives here. Only admins can read it; useIsAdmin treats a
+      // permission-denied settings read as "not an admin".
+      allow read: if isAdmin();
       allow create, update, delete: if isAdmin();
     }
 
     match /redemptions/{redemptionId} {
       allow read: if isSignedIn()
         && (resource.data.userId == request.auth.uid || isAdmin());
-      allow create: if isAdmin() || validRedemptionCreate();
+      allow create: if isAdmin() || validRedemptionCreate(redemptionId);
       allow update: if isAdmin() || ownerFulfillsRedemption();
       allow delete: if isAdmin();
     }

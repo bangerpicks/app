@@ -2,7 +2,7 @@
  * User utility functions for Firestore operations
  */
 
-import { doc, getDoc, setDoc, updateDoc, serverTimestamp, Timestamp, collection, query, orderBy, limit, getDocs, where } from 'firebase/firestore'
+import { doc, getDoc, setDoc, updateDoc, serverTimestamp, Timestamp, collection, query, orderBy, limit, getDocs, where, writeBatch } from 'firebase/firestore'
 import { User } from 'firebase/auth'
 import { db } from './firebase'
 import { RankingEntry } from '@/types/dashboard'
@@ -186,11 +186,21 @@ export async function getUserReferralCode(user: User): Promise<string> {
     const userRef = doc(db, 'users', user.uid)
     const userDoc = await getDoc(userRef)
 
-    if (userDoc.exists()) {
-      const data = userDoc.data() as UserDocument
-      if (data.referralCode) {
-        return data.referralCode
+    if (!userDoc.exists()) {
+      // A referral-code-only merge is a create, which the rules reject.
+      // Creating the full profile also assigns a code.
+      await ensureUserDocument(user, user.displayName || 'Player')
+      const created = await getDoc(userRef)
+      const createdCode = (created.data() as UserDocument | undefined)?.referralCode
+      if (!createdCode) {
+        throw new Error('Failed to create referral code')
       }
+      return createdCode
+    }
+
+    const data = userDoc.data() as UserDocument
+    if (data.referralCode) {
+      return data.referralCode
     }
 
     // Generate a new code and ensure uniqueness
@@ -368,7 +378,8 @@ export async function updateUserLanguage(user: User, language: 'en' | 'es-MX'): 
  */
 export async function updateUserFavoritePlayer(
   uid: string,
-  favoritePlayer: { id: number; name: string; photo: string } | null
+  favoritePlayer: { id: number; name: string; photo: string } | null,
+  redemptionId?: string
 ): Promise<void> {
   try {
     if (!uid) {
@@ -376,8 +387,29 @@ export async function updateUserFavoritePlayer(
     }
 
     const userRef = doc(db, 'users', uid)
+
+    // Rules only accept a favorite player alongside that player's redemption.
+    if (favoritePlayer) {
+      if (!redemptionId) {
+        throw new Error('A favorite-player redemption is required')
+      }
+      const batch = writeBatch(db)
+      batch.update(userRef, {
+        favoritePlayer,
+        favoritePlayerRedemptionId: redemptionId,
+        lastUpdated: serverTimestamp() as any,
+      })
+      batch.update(doc(db, 'redemptions', redemptionId), {
+        status: 'fulfilled',
+        updatedAt: serverTimestamp(),
+        fulfilledAt: serverTimestamp(),
+      })
+      await batch.commit()
+      return
+    }
+
     await updateDoc(userRef, {
-      favoritePlayer: favoritePlayer ?? null,
+      favoritePlayer: null,
       lastUpdated: serverTimestamp() as any,
     })
   } catch (error: any) {

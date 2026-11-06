@@ -103,7 +103,7 @@ export default function RankingsPage() {
         const latestCompleted = completedOnly.length > 0 ? completedOnly[0].gameweekId : null
         setLatestCompletedGameweekId(latestCompleted)
 
-        // Past gameweeks list: show all gameweeks (any status) so past weeks always appear
+        // Past gameweeks list: published statuses only. Drafts are admin-only.
         const pastOptions: PastGameweekOption[] = completedGameweeks
           .slice(0, PAST_GAMEWEEKS_LIMIT)
           .map((gw) => ({ gameweekId: gw.gameweekId, name: gw.name }))

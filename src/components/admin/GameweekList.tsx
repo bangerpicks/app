@@ -34,7 +34,7 @@ export function GameweekList({ onEdit, onRefresh }: GameweekListProps) {
     setLoading(true)
     setError(null)
     try {
-      const data = await getAllGameweeks(filters)
+      const data = await getAllGameweeks({ ...filters, includeDrafts: true })
       setGameweeks(data)
     } catch (err: any) {
       console.error('Error loading gameweeks:', err)

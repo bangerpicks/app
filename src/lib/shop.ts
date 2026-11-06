@@ -18,8 +18,23 @@ import {
 } from 'firebase/firestore'
 import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage'
 import { db } from './firebase'
-import { ShopItem, CreateShopItemData, ShopItemFilters, isFavoritePlayerCustomization } from '@/types/shop'
+import { ShopItem, CreateShopItemData, ShopItemFilters, FavoritePlayerCustomization, FavoritePlayerOption, isFavoritePlayerCustomization } from '@/types/shop'
 import { withTimeout } from './firestore-utils'
+
+/**
+ * Rules look up a favorite-player price by id. Keep the array for the shop UI
+ * and write optionsById alongside it.
+ */
+function indexFavoritePlayerOptions(customization: object | undefined): object | undefined {
+  if (!isFavoritePlayerCustomization(customization)) {
+    return customization
+  }
+  const optionsById: Record<string, FavoritePlayerOption> = {}
+  for (const option of (customization as FavoritePlayerCustomization).playerOptions) {
+    optionsById[String(option.playerId)] = option
+  }
+  return { ...customization, optionsById }
+}
 
 /**
  * Validate shop item data
@@ -134,7 +149,7 @@ export async function createShopItem(data: CreateShopItemData): Promise<string> 
       ...(data.category === 'digital' && {
         ...(data.badge && { badge: data.badge.trim() }),
         ...(data.theme && { theme: data.theme.trim() }),
-        ...(data.customization && { customization: data.customization }),
+        ...(data.customization && { customization: indexFavoritePlayerOptions(data.customization) }),
       }),
       ...(data.category === 'physical' && {
         shippingRequired: data.shippingRequired ?? false,
@@ -213,7 +228,9 @@ export async function updateShopItem(
         updateData.theme = updates.theme?.trim() || null
       }
       if (updates.customization !== undefined) {
-        updateData.customization = updates.customization || null
+        updateData.customization = updates.customization
+          ? indexFavoritePlayerOptions(updates.customization)
+          : null
       }
       // Clear physical fields if switching to digital
       if (updates.category === 'digital') {
