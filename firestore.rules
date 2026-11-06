@@ -1,0 +1,310 @@
+rules_version = '2';
+
+// Banger Picks Firestore rules.
+//
+// Cloud Functions (updateLiveFixtures, autoScoring, onGameweekUpdate,
+// trackReferralSignup) use the Admin SDK and bypass these rules.
+//
+// Prediction lock: the gameweek deadline lives on gameweeks/{id}.deadline
+// (forceOpenForTesting bypasses it in the client). Prediction parents only
+// store { exists: true } and entries do not store gameweekId. Rules cannot
+// query gameweeks by fixtureIds, and entries.fixtureDate is that match's
+// kickoff — not the gameweek deadline (offset minutes after the first
+// kickoff, applied to every fixture). Enforcing fixtureDate would reject
+// legitimate saves for the opening match during the post-kickoff window.
+// Deadline enforcement stays in the client until writes also store a
+// gameweek id or deadline.
+//
+// Redemption balance (correctPredictions + referralPoints - sum of
+// redemptions.pointsCost) cannot be enforced: rules cannot aggregate a
+// collection. Any signed-in user can also decrement shopItems.stock by 1
+// without creating a redemption, or create a redemption without decrementing
+// stock. Favorite-player prices are checked against the first 32
+// customization.playerOptions entries.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function userIsAdminFlag() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('isAdmin', false) == true;
+    }
+
+    function uidInAdminList() {
+      return exists(/databases/$(database)/documents/settings/app)
+        && get(/databases/$(database)/documents/settings/app).data.keys().hasAny(['adminUids'])
+        && get(/databases/$(database)/documents/settings/app).data.adminUids is list
+        && get(/databases/$(database)/documents/settings/app).data.adminUids.hasAny([request.auth.uid]);
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (userIsAdminFlag() || uidInAdminList());
+    }
+
+    function changedKeys() {
+      return request.resource.data.diff(resource.data).affectedKeys();
+    }
+
+    // Owner creates from ensureUserDocument. Stat fields are zero, isAdmin is absent.
+    function validUserCreate(userId) {
+      return isOwner(userId)
+        && request.resource.data.keys().hasOnly([
+          'uid',
+          'displayName',
+          'photoURL',
+          'points',
+          'referralCode',
+          'referralPoints',
+          'referredBy',
+          'hasSeenOnboardingIntro',
+          'createdAt',
+          'lastUpdated'
+        ])
+        && request.resource.data.uid == userId
+        && request.resource.data.displayName is string
+        && (request.resource.data.photoURL == null || request.resource.data.photoURL is string)
+        && request.resource.data.points == 0
+        && request.resource.data.referralCode is string
+        && request.resource.data.referralPoints == 0
+        && (request.resource.data.referredBy == null || request.resource.data.referredBy is string)
+        && request.resource.data.hasSeenOnboardingIntro == false
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.lastUpdated is timestamp;
+    }
+
+    // Fields written by users.ts and RedemptionActionModal.
+    // points, correctPredictions, totalPredictions, accuracy, isAdmin,
+    // weekWins*, referralPoints, lastWeekPlace, lastCompletedGameweekId,
+    // referredBy, and createdAt are not in this set, so clients cannot change them.
+    function validOwnerProfileUpdate(userId) {
+      return resource != null
+        && isOwner(userId)
+        && changedKeys().hasOnly([
+          'displayName',
+          'photoURL',
+          'referralCode',
+          'language',
+          'favoritePlayer',
+          'hasSeenOnboardingIntro',
+          'lastUpdated'
+        ])
+        && (!changedKeys().hasAny(['displayName']) || request.resource.data.displayName is string)
+        && (!changedKeys().hasAny(['photoURL']) || request.resource.data.photoURL == null || request.resource.data.photoURL is string)
+        && (!changedKeys().hasAny(['language']) || request.resource.data.language in ['en', 'es-MX'])
+        && (!changedKeys().hasAny(['lastUpdated']) || request.resource.data.lastUpdated is timestamp)
+        && (!changedKeys().hasAny(['referralCode'])
+          || !resource.data.keys().hasAny(['referralCode'])
+          || resource.data.referralCode == null)
+        && (!changedKeys().hasAny(['favoritePlayer'])
+          || request.resource.data.favoritePlayer == null
+          || (request.resource.data.favoritePlayer is map
+            && request.resource.data.favoritePlayer.keys().hasOnly(['id', 'name', 'photo'])));
+    }
+
+    function validPredictionWrite(entryUid, fixtureId) {
+      return isOwner(entryUid)
+        && request.resource.data.uid == entryUid
+        && request.resource.data.fixtureId == int(fixtureId)
+        && request.resource.data.pick in ['H', 'D', 'A']
+        && request.resource.data.awarded == false
+        && request.resource.data.points == 0
+        && request.resource.data.correct == null;
+    }
+
+    // Signed-in stock write from redeemShopItem: increment(-1) plus updatedAt.
+    // Not tied to a redemption document. See file header.
+    function isStockDecrement() {
+      return resource != null
+        && isSignedIn()
+        && resource.data.get('stock', null) is number
+        && resource.data.stock > 0
+        && request.resource.data.stock == resource.data.stock - 1
+        && changedKeys().hasOnly(['stock', 'updatedAt'])
+        && (!changedKeys().hasAny(['updatedAt']) || request.resource.data.updatedAt is timestamp);
+    }
+
+    function isFavoritePlayerItem(item) {
+      return item.keys().hasAny(['customization'])
+        && item.customization is map
+        && item.customization.get('type', '') == 'favoritePlayer'
+        && item.customization.keys().hasAny(['playerOptions'])
+        && item.customization.playerOptions is list;
+    }
+
+    function optionMatches(options, i, cost) {
+      return options.size() > i
+        && options[i] is map
+        && options[i].get('pointsCost', -1) == cost
+        && options[i].get('playerId', -1) == request.resource.data.redemptionData.get('playerId', -2);
+    }
+
+    function optionsMatch(options, cost) {
+      return optionMatches(options, 0, cost)
+        || optionMatches(options, 1, cost)
+        || optionMatches(options, 2, cost)
+        || optionMatches(options, 3, cost)
+        || optionMatches(options, 4, cost)
+        || optionMatches(options, 5, cost)
+        || optionMatches(options, 6, cost)
+        || optionMatches(options, 7, cost)
+        || optionMatches(options, 8, cost)
+        || optionMatches(options, 9, cost)
+        || optionMatches(options, 10, cost)
+        || optionMatches(options, 11, cost)
+        || optionMatches(options, 12, cost)
+        || optionMatches(options, 13, cost)
+        || optionMatches(options, 14, cost)
+        || optionMatches(options, 15, cost)
+        || optionMatches(options, 16, cost)
+        || optionMatches(options, 17, cost)
+        || optionMatches(options, 18, cost)
+        || optionMatches(options, 19, cost)
+        || optionMatches(options, 20, cost)
+        || optionMatches(options, 21, cost)
+        || optionMatches(options, 22, cost)
+        || optionMatches(options, 23, cost)
+        || optionMatches(options, 24, cost)
+        || optionMatches(options, 25, cost)
+        || optionMatches(options, 26, cost)
+        || optionMatches(options, 27, cost)
+        || optionMatches(options, 28, cost)
+        || optionMatches(options, 29, cost)
+        || optionMatches(options, 30, cost)
+        || optionMatches(options, 31, cost);
+    }
+
+    function favoriteOptionMatches(item, cost) {
+      return request.resource.data.keys().hasAny(['redemptionData'])
+        && request.resource.data.redemptionData is map
+        && request.resource.data.redemptionData.get('pointsCost', -1) == cost
+        && optionsMatch(item.customization.playerOptions, cost);
+    }
+
+    function validRedemptionCreate() {
+      let item = get(/databases/$(database)/documents/shopItems/$(request.resource.data.itemId)).data;
+      let cost = request.resource.data.pointsCost;
+      return isSignedIn()
+        && request.resource.data.keys().hasOnly([
+          'redemptionId',
+          'userId',
+          'itemId',
+          'itemName',
+          'pointsCost',
+          'redeemedAt',
+          'status',
+          'updatedAt',
+          'redemptionData'
+        ])
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.status == 'pending'
+        && request.resource.data.itemId is string
+        && request.resource.data.itemId.matches('^[A-Za-z0-9_-]+$')
+        && request.resource.data.itemName == item.name
+        && cost is number
+        && request.resource.data.redeemedAt is timestamp
+        && request.resource.data.updatedAt is timestamp
+        && (isFavoritePlayerItem(item)
+          ? favoriteOptionMatches(item, cost)
+          : cost == item.pointsCost);
+    }
+
+    // updateRedemptionStatus(..., 'fulfilled') writes status, updatedAt, fulfilledAt.
+    function ownerFulfillsRedemption() {
+      return resource != null
+        && isSignedIn()
+        && resource.data.userId == request.auth.uid
+        && request.resource.data.status == 'fulfilled'
+        && changedKeys().hasOnly(['status', 'updatedAt', 'fulfilledAt'])
+        && (!changedKeys().hasAny(['updatedAt']) || request.resource.data.updatedAt is timestamp)
+        && (!changedKeys().hasAny(['fulfilledAt']) || request.resource.data.fulfilledAt is timestamp);
+    }
+
+    match /users/{userId} {
+      allow read: if true;
+      allow create: if validUserCreate(userId);
+      allow update: if isAdmin() || validOwnerProfileUpdate(userId);
+      allow delete: if false;
+
+      match /gameweek_predictions/{gameweekId} {
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId)
+          && request.resource.data.keys().hasOnly(['predictions', 'updatedAt'])
+          && request.resource.data.predictions is map
+          && request.resource.data.updatedAt is timestamp;
+        allow delete: if false;
+      }
+    }
+
+    match /predictions/{fixtureId} {
+      allow read: if true;
+      allow create: if isSignedIn()
+        && request.resource.data.keys().hasOnly(['exists'])
+        && request.resource.data.exists == true;
+      allow update: if resource != null
+        && isSignedIn()
+        && request.resource.data.exists == true
+        && changedKeys().hasOnly(['exists']);
+      allow delete: if false;
+
+      match /entries/{entryUid} {
+        allow read: if true;
+        allow create: if validPredictionWrite(entryUid, fixtureId);
+        allow update: if resource != null
+          && validPredictionWrite(entryUid, fixtureId)
+          && resource.data.get('awarded', false) != true;
+        allow delete: if false;
+      }
+    }
+
+    match /gameweeks/{gameweekId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+
+      match /fixtures/{fixtureId} {
+        allow read: if true;
+        allow create, update, delete: if isAdmin();
+      }
+    }
+
+    match /shopItems/{itemId} {
+      allow read: if true;
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin() || isStockDecrement();
+    }
+
+    match /settings/{docId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /redemptions/{redemptionId} {
+      allow read: if isSignedIn()
+        && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isAdmin() || validRedemptionCreate();
+      allow update: if isAdmin() || ownerFulfillsRedemption();
+      allow delete: if isAdmin();
+    }
+
+    match /referrals/{referralId} {
+      allow read: if isSignedIn()
+        && (resource.data.referrerUid == request.auth.uid
+          || resource.data.referredUid == request.auth.uid);
+      allow create, update, delete: if false;
+    }
+
+    match /fixture_searches/{cacheKey} {
+      allow read, write: if isAdmin();
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
