@@ -22,7 +22,8 @@
     "spanish": "Español",
     "saving": "Guardando...",
     "saved": "Guardado",
-    "error": "Ocurrió un error. Por favor, intenta de nuevo."
+    "error": "Ocurrió un error. Por favor, intenta de nuevo.",
+    "versionLine": "Versión {version} ({sha}) · {date}"
   },
   "profile": {
     "title": "Perfil",

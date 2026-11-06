@@ -87,7 +87,7 @@ export function SettingsClient() {
       <Header username={username} />
 
       {/* Main Content */}
-      <main className="flex-1 px-4 sm:px-5 pb-20 sm:pb-24 py-4 sm:py-5 overflow-x-hidden">
+      <main className="flex flex-1 flex-col px-4 sm:px-5 pb-20 sm:pb-24 py-4 sm:py-5 overflow-x-hidden">
         {/* Back Button */}
         <button
           onClick={handleBack}
@@ -181,6 +181,14 @@ export function SettingsClient() {
             )}
           </div>
         </div>
+
+        <p className="mt-auto pt-8 text-center text-xs text-ivory/40">
+          {t('versionLine', {
+            version: process.env.NEXT_PUBLIC_APP_VERSION || '0.0.0',
+            sha: process.env.NEXT_PUBLIC_GIT_SHA || 'unknown',
+            date: process.env.NEXT_PUBLIC_BUILD_DATE || 'unknown',
+          })}
+        </p>
       </main>
 
       {/* Bottom Navigation */}

@@ -22,7 +22,8 @@
     "spanish": "Spanish",
     "saving": "Saving...",
     "saved": "Saved",
-    "error": "An error occurred. Please try again."
+    "error": "An error occurred. Please try again.",
+    "versionLine": "Version {version} ({sha}) · {date}"
   },
   "profile": {
     "title": "Profile",
