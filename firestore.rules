@@ -5,9 +5,17 @@ rules_version = '2';
 // Cloud Functions (updateLiveFixtures, autoScoring, onGameweekUpdate,
 // trackReferralSignup) use the Admin SDK and bypass these rules. They still
 // own awarding points, week-placement bonuses, referral rewards, and refreshing
-// fixture status. Rules treat the stored fixture status and user.points as
-// given; they do not recompute the shop balance
-// (correctPredictions + referralPoints - sum of redemption costs).
+// fixture status.
+//
+// Shop balance is correctPredictions + referralPoints - pointsSpent.
+// pointsSpent is missing-as-0. Ranking `points` are not spendable.
+// Cancelling a redemption does not refund pointsSpent (admin/SDK only).
+//
+// Signed-in reads of users/{uid} return the whole document. Rankings, referral
+// lookup, and display-name checks need that, and rules cannot hide fields.
+// isAdmin, pointsSpent, referralPoints, referredBy, and lastShopRedemptionId
+// are therefore visible to any signed-in user. adminUids stay admin-only.
+// Anonymous clients cannot read user documents.
 
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -70,7 +78,7 @@ service cloud.firestore {
     }
 
     function displayNameOk(value) {
-      return value is string && value.matches('^[A-Za-z0-9 _-]{2,30}$');
+      return value is string && value.size() >= 2 && value.size() <= 30;
     }
 
     function validUserCreate(userId) {
@@ -85,11 +93,13 @@ service cloud.firestore {
           'referralPoints',
           'referredBy',
           'hasSeenOnboardingIntro',
+          'pointsSpent',
           'createdAt',
           'lastUpdated'
         ])
         && request.resource.data.uid == userId
         && displayNameOk(request.resource.data.displayName)
+        && (!request.resource.data.keys().hasAny(['pointsSpent']) || request.resource.data.pointsSpent == 0)
         && (
           request.resource.data.photoURL == null
           || (request.resource.data.photoURL is string
@@ -202,6 +212,28 @@ service cloud.firestore {
         );
     }
 
+    // The only owner write that may touch pointsSpent: +cost, same batch as
+    // the new redemption named by lastShopRedemptionId.
+    function validPointsSpentCharge(userId) {
+      let spentBefore = resource.data.get('pointsSpent', 0);
+      let spentAfter = request.resource.data.pointsSpent;
+      let redemptionId = request.resource.data.lastShopRedemptionId;
+      let path = /databases/$(database)/documents/redemptions/$(redemptionId);
+      return resource != null
+        && isOwner(userId)
+        && changedKeys().hasOnly(['pointsSpent', 'lastShopRedemptionId'])
+        && spentBefore is number
+        && spentAfter is int
+        && redemptionId is string
+        && redemptionId.size() <= 160
+        && !exists(path)
+        && existsAfter(path)
+        && getAfter(path).data.userId == userId
+        && getAfter(path).data.status == 'pending'
+        && getAfter(path).data.pointsCost is int
+        && spentAfter == spentBefore + getAfter(path).data.pointsCost;
+    }
+
     function teamOk(team) {
       return team is map
         && team.keys().hasOnly(['id', 'name', 'logo'])
@@ -245,8 +277,11 @@ service cloud.firestore {
 
     function gameweekStillOpen(gameweekId) {
       let gameweek = get(gameweekPath(gameweekId)).data;
-      return gameweek.get('forceOpenForTesting', false) == true
-        || (gameweek.deadline is timestamp && request.time < gameweek.deadline);
+      return gameweek.status == 'active'
+        && (
+          gameweek.get('forceOpenForTesting', false) == true
+          || (gameweek.deadline is timestamp && request.time < gameweek.deadline)
+        );
     }
 
     function fixtureNotStarted(gameweekId, fixtureId) {
@@ -276,6 +311,16 @@ service cloud.firestore {
         );
     }
 
+    // Legacy entries stored a `ts` timestamp. Merge writes keep it.
+    function legacyTsOk() {
+      return !request.resource.data.keys().hasAny(['ts'])
+        || (
+          resource != null
+          && request.resource.data.ts is timestamp
+          && !changedKeys().hasAny(['ts'])
+        );
+    }
+
     function validPredictionWrite(entryUid, fixtureId) {
       return isOwner(entryUid)
         && fixtureId.matches('^[0-9]+$')
@@ -293,8 +338,10 @@ service cloud.firestore {
           'league',
           'fixtureDate',
           'status',
-          'result'
+          'result',
+          'ts'
         ])
+        && legacyTsOk()
         && request.resource.data.uid == entryUid
         && request.resource.data.fixtureId == int(fixtureId)
         && request.resource.data.gameweekId is string
@@ -335,32 +382,49 @@ service cloud.firestore {
     }
 
     function isStockDecrement(itemId) {
-      let lockPath = /databases/$(database)/documents/shopItems/$(itemId)/decrementLocks/$(request.auth.uid);
+      let redemptionId = request.resource.data.lastRedemptionId;
       return resource != null
         && isSignedIn()
         && resource.data.get('stock', null) is int
         && resource.data.stock > 0
         && request.resource.data.stock == resource.data.stock - 1
-        && changedKeys().hasOnly(['stock', 'updatedAt'])
+        && changedKeys().hasOnly(['stock', 'updatedAt', 'lastRedemptionId'])
         && request.resource.data.updatedAt == request.time
-        && existsAfter(lockPath)
-        && newRedemptionForItem(itemId, getAfter(lockPath).data.redemptionId);
+        && newRedemptionForItem(itemId, redemptionId);
     }
 
-    function validDecrementLock(itemId) {
-      return request.resource.data.keys().hasOnly(['redemptionId', 'createdAt'])
-        && request.resource.data.createdAt == request.time
-        && newRedemptionForItem(itemId, request.resource.data.redemptionId);
+    function stockTracked(item) {
+      return item.get('stock', null) is int;
     }
 
-    function payerCanAfford(cost) {
-      let points = get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('points', 0);
+    // Stock-tracked items must drop by 1 in this batch, tied to this redemption.
+    function stockPaired(itemId, redemptionId, item) {
+      let after = getAfter(/databases/$(database)/documents/shopItems/$(itemId)).data;
+      return !stockTracked(item)
+        || (
+          item.stock > 0
+          && after.stock == item.stock - 1
+          && after.lastRedemptionId == redemptionId
+        );
+    }
+
+    // correctPredictions + referralPoints - pointsSpent, missing fields as 0.
+    function shopBalanceOk(cost, redemptionId) {
+      let before = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+      let after = getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+      let spentBefore = before.get('pointsSpent', 0);
+      let spentAfter = after.get('pointsSpent', 0);
+      let earned = after.get('correctPredictions', 0) + after.get('referralPoints', 0);
       let minimum = settingsExist() ? settingsData().get('minRedemptionPoints', 0) : 0;
-      return points is number
+      return spentBefore is number
+        && spentAfter is int
         && cost is int
         && cost > 0
-        && points >= cost
-        && points >= minimum;
+        && spentAfter == spentBefore + cost
+        && after.get('lastShopRedemptionId', '') == redemptionId
+        && earned is number
+        && earned >= minimum
+        && earned - spentAfter >= 0;
     }
 
     function favoriteOptionMatches(item, cost) {
@@ -421,7 +485,8 @@ service cloud.firestore {
         && item.status == 'active'
         && request.resource.data.redeemedAt is timestamp
         && request.resource.data.updatedAt is timestamp
-        && payerCanAfford(cost)
+        && shopBalanceOk(cost, redemptionId)
+        && stockPaired(request.resource.data.itemId, redemptionId, item)
         && (
           isFavoritePlayerItem(item)
             ? favoriteOptionMatches(item, cost)
@@ -447,7 +512,7 @@ service cloud.firestore {
       // one field. Anonymous reads are denied.
       allow read: if isSignedIn();
       allow create: if validUserCreate(userId);
-      allow update: if isAdmin() || validOwnerProfileUpdate(userId);
+      allow update: if isAdmin() || validOwnerProfileUpdate(userId) || validPointsSpentCharge(userId);
       allow delete: if false;
 
       match /gameweek_predictions/{gameweekId} {
@@ -476,7 +541,8 @@ service cloud.firestore {
       allow delete: if false;
 
       match /entries/{entryUid} {
-        allow read: if true;
+        // Rankings list entries while signed in. Signed-out player count fails closed.
+        allow read: if isSignedIn();
         allow create: if validPredictionWrite(entryUid, fixtureId);
         allow update: if resource != null
           && validPredictionWrite(entryUid, fixtureId)
@@ -501,12 +567,6 @@ service cloud.firestore {
       allow read: if true;
       allow create, delete: if isAdmin();
       allow update: if isAdmin() || isStockDecrement(itemId);
-
-      match /decrementLocks/{uid} {
-        allow read: if isAdmin() || isOwner(uid);
-        allow create, update: if isOwner(uid) && validDecrementLock(itemId);
-        allow delete: if false;
-      }
     }
 
     match /settings/{docId} {

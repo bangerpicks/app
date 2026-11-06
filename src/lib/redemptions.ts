@@ -62,7 +62,8 @@ export function computeShopPointsBalance(
 }
 
 /**
- * Sum of pointsCost for all redemptions by a user (used to compute spendable shop balance).
+ * Sum of pointsCost for non-cancelled redemptions. The enforced balance uses
+ * users.pointsSpent (missing counts as 0); this sum is a fallback view.
  */
 export async function getTotalRedeemedForUser(userId: string): Promise<number> {
   try {
@@ -72,6 +73,7 @@ export async function getTotalRedeemedForUser(userId: string): Promise<number> {
     let total = 0
     snapshot.docs.forEach((d) => {
       const data = d.data()
+      if (data.status === 'cancelled') return
       total += data.pointsCost ?? 0
     })
     return total
@@ -140,8 +142,8 @@ export async function redeemShopItem(
     const userData = userDoc.data()
     const correctPredictions = userData.correctPredictions ?? 0
     const referralPoints = userData.referralPoints ?? 0
-    const totalRedeemed = await getTotalRedeemedForUser(user.uid)
-    const currentBalance = computeShopPointsBalance(correctPredictions, referralPoints, totalRedeemed)
+    const pointsSpent = userData.pointsSpent ?? 0
+    const currentBalance = computeShopPointsBalance(correctPredictions, referralPoints, pointsSpent)
 
     // Check if user has enough shop points (correct predictions + referrals, minus already redeemed)
     if (currentBalance < actualPointsCost) {
@@ -176,16 +178,17 @@ export async function redeemShopItem(
 
     const batch = writeBatch(db)
     batch.set(doc(db, 'redemptions', redemptionId), redemptionDoc)
+    batch.update(userRef, {
+      pointsSpent: increment(actualPointsCost),
+      lastShopRedemptionId: redemptionId,
+    })
 
-    // Stock can drop only in this batch, paired with the new redemption.
+    // Stock-tracked items must drop by 1 in this same batch, tied to this id.
     if (item.category === 'physical' && item.stock !== null) {
       batch.update(doc(db, 'shopItems', item.itemId), {
         stock: increment(-1),
         updatedAt: serverTimestamp(),
-      })
-      batch.set(doc(db, 'shopItems', item.itemId, 'decrementLocks', user.uid), {
-        redemptionId,
-        createdAt: serverTimestamp(),
+        lastRedemptionId: redemptionId,
       })
     }
 

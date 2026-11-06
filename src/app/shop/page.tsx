@@ -8,7 +8,7 @@ import { NotSignedIn } from '@/components/dashboard/NotSignedIn'
 import { ShopItem } from '@/types/shop'
 import { getUserData } from '@/lib/users'
 import { getAllShopItems } from '@/lib/shop'
-import { getTotalRedeemedForUser, computeShopPointsBalance } from '@/lib/redemptions'
+import { computeShopPointsBalance } from '@/lib/redemptions'
 
 export default function ShopPage() {
   const { user, loading: authLoading } = useAuth()
@@ -24,14 +24,11 @@ export default function ShopPage() {
     if (user) {
       // Shop points = correct predictions + referral points (minus already redeemed)
       getUserData(user)
-        .then(({ displayName, referralPoints, correctPredictions }) => {
+        .then(({ displayName, referralPoints, correctPredictions, pointsSpent }) => {
           if (abortController.signal.aborted) return
           setUsername(displayName)
-          return getTotalRedeemedForUser(user.uid).then((totalRedeemed) => {
-            if (abortController.signal.aborted) return
-            setUserPoints(computeShopPointsBalance(correctPredictions, referralPoints, totalRedeemed))
-            setError(null)
-          })
+          setUserPoints(computeShopPointsBalance(correctPredictions, referralPoints, pointsSpent))
+          setError(null)
         })
         .catch((error) => {
           if (abortController.signal.aborted) return

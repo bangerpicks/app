@@ -32,6 +32,9 @@ export interface UserDocument {
   language?: 'en' | 'es-MX'
   referralCode?: string
   referralPoints?: number
+  // Shop spend counter. Balance = correctPredictions + referralPoints - pointsSpent.
+  pointsSpent?: number
+  lastShopRedemptionId?: string
   referredBy?: string | null
   hasSeenOnboardingIntro?: boolean
   // Weekly placement counts (1st / 2nd / 3rd in completed gameweeks)
@@ -264,17 +267,18 @@ export async function getUserReferralPoints(user: User): Promise<number> {
  * Shop points = correctPredictions + referralPoints (no multiplier/accuracy); balance is this minus redemptions.
  *
  * @param user - The Firebase Auth user object
- * @returns Promise<{ displayName: string; referralPoints: number; correctPredictions: number }> - User data
+ * @returns Promise<{ displayName: string; referralPoints: number; correctPredictions: number; pointsSpent: number }> - User data
  */
 export async function getUserData(
   user: User
-): Promise<{ displayName: string; referralPoints: number; correctPredictions: number }> {
+): Promise<{ displayName: string; referralPoints: number; correctPredictions: number; pointsSpent: number }> {
   try {
     if (!user || !user.uid) {
       return {
         displayName: user?.displayName || 'Player',
         referralPoints: 0,
         correctPredictions: 0,
+        pointsSpent: 0,
       }
     }
 
@@ -287,6 +291,7 @@ export async function getUserData(
         displayName: data.displayName || user.displayName || 'Player',
         referralPoints: data.referralPoints || 0,
         correctPredictions: data.correctPredictions ?? 0,
+        pointsSpent: data.pointsSpent ?? 0,
       }
     }
 
@@ -295,6 +300,7 @@ export async function getUserData(
       displayName: user.displayName || 'Player',
       referralPoints: 0,
       correctPredictions: 0,
+      pointsSpent: 0,
     }
   } catch (error) {
     console.error('Error fetching user data:', error)
@@ -303,6 +309,7 @@ export async function getUserData(
       displayName: user.displayName || 'Player',
       referralPoints: 0,
       correctPredictions: 0,
+      pointsSpent: 0,
     }
   }
 }
@@ -470,6 +477,7 @@ export async function ensureUserDocument(user: User, displayName: string, referr
         displayName: displayName || 'Player',
         photoURL: user.photoURL || null,
         points: 0,
+        pointsSpent: 0,
         referralCode: code,
         referralPoints: 0,
         referredBy: referralCode || null,

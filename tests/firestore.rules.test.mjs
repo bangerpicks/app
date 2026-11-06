@@ -335,7 +335,7 @@ describe('users', () => {
     await assertDenied(updateDoc(ref, { displayName: 123 }))
     await assertDenied(updateDoc(ref, { displayName: 'A' }))
     await assertDenied(updateDoc(ref, { displayName: 'A'.repeat(31) }))
-    await assertDenied(updateDoc(ref, { displayName: 'Bad!' }))
+    await assertSucceeds(updateDoc(ref, { displayName: 'José', lastUpdated: serverTimestamp() }))
     await assertDenied(updateDoc(ref, { photoURL: { url: 'https://example.com/p.png' } }))
     await assertDenied(updateDoc(ref, { photoURL: 'x'.repeat(2049) }))
     await assertDenied(updateDoc(ref, { hasSeenOnboardingIntro: 'true' }))
@@ -361,6 +361,7 @@ describe('users', () => {
     await assertDenied(updateDoc(ref, { lastCompletedGameweekId: 'gw-hack' }))
     await assertDenied(updateDoc(ref, { referredBy: 'someone' }))
     await assertDenied(updateDoc(ref, { referralCode: 'STOLEN' }))
+    await assertDenied(updateDoc(ref, { pointsSpent: 5 }))
     await assertDenied(updateDoc(ref, { email: 'a@b.com' }))
     await assertDenied(updateDoc(doc(dbAs(OTHER), 'users', USER), { displayName: 'Hijack' }))
     await assertDenied(deleteDoc(ref))
@@ -422,12 +423,35 @@ describe('predictions', () => {
     await assertSucceeds(savePick(dbAs(USER), USER, 'H'))
     await assertSucceeds(savePick(dbAs(OTHER), OTHER, 'D'))
     await assertSucceeds(savePick(dbAs(USER), USER, 'A'))
-    await assertSucceeds(getDocs(collection(dbAnon(), 'predictions', String(FIXTURE_ID), 'entries')))
+    await assertDenied(getDocs(collection(dbAnon(), 'predictions', String(FIXTURE_ID), 'entries')))
+    await assertSucceeds(getDocs(collection(dbAs(USER), 'predictions', String(FIXTURE_ID), 'entries')))
   })
 
   it('allows a pick after the deadline when forceOpenForTesting is set and the fixture is still NS', async () => {
     await seedPlayableFixture({ deadlineMs: -60 * 60 * 1000, forceOpenForTesting: true })
     await assertSucceeds(savePick(dbAs(USER), USER, 'H'))
+  })
+
+  it('denies a pick on a draft gameweek', async () => {
+    await seedPlayableFixture({ gameweekStatus: 'draft' })
+    await assertDenied(savePick(dbAs(USER), USER, 'H'))
+  })
+
+  it('allows a merge save that keeps a legacy ts field', async () => {
+    await seedPlayableFixture()
+    await seed(async (db) => {
+      await setDoc(doc(db, 'predictions', String(FIXTURE_ID)), { exists: true })
+      await setDoc(entryRef(db), {
+        ...predictionEntry(USER, FIXTURE_ID, GAMEWEEK_ID, 'H', {
+          createdAt: Timestamp.fromDate(new Date('2024-06-01T00:00:00Z')),
+        }),
+        ts: Timestamp.fromDate(new Date('2024-01-01T00:00:00Z')),
+      })
+    })
+    await assertSucceeds(savePick(dbAs(USER), USER, 'A'))
+    const snap = await getDoc(entryRef(dbAs(USER)))
+    assert.equal(snap.data().pick, 'A')
+    assert.ok(snap.data().ts)
   })
 
   it('denies a pick after the deadline', async () => {
@@ -654,7 +678,15 @@ describe('shop items and redemptions', () => {
     }
   }
 
-  async function seedShop({ points = 100, shopEnabled = true, minRedemptionPoints = 0, shirtStatus = 'active' } = {}) {
+  async function seedShop({
+    correctPredictions = 100,
+    referralPoints = 0,
+    pointsSpent = 0,
+    writePointsSpent = true,
+    shopEnabled = true,
+    minRedemptionPoints = 0,
+    shirtStatus = 'active',
+  } = {}) {
     await seed(async (db) => {
       await setDoc(doc(db, 'users', ADMIN), { uid: ADMIN, isAdmin: true, displayName: 'Admin', points: 0 })
       await setDoc(doc(db, 'settings', 'app'), {
@@ -666,27 +698,33 @@ describe('shop items and redemptions', () => {
       await setDoc(doc(db, 'users', USER), {
         uid: USER,
         displayName: 'Player One',
-        points,
-        correctPredictions: 0,
-        referralPoints: 0,
+        points: 40,
+        correctPredictions,
+        referralPoints,
+        ...(writePointsSpent ? { pointsSpent } : {}),
       })
       await setDoc(doc(db, 'shopItems', badge.itemId), badge)
       await setDoc(doc(db, 'shopItems', shirt.itemId), { ...shirt, status: shirtStatus, stock: 3 })
     })
   }
 
-  function redeem(database, uid, item, nonce, extra = {}) {
-    const redemptionId = `${uid}_${item.itemId}_${nonce}`
+  function placeRedemption(database, uid, item, nonce, extra = {}, withStock = item.stock != null) {
+    const redemptionId = extra.redemptionId || `${uid}_${item.itemId}_${nonce}`
+    const cost = extra.pointsCost != null ? extra.pointsCost : item.pointsCost
     const batch = writeBatch(database)
-    batch.set(doc(database, 'redemptions', redemptionId), redemptionDoc(uid, item, { redemptionId, ...extra }))
-    if (item.stock != null) {
+    batch.set(
+      doc(database, 'redemptions', redemptionId),
+      redemptionDoc(uid, item, { redemptionId, ...extra })
+    )
+    batch.update(doc(database, 'users', uid), {
+      pointsSpent: increment(cost),
+      lastShopRedemptionId: redemptionId,
+    })
+    if (withStock) {
       batch.update(doc(database, 'shopItems', item.itemId), {
         stock: increment(-1),
         updatedAt: serverTimestamp(),
-      })
-      batch.set(doc(database, 'shopItems', item.itemId, 'decrementLocks', uid), {
-        redemptionId,
-        createdAt: serverTimestamp(),
+        lastRedemptionId: redemptionId,
       })
     }
     return batch.commit()
@@ -709,10 +747,9 @@ describe('shop items and redemptions', () => {
 
   it('allows a redemption when points cover the cost and the shop is enabled', async () => {
     await seedShop()
+    const database = dbAs(USER)
     const redemptionId = `${USER}_${badge.itemId}_n1`
-    await assertSucceeds(
-      setDoc(doc(dbAs(USER), 'redemptions', redemptionId), redemptionDoc(USER, badge, { redemptionId }))
-    )
+    await assertSucceeds(placeRedemption(database, USER, badge, 'n1'))
     await assertSucceeds(
       updateDoc(doc(dbAs(USER), 'users', USER), {
         displayName: 'Renamed',
@@ -729,40 +766,29 @@ describe('shop items and redemptions', () => {
   })
 
   it('denies unpaid, below-minimum, inactive, and shop-disabled redemptions', async () => {
-    await seedShop({ points: 10 })
-    await assertDenied(
-      setDoc(
-        doc(dbAs(USER), 'redemptions', `${USER}_${badge.itemId}_poor`),
-        redemptionDoc(USER, badge, { redemptionId: `${USER}_${badge.itemId}_poor` })
-      )
-    )
+    await seedShop({ correctPredictions: 10 })
+    await assertDenied(placeRedemption(dbAs(USER), USER, badge, 'poor'))
 
     await testEnv.clearFirestore()
-    await seedShop({ points: 40, minRedemptionPoints: 50 })
-    await assertDenied(
-      setDoc(
-        doc(dbAs(USER), 'redemptions', `${USER}_${shirt.itemId}_min`),
-        redemptionDoc(USER, shirt, { redemptionId: `${USER}_${shirt.itemId}_min` })
-      )
-    )
+    await seedShop({ correctPredictions: 40, minRedemptionPoints: 50 })
+    await assertDenied(placeRedemption(dbAs(USER), USER, shirt, 'min'))
 
     await testEnv.clearFirestore()
     await seedShop({ shirtStatus: 'inactive' })
-    await assertDenied(
-      setDoc(
-        doc(dbAs(USER), 'redemptions', `${USER}_${shirt.itemId}_off`),
-        redemptionDoc(USER, { ...shirt, status: 'inactive' }, { redemptionId: `${USER}_${shirt.itemId}_off` })
-      )
-    )
+    await assertDenied(placeRedemption(dbAs(USER), USER, shirt, 'off'))
 
     await testEnv.clearFirestore()
     await seedShop({ shopEnabled: false })
-    await assertDenied(
-      setDoc(
-        doc(dbAs(USER), 'redemptions', `${USER}_${badge.itemId}_closed`),
-        redemptionDoc(USER, badge, { redemptionId: `${USER}_${badge.itemId}_closed` })
-      )
-    )
+    await assertDenied(placeRedemption(dbAs(USER), USER, badge, 'closed'))
+  })
+
+  it('allows a referral-only balance once and denies a repeated redemption past it', async () => {
+    await seedShop({ correctPredictions: 0, referralPoints: 50, writePointsSpent: false })
+    const database = dbAs(USER)
+    await assertSucceeds(placeRedemption(database, USER, badge, 'ref1'))
+    const after = await getDoc(doc(database, 'users', USER))
+    assert.equal(after.data().pointsSpent, 50)
+    await assertDenied(placeRedemption(database, USER, badge, 'ref2'))
   })
 
   it('allows a favorite-player option past the old 27-option scan and rejects a mismatched price', async () => {
@@ -772,22 +798,19 @@ describe('shop items and redemptions', () => {
       await setDoc(doc(db, 'shopItems', item.itemId), item)
     })
     const player = item.customization.optionsById['30']
+    const databaseForRedeem = dbAs(USER)
     const redemptionId = `${USER}_${item.itemId}_star`
     await assertSucceeds(
-      setDoc(
-        doc(dbAs(USER), 'redemptions', redemptionId),
-        redemptionDoc(USER, item, {
-          redemptionId,
+      placeRedemption(databaseForRedeem, USER, item, 'star', {
+        pointsCost: player.pointsCost,
+        redemptionData: {
+          playerId: player.playerId,
+          playerName: player.name,
+          playerPhoto: player.photo,
           pointsCost: player.pointsCost,
-          redemptionData: {
-            playerId: player.playerId,
-            playerName: player.name,
-            playerPhoto: player.photo,
-            pointsCost: player.pointsCost,
-            playerKey: '30',
-          },
-        })
-      )
+          playerKey: '30',
+        },
+      })
     )
     const database = dbAs(USER)
     const batch = writeBatch(database)
@@ -804,20 +827,16 @@ describe('shop items and redemptions', () => {
     await assertSucceeds(batch.commit())
 
     await assertDenied(
-      setDoc(
-        doc(dbAs(USER), 'redemptions', `${USER}_${item.itemId}_cheap`),
-        redemptionDoc(USER, item, {
-          redemptionId: `${USER}_${item.itemId}_cheap`,
+      placeRedemption(dbAs(USER), USER, item, 'cheap', {
+        pointsCost: 11,
+        redemptionData: {
+          playerId: 30,
+          playerName: player.name,
+          playerPhoto: player.photo,
           pointsCost: 11,
-          redemptionData: {
-            playerId: 30,
-            playerName: player.name,
-            playerPhoto: player.photo,
-            pointsCost: 11,
-            playerKey: '1',
-          },
-        })
-      )
+          playerKey: '1',
+        },
+      })
     )
   })
 
@@ -839,7 +858,7 @@ describe('shop items and redemptions', () => {
         updatedAt: serverTimestamp(),
       })
     )
-    await assertSucceeds(redeem(dbAs(USER), USER, shirt, 'buy1'))
+    await assertSucceeds(placeRedemption(dbAs(USER), USER, shirt, 'buy1'))
     const snap = await getDoc(doc(dbAs(USER), 'shopItems', shirt.itemId))
     assert.equal(snap.data().stock, 2)
     await assertDenied(
@@ -853,9 +872,7 @@ describe('shop items and redemptions', () => {
   it('lets an owner move pending to fulfilled and blocks cancelled to fulfilled', async () => {
     await seedShop()
     const pendingId = `${USER}_${badge.itemId}_pend`
-    await assertSucceeds(
-      setDoc(doc(dbAs(USER), 'redemptions', pendingId), redemptionDoc(USER, badge, { redemptionId: pendingId }))
-    )
+    await assertSucceeds(placeRedemption(dbAs(USER), USER, badge, 'pend'))
     await assertDenied(
       updateDoc(doc(dbAs(USER), 'redemptions', pendingId), {
         status: 'cancelled',
@@ -902,19 +919,38 @@ describe('shop items and redemptions', () => {
     )
   })
 
+  it('denies a physical redemption that does not decrement stock', async () => {
+    await seedShop()
+    await assertDenied(placeRedemption(dbAs(USER), USER, shirt, 'nostock', {}, false))
+  })
+
+  it('denies two redemptions sharing one stock decrement', async () => {
+    await seedShop()
+    const database = dbAs(USER)
+    const firstId = `${USER}_${shirt.itemId}_a`
+    const secondId = `${USER}_${shirt.itemId}_b`
+    const batch = writeBatch(database)
+    batch.set(doc(database, 'redemptions', firstId), redemptionDoc(USER, shirt, { redemptionId: firstId }))
+    batch.set(doc(database, 'redemptions', secondId), redemptionDoc(USER, shirt, { redemptionId: secondId }))
+    batch.update(doc(database, 'users', USER), {
+      pointsSpent: increment(shirt.pointsCost),
+      lastShopRedemptionId: firstId,
+    })
+    batch.update(doc(database, 'shopItems', shirt.itemId), {
+      stock: increment(-1),
+      updatedAt: serverTimestamp(),
+      lastRedemptionId: firstId,
+    })
+    await assertDenied(batch.commit())
+  })
+
   it('denies forged prices, cross-user creates, and non-owner reads', async () => {
     await seedShop()
     await assertDenied(
-      setDoc(
-        doc(dbAs(USER), 'redemptions', `${USER}_${badge.itemId}_cheap`),
-        redemptionDoc(USER, badge, { redemptionId: `${USER}_${badge.itemId}_cheap`, pointsCost: 1 })
-      )
+      placeRedemption(dbAs(USER), USER, badge, 'cheap', { pointsCost: 1 })
     )
     await assertDenied(
-      setDoc(
-        doc(dbAs(USER), 'redemptions', `${OTHER}_${badge.itemId}_x`),
-        redemptionDoc(OTHER, badge, { redemptionId: `${OTHER}_${badge.itemId}_x` })
-      )
+      placeRedemption(dbAs(USER), USER, badge, 'x', { userId: OTHER, redemptionId: `${OTHER}_${badge.itemId}_x` })
     )
     await assertDenied(getDocs(collection(dbAs(USER), 'redemptions')))
   })
