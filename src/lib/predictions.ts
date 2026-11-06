@@ -11,6 +11,7 @@ import {
   serverTimestamp,
   writeBatch,
   Timestamp,
+  increment,
 } from 'firebase/firestore'
 import { db } from './firebase'
 import { Prediction, MatchCardData } from '@/types/dashboard'
@@ -109,6 +110,13 @@ export async function savePredictions(
     })
 
     const batch = writeBatch(db)
+    const cacheRef = doc(db, 'users', uid, 'gameweek_predictions', gameweekId)
+    const cacheSnap = await getDoc(cacheRef)
+    const existingPredictions: Record<string, Prediction> = cacheSnap.exists()
+      ? (cacheSnap.data() as GameweekPredictionsCache).predictions || {}
+      : {}
+    const mergedPredictions: Record<string, Prediction> = { ...existingPredictions }
+    let wrote = 0
 
     // Process each prediction
     for (const [fixtureId, pick] of predictions.entries()) {
@@ -117,12 +125,15 @@ export async function savePredictions(
         continue
       }
 
-      // Ensure parent document exists (required for security rules)
       const parentRef = doc(db, 'predictions', String(fixtureId))
-      batch.set(parentRef, { exists: true }, { merge: true })
-
-      // Create prediction entry document reference
       const entryRef = doc(db, 'predictions', String(fixtureId), 'entries', uid)
+      const entrySnap = await getDoc(entryRef)
+      // Public per-fixture count. Only a brand-new entry may add 1.
+      if (entrySnap.exists()) {
+        batch.set(parentRef, { exists: true }, { merge: true })
+      } else {
+        batch.set(parentRef, { exists: true, playerCount: increment(1) }, { merge: true })
+      }
 
       // Build entry data
       const entryData: Partial<PredictionEntry> = {
@@ -161,30 +172,24 @@ export async function savePredictions(
       }
 
       batch.set(entryRef, entryData, { merge: true })
+      mergedPredictions[String(fixtureId)] = pick
+      wrote += 1
+    }
+
+    if (wrote === 0) {
+      return
+    }
+
+    batch.set(cacheRef, {
+      predictions: mergedPredictions,
+      updatedAt: serverTimestamp(),
+    })
+    // Unique gameweek total. +1 only the first time this user saves in the week.
+    if (!cacheSnap.exists()) {
+      batch.update(doc(db, 'gameweeks', gameweekId), { playerCount: increment(1) })
     }
 
     await batch.commit()
-
-    // Update gameweek cache for fast loading (1 read instead of N)
-    if (gameweekId) {
-      try {
-        const cacheRef = doc(db, 'users', uid, 'gameweek_predictions', gameweekId)
-        const cacheDoc = await getDoc(cacheRef)
-        const existing: Record<string, Prediction> = cacheDoc.exists()
-          ? (cacheDoc.data() as GameweekPredictionsCache).predictions || {}
-          : {}
-        const merged = { ...existing }
-        predictions.forEach((pick, fixtureId) => {
-          merged[String(fixtureId)] = pick
-        })
-        await setDoc(cacheRef, {
-          predictions: merged,
-          updatedAt: serverTimestamp(),
-        } as GameweekPredictionsCache)
-      } catch (cacheErr) {
-        console.warn('Failed to update gameweek predictions cache:', cacheErr)
-      }
-    }
   } catch (error: any) {
     console.error('Error saving predictions:', error)
     
@@ -326,9 +331,26 @@ export async function getUserPredictions(
  * @returns Promise<number> - Number of unique players who have predicted
  */
 export async function getGameweekPlayerCount(
-  fixtureIds: number[]
+  fixtureIds: number[],
+  gameweekId?: string | null
 ): Promise<number> {
   try {
+    if (gameweekId) {
+      try {
+        const gameweekSnap = await withTimeout(
+          getDoc(doc(db, 'gameweeks', gameweekId)),
+          10000,
+          'Failed to load player count - request timed out'
+        )
+        const count = gameweekSnap.exists() ? gameweekSnap.data().playerCount : undefined
+        if (typeof count === 'number') {
+          return count
+        }
+      } catch (error) {
+        console.warn('Public player count unavailable, falling back to entry reads:', error)
+      }
+    }
+
     if (!fixtureIds || fixtureIds.length === 0) {
       return 0
     }

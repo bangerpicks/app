@@ -356,7 +356,7 @@ export default function DashboardPage() {
         
         // Load player count in background
         if (activeGameweek.fixtureIds && activeGameweek.fixtureIds.length > 0) {
-          getGameweekPlayerCount(activeGameweek.fixtureIds)
+          getGameweekPlayerCount(activeGameweek.fixtureIds, activeGameweek.gameweekId)
             .then((playerCount) => {
               if (abortController.signal.aborted) return
               setGameweek((prev) => prev ? { ...prev, playerCount } : null)

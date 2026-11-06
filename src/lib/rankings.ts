@@ -180,7 +180,7 @@ export async function transformGameweekData(
   const dashboardStatus = statusMap[adminGameweek.status] || 'UPCOMING'
 
   // Get player count
-  const playerCount = await getGameweekPlayerCount(adminGameweek.fixtureIds)
+  const playerCount = await getGameweekPlayerCount(adminGameweek.fixtureIds, adminGameweek.gameweekId)
 
   // Transform to GameweekData
   const gameweekData: GameweekData = {

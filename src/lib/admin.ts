@@ -137,6 +137,7 @@ export interface AdminGameweekData {
   createdAt: Timestamp
   updatedAt: Timestamp
   forceOpenForTesting?: boolean
+  playerCount?: number
   standings?: {
     [leagueId: string]: LeagueStandings[]
   }
@@ -218,6 +219,7 @@ export async function createGameweek(data: CreateGameweekData): Promise<string> 
       createdBy: data.createdBy,
       createdAt: now,
       updatedAt: now,
+      playerCount: 0,
       ...(data.forceOpenForTesting !== undefined && { forceOpenForTesting: data.forceOpenForTesting }),
     }
 

@@ -8,8 +8,10 @@ rules_version = '2';
 // fixture status.
 //
 // Shop balance is correctPredictions + referralPoints - pointsSpent.
-// pointsSpent is missing-as-0. Ranking `points` are not spendable.
-// Cancelling a redemption does not refund pointsSpent (admin/SDK only).
+// pointsSpent must already exist on the user (migration sets it, including 0).
+// A missing field denies new redemptions so old spend cannot be reused.
+// Ranking `points` are not spendable.
+// Cancelling a redemption does not refund pointsSpent (admin adjusts it).
 //
 // Signed-in reads of users/{uid} return the whole document. Rankings, referral
 // lookup, and display-name checks need that, and rules cannot hide fields.
@@ -99,7 +101,6 @@ service cloud.firestore {
         ])
         && request.resource.data.uid == userId
         && displayNameOk(request.resource.data.displayName)
-        && (!request.resource.data.keys().hasAny(['pointsSpent']) || request.resource.data.pointsSpent == 0)
         && (
           request.resource.data.photoURL == null
           || (request.resource.data.photoURL is string
@@ -107,6 +108,7 @@ service cloud.firestore {
             && request.resource.data.photoURL.size() <= 2048)
         )
         && request.resource.data.points == 0
+        && request.resource.data.pointsSpent == 0
         && request.resource.data.referralCode is string
         && request.resource.data.referralCode.matches('^[A-Z0-9]{4,16}$')
         && request.resource.data.referralPoints == 0
@@ -215,12 +217,13 @@ service cloud.firestore {
     // The only owner write that may touch pointsSpent: +cost, same batch as
     // the new redemption named by lastShopRedemptionId.
     function validPointsSpentCharge(userId) {
-      let spentBefore = resource.data.get('pointsSpent', 0);
+      let spentBefore = resource.data.pointsSpent;
       let spentAfter = request.resource.data.pointsSpent;
       let redemptionId = request.resource.data.lastShopRedemptionId;
       let path = /databases/$(database)/documents/redemptions/$(redemptionId);
       return resource != null
         && isOwner(userId)
+        && resource.data.keys().hasAny(['pointsSpent'])
         && changedKeys().hasOnly(['pointsSpent', 'lastShopRedemptionId'])
         && spentBefore is number
         && spentAfter is int
@@ -408,15 +411,18 @@ service cloud.firestore {
         );
     }
 
-    // correctPredictions + referralPoints - pointsSpent, missing fields as 0.
+    // correctPredictions + referralPoints - pointsSpent.
+    // pointsSpent must already exist. correctPredictions and referralPoints
+    // may be missing and count as 0, so a referral-only balance still works.
     function shopBalanceOk(cost, redemptionId) {
       let before = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
       let after = getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data;
-      let spentBefore = before.get('pointsSpent', 0);
-      let spentAfter = after.get('pointsSpent', 0);
+      let spentBefore = before.pointsSpent;
+      let spentAfter = after.pointsSpent;
       let earned = after.get('correctPredictions', 0) + after.get('referralPoints', 0);
       let minimum = settingsExist() ? settingsData().get('minRedemptionPoints', 0) : 0;
-      return spentBefore is number
+      return before.keys().hasAny(['pointsSpent'])
+        && spentBefore is number
         && spentAfter is int
         && cost is int
         && cost > 0
@@ -526,18 +532,49 @@ service cloud.firestore {
       }
     }
 
-    match /predictions/{fixtureId} {
-      allow read: if true;
-      allow create: if isSignedIn()
+    function predictionEntryPath(fixtureId) {
+      return /databases/$(database)/documents/predictions/$(fixtureId)/entries/$(request.auth.uid);
+    }
+
+    // First writer creates the parent with playerCount 1. Later new entrants
+    // add exactly 1. Repeat saves of an existing entry must not change the count.
+    function parentCreateWithCount(fixtureId) {
+      return isSignedIn()
         && fixtureId.matches('^[0-9]+$')
-        && request.resource.data.keys().hasOnly(['exists'])
-        && request.resource.data.exists == true;
-      allow update: if resource != null
+        && request.resource.data.keys().hasOnly(['exists', 'playerCount'])
+        && request.resource.data.exists == true
+        && request.resource.data.playerCount == 1
+        && existsAfter(predictionEntryPath(fixtureId));
+    }
+
+    function parentCountBump(fixtureId) {
+      return resource != null
         && isSignedIn()
         && fixtureId.matches('^[0-9]+$')
-        && request.resource.data.keys().hasOnly(['exists'])
+        && request.resource.data.keys().hasOnly(['exists', 'playerCount'])
         && request.resource.data.exists == true
+        && resource.data.keys().hasAny(['playerCount'])
+        && resource.data.playerCount is int
+        && changedKeys().hasOnly(['playerCount'])
+        && request.resource.data.playerCount == resource.data.playerCount + 1
+        && !exists(predictionEntryPath(fixtureId))
+        && existsAfter(predictionEntryPath(fixtureId));
+    }
+
+    function parentTouch(fixtureId) {
+      return resource != null
+        && isSignedIn()
+        && fixtureId.matches('^[0-9]+$')
+        && request.resource.data.keys().hasOnly(['exists', 'playerCount'])
+        && request.resource.data.exists == true
+        && !changedKeys().hasAny(['playerCount'])
         && changedKeys().hasOnly(['exists']);
+    }
+
+    match /predictions/{fixtureId} {
+      allow read: if true;
+      allow create: if parentCreateWithCount(fixtureId);
+      allow update: if parentCountBump(fixtureId) || parentTouch(fixtureId);
       allow delete: if false;
 
       match /entries/{entryUid} {
@@ -551,11 +588,31 @@ service cloud.firestore {
       }
     }
 
+    // Unique predictors. +1 only when this user creates their gameweek cache
+    // in the same batch. playerCount must already exist (migration or create).
+    function isPredictorJoin(gameweekId) {
+      let cache = /databases/$(database)/documents/users/$(request.auth.uid)/gameweek_predictions/$(gameweekId);
+      return isSignedIn()
+        && resource != null
+        && resource.data.keys().hasAny(['playerCount'])
+        && resource.data.playerCount is int
+        && changedKeys().hasOnly(['playerCount'])
+        && request.resource.data.playerCount == resource.data.playerCount + 1
+        && !exists(cache)
+        && existsAfter(cache)
+        && getAfter(cache).data.predictions is map
+        && getAfter(cache).data.predictions.size() > 0
+        && getAfter(cache).data.predictions.size() <= 10;
+    }
+
     match /gameweeks/{gameweekId} {
       // Drafts are admin-only. Public list queries must constrain status to
       // active, completed, or archived (rules are not filters).
+      // playerCount is the public unique-predictor total for the signed-out dashboard.
       allow read: if isAdmin() || isPublicGameweekStatus(resource.data.status);
-      allow create, update, delete: if isAdmin();
+      allow create: if isAdmin();
+      allow update: if isAdmin() || isPredictorJoin(gameweekId);
+      allow delete: if isAdmin();
 
       match /fixtures/{fixtureId} {
         allow read: if gameweekReadable(gameweekId);

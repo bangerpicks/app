@@ -15,7 +15,7 @@
     "clean": "node -e \"const fs=require('fs');['.next','node_modules','package-lock.json'].forEach(p=>{try{fs.rmSync(p,{recursive:true,force:true})}catch(e){}})\"",
     "clean:install": "npm run clean && npm install",
     "fresh": "npm run clean:install && npm run build",
-    "test:rules": "firebase emulators:exec --only firestore,storage --project demo-banger-picks \"node --test --test-concurrency=1 tests/firestore.rules.test.mjs tests/storage.rules.test.mjs\""
+    "test:rules": "firebase emulators:exec --only firestore,storage --project demo-banger-picks \"node --test --test-concurrency=1 tests/firestore.rules.test.mjs tests/storage.rules.test.mjs tests/migrations.test.mjs\""
   },
   "dependencies": {
     "@tanstack/react-query": "^5.0.0",

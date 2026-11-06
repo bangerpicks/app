@@ -37,6 +37,7 @@ export interface AdminGameweekData {
   createdAt: Timestamp
   updatedAt: Timestamp
   forceOpenForTesting?: boolean
+  playerCount?: number
   standings?: {
     [leagueId: string]: LeagueStandings[]
   }

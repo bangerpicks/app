@@ -75,6 +75,7 @@ function newUserPayload(uid, overrides = {}) {
     referralPoints: 0,
     referredBy: null,
     hasSeenOnboardingIntro: false,
+    pointsSpent: 0,
     createdAt: serverTimestamp(),
     lastUpdated: serverTimestamp(),
     ...overrides,
@@ -194,9 +195,21 @@ function entryRef(database, uid = USER, fixtureId = FIXTURE_ID) {
   return doc(database, 'predictions', String(fixtureId), 'entries', uid)
 }
 
-function savePick(database, uid, pick = 'H', overrides = {}, fixtureId = FIXTURE_ID, gameweekId = GAMEWEEK_ID) {
+function savePick(
+  database,
+  uid,
+  pick = 'H',
+  overrides = {},
+  fixtureId = FIXTURE_ID,
+  gameweekId = GAMEWEEK_ID,
+  bumpCount = true
+) {
   const batch = writeBatch(database)
-  batch.set(doc(database, 'predictions', String(fixtureId)), { exists: true }, { merge: true })
+  batch.set(
+    doc(database, 'predictions', String(fixtureId)),
+    bumpCount ? { exists: true, playerCount: increment(1) } : { exists: true },
+    { merge: true }
+  )
   batch.set(entryRef(database, uid, fixtureId), predictionEntry(uid, fixtureId, gameweekId, pick, overrides), {
     merge: true,
   })
@@ -422,7 +435,7 @@ describe('predictions', () => {
     await seedPlayableFixture()
     await assertSucceeds(savePick(dbAs(USER), USER, 'H'))
     await assertSucceeds(savePick(dbAs(OTHER), OTHER, 'D'))
-    await assertSucceeds(savePick(dbAs(USER), USER, 'A'))
+    await assertSucceeds(savePick(dbAs(USER), USER, 'A', {}, FIXTURE_ID, GAMEWEEK_ID, false))
     await assertDenied(getDocs(collection(dbAnon(), 'predictions', String(FIXTURE_ID), 'entries')))
     await assertSucceeds(getDocs(collection(dbAs(USER), 'predictions', String(FIXTURE_ID), 'entries')))
   })
@@ -430,6 +443,36 @@ describe('predictions', () => {
   it('allows a pick after the deadline when forceOpenForTesting is set and the fixture is still NS', async () => {
     await seedPlayableFixture({ deadlineMs: -60 * 60 * 1000, forceOpenForTesting: true })
     await assertSucceeds(savePick(dbAs(USER), USER, 'H'))
+  })
+
+  it('publishes a player count without listing entries', async () => {
+    await seedPlayableFixture()
+    await seed(async (db) => {
+      await setDoc(
+        doc(db, 'gameweeks', GAMEWEEK_ID),
+        { playerCount: 0 },
+        { merge: true }
+      )
+    })
+    const database = dbAs(USER)
+    const batch = writeBatch(database)
+    batch.set(doc(database, 'predictions', String(FIXTURE_ID)), { exists: true, playerCount: increment(1) })
+    batch.set(entryRef(database), predictionEntry(USER, FIXTURE_ID, GAMEWEEK_ID, 'H'))
+    batch.set(doc(database, 'users', USER, 'gameweek_predictions', GAMEWEEK_ID), {
+      predictions: { [String(FIXTURE_ID)]: 'H' },
+      updatedAt: serverTimestamp(),
+    })
+    batch.update(doc(database, 'gameweeks', GAMEWEEK_ID), { playerCount: increment(1) })
+    await assertSucceeds(batch.commit())
+
+    const gameweek = await getDoc(doc(dbAnon(), 'gameweeks', GAMEWEEK_ID))
+    const parent = await getDoc(doc(dbAnon(), 'predictions', String(FIXTURE_ID)))
+    assert.equal(gameweek.data().playerCount, 1)
+    assert.equal(parent.data().playerCount, 1)
+    await assertDenied(getDocs(collection(dbAnon(), 'predictions', String(FIXTURE_ID), 'entries')))
+    await assertDenied(
+      updateDoc(doc(dbAs(OTHER), 'gameweeks', GAMEWEEK_ID), { playerCount: increment(1) })
+    )
   })
 
   it('denies a pick on a draft gameweek', async () => {
@@ -448,7 +491,7 @@ describe('predictions', () => {
         ts: Timestamp.fromDate(new Date('2024-01-01T00:00:00Z')),
       })
     })
-    await assertSucceeds(savePick(dbAs(USER), USER, 'A'))
+    await assertSucceeds(savePick(dbAs(USER), USER, 'A', {}, FIXTURE_ID, GAMEWEEK_ID, false))
     const snap = await getDoc(entryRef(dbAs(USER)))
     assert.equal(snap.data().pick, 'A')
     assert.ok(snap.data().ts)
@@ -782,8 +825,12 @@ describe('shop items and redemptions', () => {
     await assertDenied(placeRedemption(dbAs(USER), USER, badge, 'closed'))
   })
 
-  it('allows a referral-only balance once and denies a repeated redemption past it', async () => {
+  it('denies a missing pointsSpent and allows one referral-only redemption', async () => {
     await seedShop({ correctPredictions: 0, referralPoints: 50, writePointsSpent: false })
+    await assertDenied(placeRedemption(dbAs(USER), USER, badge, 'missing'))
+
+    await testEnv.clearFirestore()
+    await seedShop({ correctPredictions: 0, referralPoints: 50, pointsSpent: 0 })
     const database = dbAs(USER)
     await assertSucceeds(placeRedemption(database, USER, badge, 'ref1'))
     const after = await getDoc(doc(database, 'users', USER))
