@@ -22,8 +22,7 @@
     "spanish": "Spanish",
     "saving": "Saving...",
     "saved": "Saved",
-    "error": "An error occurred. Please try again.",
-    "versionLine": "Version {version} ({sha}) · {date}"
+    "error": "An error occurred. Please try again."
   },
   "profile": {
     "title": "Profile",
@@ -32,7 +31,8 @@
     "totalPredictions": "Total Predictions",
     "correct": "Correct",
     "favoriteTeam": "Favorite Team",
-    "favoritePlayer": "Favorite Player"
+    "favoritePlayer": "Favorite Player",
+    "versionLine": "Version {version} ({sha}) · {date}"
   },
   "navigation": {
     "dashboard": "Dashboard",

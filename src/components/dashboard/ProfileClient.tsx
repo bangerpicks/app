@@ -59,7 +59,7 @@ export function ProfileClient({ user, userData }: ProfileClientProps) {
       <Header username={displayName} userPhotoUrl={photoURL || undefined} />
 
       {/* Main Content */}
-      <main className="flex-1 px-4 sm:px-5 pb-20 sm:pb-24 py-4 sm:py-5 overflow-x-hidden">
+      <main className="flex flex-1 flex-col px-4 sm:px-5 pb-20 sm:pb-24 py-4 sm:py-5 overflow-x-hidden">
         {/* Profile Header Section */}
         <div className="w-full flex flex-col items-center gap-4 mb-6">
           {/* Profile Picture */}
@@ -197,6 +197,14 @@ export function ProfileClient({ user, userData }: ProfileClientProps) {
             <span className="font-semibold">{isSigningOut ? tCommon('signingOut') : tCommon('signOut')}</span>
           </button>
         </div>
+
+        <p className="mt-auto pt-8 text-center text-xs text-ivory/40">
+          {t('versionLine', {
+            version: process.env.NEXT_PUBLIC_APP_VERSION || '0.0.0',
+            sha: process.env.NEXT_PUBLIC_GIT_SHA || 'unknown',
+            date: process.env.NEXT_PUBLIC_BUILD_DATE || 'unknown',
+          })}
+        </p>
       </main>
 
       {/* Bottom Navigation */}
