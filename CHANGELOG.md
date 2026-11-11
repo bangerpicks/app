@@ -7,7 +7,7 @@
 - Removed production mock fixtures; empty, loading, and error states instead.
 - Dashboard shows stored `playerCount` immediately; background refresh does not reset to zero.
 - Single active flagship week enforced on admin writes and Cloud Functions (`onGameweekCreate` / `onGameweekUpdate`).
-- Podium bonuses only on `active` → `completed`, guarded by `podiumAwardedAt`; admin confirm before completing.
+- Podium bonuses only on `active` → `completed`, guarded by `podiumAwardedAt`; admin confirm before completing. Payout applies user increments and `podiumAwardedAt` in a single Firestore transaction so retries cannot double-pay.
 - Pick lock defaults to 1 hour before first kickoff; editable lock time in admin form.
 - Shared current-week selection for dashboard and rankings; optional schema fields (`type`, `lockAt`, `whyItMatters`, etc.).
 
