@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { APIFootballFixture } from '@/lib/api-football'
-import { AdminGameweekData, GameweekStatus } from '@/types/admin'
+import { AdminGameweekData, GameweekFixturePreviewMeta, GameweekStatus } from '@/types/admin'
 import {
   createGameweek,
   updateGameweek,
@@ -13,6 +13,7 @@ import {
 } from '@/lib/admin'
 import { useAuth } from '@/lib/AuthProvider'
 import { FixtureSearch } from './FixtureSearch'
+import { FixturePreviewFields } from './FixturePreviewFields'
 import { ConfirmDialog } from './ConfirmDialog'
 import { calculateLockFromFirstKickoff, DEFAULT_LOCK_MINUTES_BEFORE_KICKOFF } from '@/lib/gameweek-constants'
 import { X, Save, Send } from 'lucide-react'
@@ -37,6 +38,9 @@ export function GameweekForm({
   const [endDate, setEndDate] = useState('')
   const [status, setStatus] = useState<GameweekStatus>('draft')
   const [selectedFixtures, setSelectedFixtures] = useState<APIFootballFixture[]>([])
+  const [fixturePreviewById, setFixturePreviewById] = useState<
+    Record<number, GameweekFixturePreviewMeta>
+  >({})
   const [searchResults, setSearchResults] = useState<APIFootballFixture[]>([]) // All fixtures from search
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -98,6 +102,15 @@ export function GameweekForm({
         // Convert fixture data back to APIFootballFixture format
         const apiFixtures: APIFootballFixture[] = fixtures.map((f) => f.fixture)
         setSelectedFixtures(apiFixtures)
+        const preview: Record<number, GameweekFixturePreviewMeta> = {}
+        fixtures.forEach((f) => {
+          preview[f.fixtureId] = {
+            ...(f.whyItMatters ? { whyItMatters: f.whyItMatters } : {}),
+            ...(f.officialPick ? { officialPick: f.officialPick } : {}),
+            ...(f.officialConfidence ? { officialConfidence: f.officialConfidence } : {}),
+          }
+        })
+        setFixturePreviewById(preview)
       } catch (err: any) {
         console.error('Error loading gameweek:', err)
         setError(err.message || 'Failed to load gameweek')
@@ -159,6 +172,18 @@ export function GameweekForm({
 
   const handleDeselectFixture = (fixtureId: number) => {
     setSelectedFixtures(selectedFixtures.filter((f) => f.fixture.id !== fixtureId))
+    setFixturePreviewById((prev) => {
+      const next = { ...prev }
+      delete next[fixtureId]
+      return next
+    })
+  }
+
+  const handleFixturePreviewChange = (
+    fixtureId: number,
+    next: GameweekFixturePreviewMeta
+  ) => {
+    setFixturePreviewById((prev) => ({ ...prev, [fixtureId]: next }))
   }
 
   const validateForm = (): boolean => {
@@ -229,7 +254,12 @@ export function GameweekForm({
         })
 
         // Update fixtures subcollection
-        await saveGameweekFixtures(gameweekId!, selectedFixtures, user.uid)
+        await saveGameweekFixtures(
+          gameweekId!,
+          selectedFixtures,
+          user.uid,
+          fixturePreviewById
+        )
       } else {
         // Create new gameweek
         const newGameweekId = await createGameweek({
@@ -245,7 +275,12 @@ export function GameweekForm({
         })
 
         // Save fixtures subcollection
-        await saveGameweekFixtures(newGameweekId, selectedFixtures, user.uid)
+        await saveGameweekFixtures(
+          newGameweekId,
+          selectedFixtures,
+          user.uid,
+          fixturePreviewById
+        )
       }
 
       onSuccess()
@@ -404,6 +439,11 @@ export function GameweekForm({
                 fromDate={datetimeToDate(startDate)}
                 toDate={datetimeToDate(endDate)}
                 onSearchResultsChange={setSearchResults}
+              />
+              <FixturePreviewFields
+                fixtures={selectedFixtures}
+                previewById={fixturePreviewById}
+                onChange={handleFixturePreviewChange}
               />
             </div>
 

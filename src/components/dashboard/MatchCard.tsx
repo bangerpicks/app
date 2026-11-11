@@ -1,4 +1,5 @@
 import { MatchCardData, Prediction } from '@/types/dashboard'
+import { formatGafferPreviewLine } from '@/lib/official-preview'
 import { TeamInfo } from './TeamInfo'
 import { MatchStats } from './MatchStats'
 import { PredictionButtons } from './PredictionButtons'
@@ -53,6 +54,13 @@ export function MatchCard({
     if (!readOnly) onPredictionSelect(match.fixtureId, prediction)
   }
 
+  const gafferPreview = formatGafferPreviewLine(
+    match.officialPick,
+    match.officialConfidence,
+    match.homeTeam.name,
+    match.awayTeam.name
+  )
+
   return (
     <div className="w-full">
       {/* Match Info Header */}
@@ -96,10 +104,22 @@ export function MatchCard({
       </div>
 
       <div className="border border-ivory rounded-b-[10px] px-2.5 py-2.5 flex flex-col gap-3">
-        {match.whyItMatters ? (
-          <p className="text-xs text-ivory/80 text-center leading-snug line-clamp-2">
-            {match.whyItMatters}
-          </p>
+        {match.whyItMatters || gafferPreview ? (
+          <div className="flex flex-col gap-1 items-center">
+            {match.whyItMatters ? (
+              <p className="text-xs text-ivory/80 text-center leading-snug line-clamp-2 w-full">
+                {match.whyItMatters}
+              </p>
+            ) : null}
+            {gafferPreview ? (
+              <p
+                className="text-[11px] text-lime-yellow/95 font-semibold text-center leading-snug line-clamp-1 w-full"
+                aria-label="Official house preview"
+              >
+                {gafferPreview}
+              </p>
+            ) : null}
+          </div>
         ) : null}
         <div className="flex items-center gap-2.5">
           {/* Home Team */}

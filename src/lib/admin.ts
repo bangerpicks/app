@@ -178,6 +178,15 @@ export interface GameweekFixtureData {
   addedBy: string
   addedAt: Timestamp
   whyItMatters?: string
+  officialPick?: 'H' | 'D' | 'A'
+  officialConfidence?: 'Strong' | 'Lean' | 'Toss-up'
+}
+
+/** Optional match-card preview fields per fixture (admin form). */
+export type GameweekFixturePreviewFields = {
+  whyItMatters?: string
+  officialPick?: 'H' | 'D' | 'A'
+  officialConfidence?: 'Strong' | 'Lean' | 'Toss-up'
 }
 
 /**
@@ -643,7 +652,8 @@ export async function fetchAndStoreStandings(
 export async function saveGameweekFixtures(
   gameweekId: string,
   fixtures: APIFootballFixture[],
-  addedBy: string
+  addedBy: string,
+  fixturePreviewById?: Record<number, GameweekFixturePreviewFields>
 ): Promise<void> {
   try {
     // Get existing fixtures to find ones that need to be deleted
@@ -661,12 +671,30 @@ export async function saveGameweekFixtures(
     const batch = writeBatch(db)
     const now = Timestamp.now()
     
-    const existingWhy = new Map<number, string | undefined>()
+    const existingPreview = new Map<number, GameweekFixturePreviewFields>()
     existingSnapshot.forEach((docSnapshot) => {
       const fixtureData = docSnapshot.data()
       const fixtureId = fixtureData.fixtureId
+      const preview: GameweekFixturePreviewFields = {}
       if (typeof fixtureData.whyItMatters === 'string') {
-        existingWhy.set(fixtureId, fixtureData.whyItMatters)
+        preview.whyItMatters = fixtureData.whyItMatters
+      }
+      if (
+        fixtureData.officialPick === 'H' ||
+        fixtureData.officialPick === 'D' ||
+        fixtureData.officialPick === 'A'
+      ) {
+        preview.officialPick = fixtureData.officialPick
+      }
+      if (
+        fixtureData.officialConfidence === 'Strong' ||
+        fixtureData.officialConfidence === 'Lean' ||
+        fixtureData.officialConfidence === 'Toss-up'
+      ) {
+        preview.officialConfidence = fixtureData.officialConfidence
+      }
+      if (Object.keys(preview).length > 0) {
+        existingPreview.set(fixtureId, preview)
       }
 
       if (!newFixtureIds.has(fixtureId)) {
@@ -674,8 +702,35 @@ export async function saveGameweekFixtures(
       }
     })
 
+    const applyPreviewFields = (
+      fixtureId: number
+    ): GameweekFixturePreviewFields => {
+      const fromForm = fixturePreviewById?.[fixtureId]
+      if (fromForm !== undefined) {
+        const next: GameweekFixturePreviewFields = {}
+        const why = fromForm.whyItMatters?.trim()
+        if (why) next.whyItMatters = why
+        if (
+          fromForm.officialPick === 'H' ||
+          fromForm.officialPick === 'D' ||
+          fromForm.officialPick === 'A'
+        ) {
+          next.officialPick = fromForm.officialPick
+        }
+        if (
+          fromForm.officialConfidence === 'Strong' ||
+          fromForm.officialConfidence === 'Lean' ||
+          fromForm.officialConfidence === 'Toss-up'
+        ) {
+          next.officialConfidence = fromForm.officialConfidence
+        }
+        return next
+      }
+      return existingPreview.get(fixtureId) ?? {}
+    }
+
     fixtures.forEach((fixture) => {
-      const preservedWhy = existingWhy.get(fixture.fixture.id)
+      const preview = applyPreviewFields(fixture.fixture.id)
       const fixtureData: GameweekFixtureData = {
         fixtureId: fixture.fixture.id,
         fixture,
@@ -699,7 +754,11 @@ export async function saveGameweekFixtures(
         },
         addedBy,
         addedAt: now,
-        ...(preservedWhy ? { whyItMatters: preservedWhy } : {}),
+        ...(preview.whyItMatters ? { whyItMatters: preview.whyItMatters } : {}),
+        ...(preview.officialPick ? { officialPick: preview.officialPick } : {}),
+        ...(preview.officialConfidence
+          ? { officialConfidence: preview.officialConfidence }
+          : {}),
       }
 
       const fixtureRef = doc(

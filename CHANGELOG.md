@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.5 — 2026-11-11
+
+### Official house preview on match cards (P3-1)
+
+- Optional per-fixture fields: `officialPick` (`H` | `D` | `A`) and `officialConfidence` (`Strong` | `Lean` | `Toss-up`), mapped through dashboard live data like `whyItMatters`.
+- Match cards show a labeled Gaffer line (e.g. `Gaffer: Germany · Lean`) below the why-it-matters line when both fields are set; hidden when either is missing.
+- Admin gameweek form: optional why-it-matters, official pick, and confidence per selected fixture; values persist on fixture resave.
+
 ## 1.1.3 — 2026-11-11
 
 ### Gameweek integrity (dashboard, admin, functions)

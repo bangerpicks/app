@@ -288,6 +288,8 @@ Firestore Database
   addedBy: string;                  // Admin user ID
   addedAt: Timestamp;
   whyItMatters?: string;            // One-line context for match card (optional)
+  officialPick?: 'H' | 'D' | 'A';   // House preview pick (optional)
+  officialConfidence?: 'Strong' | 'Lean' | 'Toss-up'; // House preview confidence (optional)
 }
 ```
 

@@ -110,6 +110,8 @@ function convertFixtureToMatchCard(
     minute,
     score,
     whyItMatters: fixtureData.whyItMatters,
+    officialPick: fixtureData.officialPick,
+    officialConfidence: fixtureData.officialConfidence,
   }
 }
 

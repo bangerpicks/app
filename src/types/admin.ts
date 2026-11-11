@@ -4,6 +4,7 @@
 
 import { Timestamp } from 'firebase/firestore'
 import { APIFootballFixture } from '@/lib/api-football'
+import { OfficialConfidence, Prediction } from '@/types/dashboard'
 
 /**
  * Gameweek status for admin management
@@ -80,6 +81,15 @@ export interface GameweekFixtureData {
   addedBy: string
   addedAt: Timestamp
   whyItMatters?: string
+  officialPick?: Prediction
+  officialConfidence?: OfficialConfidence
+}
+
+/** Optional per-fixture match-card copy editable in admin */
+export interface GameweekFixturePreviewMeta {
+  whyItMatters?: string
+  officialPick?: Prediction
+  officialConfidence?: OfficialConfidence
 }
 
 /**

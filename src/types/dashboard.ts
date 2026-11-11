@@ -12,6 +12,7 @@ export interface GameweekData {
 }
 
 export type Prediction = 'H' | 'D' | 'A' // Home, Draw, Away
+export type OfficialConfidence = 'Strong' | 'Lean' | 'Toss-up'
 export type FormResult = 'W' | 'D' | 'L' // Win, Draw, Loss
 
 export interface TeamInfo {
@@ -42,6 +43,8 @@ export interface MatchCardData {
     away: number
   }
   whyItMatters?: string
+  officialPick?: Prediction
+  officialConfidence?: OfficialConfidence
 }
 
 export type RankingView = 'all-time' | 'this-week' | 'past-weeks'
