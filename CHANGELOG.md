@@ -7,6 +7,9 @@
 - Optional `officialPick` and `officialConfidence` on fixture docs; shown on match cards as a labeled house preview (distinct from player H/D/A buttons).
 - Optional `whyItMatters_esMX`; dashboard uses Spanish copy when locale is `es-MX`, with English fallback.
 - Admin gameweek form: editorial fields per fixture (why-it-matters EN/ES, official pick, confidence).
+- Match card dates/times and kickoff formatting follow active locale (`en-US` / `es-MX`); LIVE / HT / FT labels translated.
+- First sign-in: unset `users.language` inherits browser language and persists it (saved `en` / `es-MX` still wins).
+- Project i18n rules: `docs/I18N.md`.
 
 ## 1.1.3 — 2026-11-11
 

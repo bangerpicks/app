@@ -12,6 +12,9 @@ import { Header } from '@/components/dashboard/Header'
 import { GameweekData, MatchCardData, FormResult } from '@/types/dashboard'
 import { getGameweekFixtures, AdminGameweekData, GameweekFixtureData } from '@/lib/admin'
 import { useLiveMatches } from '@/lib/useLiveMatches'
+import { useLanguage } from '@/lib/LanguageProvider'
+import { formatMatchKickoffTime } from '@/lib/locale-format'
+import type { Locale } from '@/i18n/config'
 import {
   fetchCurrentGameweek,
   mapAdminGameweekToDashboardStatus,
@@ -33,14 +36,6 @@ function convertGameweekData(adminGameweek: AdminGameweekData): GameweekData {
   }
 }
 
-function formatTime(date: Date): string {
-  return new Intl.DateTimeFormat('en-US', {
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-  }).format(date)
-}
-
 function convertFormString(formString: string): FormResult[] {
   if (!formString) return []
   return formString
@@ -52,7 +47,8 @@ function convertFormString(formString: string): FormResult[] {
 function convertFixtureToMatchCard(
   fixtureData: GameweekFixtureData,
   teamPositions: Map<number, number> = new Map(),
-  teamForms: Map<number, FormResult[]> = new Map()
+  teamForms: Map<number, FormResult[]> = new Map(),
+  locale: Locale = 'en'
 ): MatchCardData {
   const fixture = fixtureData.fixture.fixture
   const fixtureDate = new Date(fixture.date)
@@ -91,7 +87,7 @@ function convertFixtureToMatchCard(
       logo: fixtureData.league.logo,
     },
     date: fixtureDate,
-    time: formatTime(fixtureDate),
+    time: formatMatchKickoffTime(fixtureDate, locale),
     homeTeam: {
       id: fixtureData.teams.home.id,
       name: fixtureData.teams.home.name,
@@ -136,6 +132,7 @@ function DashboardShell({
 
 export default function DashboardPage() {
   const { user, loading: authLoading } = useAuth()
+  const { locale } = useLanguage()
   const t = useTranslations('dashboard')
   const [username, setUsername] = useState<string | undefined>(undefined)
   const [gameweek, setGameweek] = useState<GameweekData | null>(null)
@@ -238,7 +235,9 @@ export default function DashboardPage() {
         }
 
         const sortedMatches = fixtures
-          .map((fixture) => convertFixtureToMatchCard(fixture, teamPositions, teamForms))
+          .map((fixture) =>
+            convertFixtureToMatchCard(fixture, teamPositions, teamForms, locale)
+          )
           .sort((a, b) => a.date.getTime() - b.date.getTime())
 
         if (abortController.signal.aborted) return
@@ -319,8 +318,15 @@ export default function DashboardPage() {
     }
   }, [user])
 
-  const baseMatches = useMemo(() => initialMatches, [initialMatches])
-  const liveMatches = useLiveMatches(gameweekId, baseMatches)
+  const baseMatches = useMemo(
+    () =>
+      initialMatches.map((m) => ({
+        ...m,
+        time: formatMatchKickoffTime(m.date, locale),
+      })),
+    [initialMatches, locale]
+  )
+  const liveMatches = useLiveMatches(gameweekId, baseMatches, locale)
 
   if (authLoading || loadingGameweek) {
     return (

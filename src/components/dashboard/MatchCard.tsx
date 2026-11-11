@@ -11,6 +11,10 @@ import {
   officialPickTranslationKey,
   resolveWhyItMatters,
 } from '@/lib/match-card-display'
+import {
+  formatMatchCardHeaderDate,
+  formatMatchKickoffTime,
+} from '@/lib/locale-format'
 
 interface MatchCardProps {
   match: MatchCardData
@@ -19,36 +23,6 @@ interface MatchCardProps {
   disabled?: boolean
   /** When true, show prediction and result only (no buttons) */
   readOnly?: boolean
-}
-
-function getOrdinalSuffix(day: number): string {
-  if (day > 3 && day < 21) return 'th'
-  switch (day % 10) {
-    case 1:
-      return 'st'
-    case 2:
-      return 'nd'
-    case 3:
-      return 'rd'
-    default:
-      return 'th'
-  }
-}
-
-function formatDate(date: Date): string {
-  const weekday = new Intl.DateTimeFormat('en-US', { weekday: 'long' }).format(date)
-  const month = new Intl.DateTimeFormat('en-US', { month: 'short' }).format(date)
-  const day = date.getDate()
-  const suffix = getOrdinalSuffix(day)
-  return `${weekday}, ${month} ${day}${suffix}`
-}
-
-function formatTime(date: Date): string {
-  return new Intl.DateTimeFormat('en-US', {
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-  }).format(date)
 }
 
 export function MatchCard({
@@ -82,12 +56,14 @@ export function MatchCard({
           {match.league.name}
         </div>
         <div className="text-[10px] sm:text-xs font-medium text-midnight-violet text-center truncate min-w-0 px-1">
-          {match.matchStatus === 'LIVE' ? 'LIVE' : formatDate(match.date)}
+          {match.matchStatus === 'LIVE'
+            ? t('matchStatusLive')
+            : formatMatchCardHeaderDate(match.date, locale)}
         </div>
         <div className="text-[10px] sm:text-xs font-medium text-midnight-violet text-right truncate min-w-0 flex items-center justify-end gap-1.5">
           {match.matchStatus === 'HT' ? (
             <>
-              <span>HT</span>
+              <span>{t('matchStatusHt')}</span>
               <span
                 className="w-1.5 h-1.5 rounded-full bg-cinnabar animate-pulse"
                 style={{
@@ -109,9 +85,9 @@ export function MatchCard({
               />
             </>
           ) : match.matchStatus === 'FT' ? (
-            <span>FT</span>
+            <span>{t('matchStatusFt')}</span>
           ) : (
-            <span>{formatTime(match.date)}</span>
+            <span>{formatMatchKickoffTime(match.date, locale)}</span>
           )}
         </div>
       </div>
