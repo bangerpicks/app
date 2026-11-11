@@ -95,9 +95,12 @@ export function MatchCard({
         </div>
       </div>
 
-      {/* Match Body */}
       <div className="border border-ivory rounded-b-[10px] px-2.5 py-2.5 flex flex-col gap-3">
-        {/* Teams and Stats - Horizontal Layout */}
+        {match.whyItMatters ? (
+          <p className="text-xs text-ivory/80 text-center leading-snug line-clamp-2">
+            {match.whyItMatters}
+          </p>
+        ) : null}
         <div className="flex items-center gap-2.5">
           {/* Home Team */}
           <TeamInfo team={match.homeTeam} />

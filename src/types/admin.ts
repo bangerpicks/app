@@ -10,6 +10,8 @@ import { APIFootballFixture } from '@/lib/api-football'
  */
 export type GameweekStatus = 'draft' | 'active' | 'completed' | 'archived'
 
+export type GameweekType = 'banger-week' | 'league' | 'cup' | 'flagship'
+
 /**
  * Standings data for a league
  */
@@ -42,6 +44,13 @@ export interface AdminGameweekData {
     [leagueId: string]: LeagueStandings[]
   }
   standingsFetchedAt?: Timestamp
+  /** flagship default when omitted */
+  type?: GameweekType
+  weekNumber?: number
+  openAt?: Timestamp
+  lockAt?: Timestamp
+  endAt?: Timestamp
+  podiumAwardedAt?: Timestamp
 }
 
 /**
@@ -70,6 +79,7 @@ export interface GameweekFixtureData {
   }
   addedBy: string
   addedAt: Timestamp
+  whyItMatters?: string
 }
 
 /**
@@ -85,6 +95,11 @@ export interface CreateGameweekData {
   fixtureIds: number[]
   createdBy: string
   forceOpenForTesting?: boolean
+  type?: GameweekType
+  weekNumber?: number
+  openAt?: Date
+  lockAt?: Date
+  endAt?: Date
 }
 
 /**

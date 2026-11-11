@@ -60,7 +60,12 @@
     "noPastGameweeks": "No past gameweeks yet. When gameweeks are completed they will appear here.",
     "gameweekNoteNoPicks": "Make your selections before the week closes.",
     "gameweekNoteHasPicks": "Make any changes and save before the week closes.",
-    "gameweekNoteClosed": "Gameweek closed. Good luck!"
+    "gameweekNoteClosed": "Gameweek closed. Good luck!",
+    "loading": "Loading gameweek…",
+    "loadError": "We could not load this gameweek.",
+    "noActiveGameweekTitle": "No gameweek right now",
+    "noActiveGameweekBody": "When the next Banger Week is published, fixtures and picks will show up here.",
+    "fixturesLoading": "Fixtures for this gameweek are not available yet."
   },
   "rankings": {
     "title": "Rankings",

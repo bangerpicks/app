@@ -13,7 +13,7 @@ export function Settings({ onUpdate }: SettingsProps) {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
-  const [deadlineOffsetMinutes, setDeadlineOffsetMinutes] = useState<number>(5)
+  const [deadlineOffsetMinutes, setDeadlineOffsetMinutes] = useState<number>(60)
   const [forceOpenActive, setForceOpenActive] = useState<boolean>(false)
   const [activeGameweekName, setActiveGameweekName] = useState<string | null>(null)
   const [hasActiveGameweek, setHasActiveGameweek] = useState<boolean>(false)
@@ -56,8 +56,8 @@ export function Settings({ onUpdate }: SettingsProps) {
       setError(null)
       setSuccess(false)
 
-      if (deadlineOffsetMinutes < 0) {
-        setError('Deadline offset cannot be negative')
+      if (deadlineOffsetMinutes < 1) {
+        setError('Lock offset must be at least 1 minute before kickoff')
         return
       }
 
@@ -138,11 +138,11 @@ export function Settings({ onUpdate }: SettingsProps) {
       <div className="space-y-6">
         <div>
           <label className="block text-sm font-medium text-ivory mb-2">
-            Gameweek Deadline Offset (minutes)
+            Default pick lock offset (minutes)
           </label>
           <p className="text-sm text-ivory opacity-70 mb-3">
-            Set how many minutes after the first game starts that the gameweek closes for predictions.
-            Default is 5 minutes.
+            Minutes before the first kickoff when picks lock for new gameweeks (admins can override per week).
+            Default is 60 minutes (1 hour).
           </p>
           <div className="flex items-center gap-4">
             <input
@@ -154,7 +154,7 @@ export function Settings({ onUpdate }: SettingsProps) {
               className="w-32 px-3 py-2 bg-gray-800 border border-gray-700 rounded-[10px] text-ivory focus:outline-none focus:border-lime-yellow"
               disabled={saving}
             />
-            <span className="text-ivory">minutes after first game starts</span>
+            <span className="text-ivory">minutes before first kickoff</span>
           </div>
         </div>
 

@@ -13,60 +13,28 @@ import {
   Timestamp,
 } from 'firebase/firestore'
 import { db } from './firebase'
-import { getGameweekById, getAllGameweeks, AdminGameweekData, GameweekFixtureData } from './admin'
+import { getGameweekById, AdminGameweekData, GameweekFixtureData } from './admin'
 import { getGameweekPlayerCount } from './predictions'
 import { withTimeout } from './firestore-utils'
+import {
+  fetchCurrentGameweek,
+  mapAdminGameweekToDashboardStatus,
+  resolvePlayerCountFromGameweek,
+} from './gameweek-selection'
 import {
   RankingEntry,
   GameweekData,
   GameweekRankingData,
   MatchPrediction,
   TeamInfo,
-  GameweekStatus as DashboardGameweekStatus,
 } from '@/types/dashboard'
 import { PredictionEntry } from './predictions'
 
-/**
- * Get the current active gameweek, or latest completed gameweek if none active
- * 
- * @returns Promise<AdminGameweekData | null>
- */
+/** @deprecated Import fetchCurrentGameweek from gameweek-selection (same behavior). */
 export async function getCurrentGameweek(): Promise<AdminGameweekData | null> {
   try {
-    // First, try to get an active gameweek
-    const activeGameweeks = await getAllGameweeks({
-      status: 'active',
-      sortBy: 'date',
-      sortOrder: 'desc',
-    })
-
-    if (activeGameweeks.length > 0) {
-      return activeGameweeks[0] // Return the most recent active gameweek
-    }
-
-    // If no active gameweek, get the latest completed gameweek
-    const completedGameweeks = await getAllGameweeks({
-      status: 'completed',
-      sortBy: 'date',
-      sortOrder: 'desc',
-    })
-
-    if (completedGameweeks.length > 0) {
-      return completedGameweeks[0] // Return the most recent completed gameweek
-    }
-
-    // If no completed gameweek, try to get the latest gameweek by date (any status except archived)
-    const allGameweeks = await getAllGameweeks({
-      sortBy: 'date',
-      sortOrder: 'desc',
-    })
-
-    // Filter out archived gameweeks
-    const nonArchived = allGameweeks.filter((gw) => gw.status !== 'archived')
-    
-    return nonArchived.length > 0 ? nonArchived[0] : null
-  } catch (error) {
-    console.error('Error getting current gameweek:', error)
+    return await fetchCurrentGameweek()
+  } catch {
     return null
   }
 }
@@ -169,18 +137,13 @@ export async function transformGameweekData(
     awayTeam: TeamInfo
   }>
 ): Promise<GameweekRankingData> {
-  // Map admin status to dashboard status
-  const statusMap: Record<string, DashboardGameweekStatus> = {
-    draft: 'UPCOMING',
-    active: 'OPEN',
-    completed: 'COMPLETED',
-    archived: 'COMPLETED',
-  }
+  const dashboardStatus = mapAdminGameweekToDashboardStatus(adminGameweek)
 
-  const dashboardStatus = statusMap[adminGameweek.status] || 'UPCOMING'
-
-  // Get player count
-  const playerCount = await getGameweekPlayerCount(adminGameweek.fixtureIds, adminGameweek.gameweekId)
+  const storedCount = resolvePlayerCountFromGameweek(adminGameweek)
+  const playerCount =
+    storedCount !== undefined
+      ? storedCount
+      : await getGameweekPlayerCount(adminGameweek.fixtureIds, adminGameweek.gameweekId)
 
   // Transform to GameweekData
   const gameweekData: GameweekData = {
@@ -188,7 +151,8 @@ export async function transformGameweekData(
     name: adminGameweek.name,
     playerCount,
     status: dashboardStatus,
-    deadline: adminGameweek.deadline?.toDate(),
+    deadline:
+      adminGameweek.lockAt?.toDate() ?? adminGameweek.deadline?.toDate(),
     startDate: adminGameweek.startDate?.toDate(),
     endDate: adminGameweek.endDate?.toDate(),
     forceOpenForTesting: adminGameweek.forceOpenForTesting,

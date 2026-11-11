@@ -232,7 +232,15 @@ Firestore Database
   // Dates
   startDate: Timestamp;             // Start date/time
   endDate: Timestamp;               // End date/time
-  deadline: Timestamp;              // Prediction deadline (1 hour before first kickoff)
+  deadline: Timestamp;              // Pick lock (mirrors lockAt for rules compatibility)
+  lockAt?: Timestamp;               // When picks close (optional; preferred)
+  openAt?: Timestamp;             // Optional future open time
+  endAt?: Timestamp;              // Optional explicit end
+  type?: 'banger-week' | 'league' | 'cup' | 'flagship'; // omitted = flagship
+  weekNumber?: number;
+  playerCount?: number;           // Public joined count for signed-out dashboard
+  forceOpenForTesting?: boolean;
+  podiumAwardedAt?: Timestamp;    // Set when podium bonuses are paid (once)
   
   // Status
   status: 'draft' | 'active' | 'completed' | 'archived';
@@ -279,6 +287,7 @@ Firestore Database
   };
   addedBy: string;                  // Admin user ID
   addedAt: Timestamp;
+  whyItMatters?: string;            // One-line context for match card (optional)
 }
 ```
 

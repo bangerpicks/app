@@ -20,6 +20,7 @@ import {
 import { db } from './firebase'
 import { APIFootballFixture, getStandings } from './api-football'
 import { withTimeout } from './firestore-utils'
+import { isFlagshipGameweek } from './gameweek-constants'
 
 /**
  * Generate cache key for fixture search
@@ -142,6 +143,12 @@ export interface AdminGameweekData {
     [leagueId: string]: LeagueStandings[]
   }
   standingsFetchedAt?: Timestamp
+  type?: 'banger-week' | 'league' | 'cup' | 'flagship'
+  weekNumber?: number
+  openAt?: Timestamp
+  lockAt?: Timestamp
+  endAt?: Timestamp
+  podiumAwardedAt?: Timestamp
 }
 
 /**
@@ -170,6 +177,7 @@ export interface GameweekFixtureData {
   }
   addedBy: string
   addedAt: Timestamp
+  whyItMatters?: string
 }
 
 /**
@@ -185,6 +193,47 @@ export interface CreateGameweekData {
   fixtureIds: number[]
   createdBy: string
   forceOpenForTesting?: boolean
+  type?: 'banger-week' | 'league' | 'cup' | 'flagship'
+  weekNumber?: number
+  openAt?: Date
+  lockAt?: Date
+  endAt?: Date
+}
+
+/**
+ * When one flagship gameweek goes active, archive any other active flagship weeks.
+ */
+export async function archiveOtherActiveFlagshipGameweeks(
+  keepGameweekId: string
+): Promise<void> {
+  const q = query(collection(db, 'gameweeks'), where('status', '==', 'active'))
+  const snapshot = await withTimeout(
+    getDocs(q),
+    10000,
+    'Failed to load active gameweeks - request timed out'
+  )
+
+  const batch = writeBatch(db)
+  let pending = 0
+
+  snapshot.docs.forEach((gameweekDoc) => {
+    if (gameweekDoc.id === keepGameweekId) {
+      return
+    }
+    const data = gameweekDoc.data()
+    if (!isFlagshipGameweek(data)) {
+      return
+    }
+    batch.update(gameweekDoc.ref, {
+      status: 'archived',
+      updatedAt: Timestamp.now(),
+    })
+    pending++
+  })
+
+  if (pending > 0) {
+    await batch.commit()
+  }
 }
 
 /**
@@ -221,6 +270,22 @@ export async function createGameweek(data: CreateGameweekData): Promise<string> 
       updatedAt: now,
       playerCount: 0,
       ...(data.forceOpenForTesting !== undefined && { forceOpenForTesting: data.forceOpenForTesting }),
+      ...(data.type !== undefined && { type: data.type }),
+      ...(data.weekNumber !== undefined && { weekNumber: data.weekNumber }),
+      ...(data.openAt !== undefined && { openAt: Timestamp.fromDate(data.openAt) }),
+      ...(data.lockAt !== undefined && {
+        lockAt: Timestamp.fromDate(data.lockAt),
+      }),
+      ...(data.endAt !== undefined && { endAt: Timestamp.fromDate(data.endAt) }),
+    }
+
+    if (data.lockAt) {
+      gameweekData.deadline = Timestamp.fromDate(data.lockAt)
+      gameweekData.lockAt = Timestamp.fromDate(data.lockAt)
+    }
+
+    if (data.status === 'active' && isFlagshipGameweek(data)) {
+      await archiveOtherActiveFlagshipGameweeks(gameweekId)
     }
 
     await setDoc(doc(db, 'gameweeks', gameweekId), gameweekData)
@@ -278,6 +343,9 @@ export async function updateGameweek(
 
     if (updates.deadline !== undefined) {
       updateData.deadline = Timestamp.fromDate(updates.deadline)
+      if (updates.lockAt === undefined) {
+        updateData.lockAt = Timestamp.fromDate(updates.deadline)
+      }
     }
 
     if (updates.status !== undefined) {
@@ -293,6 +361,29 @@ export async function updateGameweek(
 
     if (updates.forceOpenForTesting !== undefined) {
       updateData.forceOpenForTesting = updates.forceOpenForTesting
+    }
+
+    if (updates.type !== undefined) {
+      updateData.type = updates.type
+    }
+    if (updates.weekNumber !== undefined) {
+      updateData.weekNumber = updates.weekNumber
+    }
+    if (updates.openAt !== undefined) {
+      updateData.openAt = Timestamp.fromDate(updates.openAt)
+    }
+    if (updates.lockAt !== undefined) {
+      updateData.lockAt = Timestamp.fromDate(updates.lockAt)
+      updateData.deadline = Timestamp.fromDate(updates.lockAt)
+    }
+    if (updates.endAt !== undefined) {
+      updateData.endAt = Timestamp.fromDate(updates.endAt)
+    }
+
+    const gwType = updates.type ?? gameweekDoc.data().type
+
+    if (updates.status === 'active' && isFlagshipGameweek({ type: gwType })) {
+      await archiveOtherActiveFlagshipGameweeks(gameweekId)
     }
 
     await updateDoc(gameweekRef, updateData)
@@ -430,17 +521,16 @@ export async function getActiveGameweek(): Promise<AdminGameweekData | null> {
       'Failed to load gameweek data - request timed out'
     )
     
-    if (snapshot.empty) {
+    const flagshipActive = snapshot.docs.find((d) => isFlagshipGameweek(d.data()))
+    if (!flagshipActive) {
       return null
     }
-    
-    // Return the first (most recent) active gameweek
-    const doc = snapshot.docs[0]
-    const data = doc.data()
-    
+
+    const data = flagshipActive.data()
+
     return {
       ...data,
-      gameweekId: doc.id,
+      gameweekId: flagshipActive.id,
     } as AdminGameweekData
   } catch (error) {
     console.error('Error getting active gameweek:', error)
@@ -571,19 +661,21 @@ export async function saveGameweekFixtures(
     const batch = writeBatch(db)
     const now = Timestamp.now()
     
-    // Delete fixtures that are no longer in the new list
+    const existingWhy = new Map<number, string | undefined>()
     existingSnapshot.forEach((docSnapshot) => {
       const fixtureData = docSnapshot.data()
       const fixtureId = fixtureData.fixtureId
-      
+      if (typeof fixtureData.whyItMatters === 'string') {
+        existingWhy.set(fixtureId, fixtureData.whyItMatters)
+      }
+
       if (!newFixtureIds.has(fixtureId)) {
-        // This fixture was removed, delete it
         batch.delete(docSnapshot.ref)
       }
     })
-    
-    // Add or update fixtures in the new list
+
     fixtures.forEach((fixture) => {
+      const preservedWhy = existingWhy.get(fixture.fixture.id)
       const fixtureData: GameweekFixtureData = {
         fixtureId: fixture.fixture.id,
         fixture,
@@ -607,8 +699,9 @@ export async function saveGameweekFixtures(
         },
         addedBy,
         addedAt: now,
+        ...(preservedWhy ? { whyItMatters: preservedWhy } : {}),
       }
-      
+
       const fixtureRef = doc(
         db,
         'gameweeks',

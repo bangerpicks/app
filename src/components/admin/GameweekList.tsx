@@ -71,6 +71,10 @@ export function GameweekList({ onEdit, onRefresh }: GameweekListProps) {
   }
 
   const handleToggleStatus = async (gameweek: AdminGameweekData) => {
+    if (gameweek.status !== 'active' && gameweek.status !== 'draft') {
+      setError('Only draft and active weeks can be toggled here. Use the editor to complete or archive.')
+      return
+    }
     try {
       const newStatus = gameweek.status === 'active' ? 'draft' : 'active'
       await updateGameweek(gameweek.gameweekId, { status: newStatus })

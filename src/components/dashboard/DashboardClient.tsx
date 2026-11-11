@@ -17,6 +17,8 @@ interface DashboardClientProps {
   playerCount: number
   matches: MatchCardData[]
   username?: string
+  /** Gameweek exists but fixtures are still loading or missing */
+  fixturesPending?: boolean
 }
 
 export function DashboardClient({
@@ -24,6 +26,7 @@ export function DashboardClient({
   playerCount,
   matches,
   username,
+  fixturesPending = false,
 }: DashboardClientProps) {
   const { user } = useAuth()
   const t = useTranslations('dashboard')
@@ -192,8 +195,10 @@ export function DashboardClient({
         {/* Gameweek Card */}
         <GameweekCard gameweek={gameweek} playerCount={playerCount} hasAnyPicks={hasAnyPicks} />
 
-        {/* Match Cards */}
         <div className="w-full flex flex-col gap-5">
+          {fixturesPending && (
+            <p className="text-ivory/80 text-sm text-center py-6">{t('fixturesLoading')}</p>
+          )}
           {matches.map((match) => (
             <MatchCard
               key={match.fixtureId}
