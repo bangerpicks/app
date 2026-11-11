@@ -77,6 +77,7 @@ function convertFixtureToMatchCard(
     matchStatus,
     minute,
     score,
+    whyItMatters: fixtureData.whyItMatters,
   }
 }
 

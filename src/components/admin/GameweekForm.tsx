@@ -13,6 +13,8 @@ import {
 } from '@/lib/admin'
 import { useAuth } from '@/lib/AuthProvider'
 import { FixtureSearch } from './FixtureSearch'
+import { ConfirmDialog } from './ConfirmDialog'
+import { calculateLockFromFirstKickoff, DEFAULT_LOCK_MINUTES_BEFORE_KICKOFF } from '@/lib/gameweek-constants'
 import { X, Save, Send } from 'lucide-react'
 
 interface GameweekFormProps {
@@ -39,7 +41,13 @@ export function GameweekForm({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loadingExisting, setLoadingExisting] = useState(isEditing)
-  const [deadlineOffsetMinutes, setDeadlineOffsetMinutes] = useState<number>(5) // Default: 5 minutes after first game
+  const [lockAt, setLockAt] = useState('')
+  const [lockManuallyEdited, setLockManuallyEdited] = useState(false)
+  const [minutesBeforeKickoff, setMinutesBeforeKickoff] = useState<number>(
+    DEFAULT_LOCK_MINUTES_BEFORE_KICKOFF
+  )
+  const [completeConfirmOpen, setCompleteConfirmOpen] = useState(false)
+  const [pendingPublish, setPendingPublish] = useState(false)
 
   // Load settings to get deadline offset
   useEffect(() => {
@@ -47,7 +55,7 @@ export function GameweekForm({
       try {
         const settings = await getAppSettings()
         if (settings?.gameweekDeadlineOffsetMinutes !== undefined) {
-          setDeadlineOffsetMinutes(settings.gameweekDeadlineOffsetMinutes)
+          setMinutesBeforeKickoff(settings.gameweekDeadlineOffsetMinutes)
         }
       } catch (err) {
         console.error('Error loading settings:', err)
@@ -81,6 +89,10 @@ export function GameweekForm({
         setStartDate(formatDateTimeLocal(start))
         setEndDate(formatDateTimeLocal(end))
 
+        const lockSource = gameweek.lockAt ?? gameweek.deadline
+        setLockAt(formatDateTimeLocal(lockSource.toDate()))
+        setLockManuallyEdited(true)
+
         // Load fixtures
         const fixtures = await getGameweekFixtures(gameweekId!)
         // Convert fixture data back to APIFootballFixture format
@@ -97,17 +109,21 @@ export function GameweekForm({
     loadGameweek()
   }, [isEditing, gameweekId])
 
-  // Calculate deadline from selected fixtures (offset minutes after first game starts)
-  const calculateDeadline = (): Date | null => {
-    if (selectedFixtures.length === 0) {
-      return null
+  useEffect(() => {
+    if (lockManuallyEdited || selectedFixtures.length === 0) {
+      return
     }
-    const earliestKickoff = Math.min(
-      ...selectedFixtures.map((f) => f.fixture.timestamp)
-    )
-    // Add offset minutes (default: 5 minutes = 300 seconds) after first game starts
-    const deadlineTimestamp = earliestKickoff + (deadlineOffsetMinutes * 60)
-    return new Date(deadlineTimestamp * 1000)
+    const suggested = calculateLockFromFirstKickoff(selectedFixtures, minutesBeforeKickoff)
+    if (suggested) {
+      setLockAt(formatDateTimeLocal(suggested))
+    }
+  }, [selectedFixtures, minutesBeforeKickoff, lockManuallyEdited])
+
+  const resolveLockDate = (): Date | null => {
+    if (lockAt) {
+      return parseDateTimeLocal(lockAt)
+    }
+    return calculateLockFromFirstKickoff(selectedFixtures, minutesBeforeKickoff)
   }
 
   function formatDateTimeLocal(date: Date): string {
@@ -171,16 +187,15 @@ export function GameweekForm({
       return false
     }
     // Deadline is auto-calculated from fixtures (selected or search results)
-    const calculatedDeadline = calculateDeadline()
-    if (!calculatedDeadline) {
-      setError('Deadline cannot be calculated. Please search for fixtures first.')
+    const lockDate = resolveLockDate()
+    if (!lockDate) {
+      setError('Pick lock cannot be calculated. Select fixtures and set a lock time.')
       return false
     }
     return true
   }
 
-  const handleSave = async (publish: boolean = false) => {
-    if (!validateForm()) return
+  const performSave = async (publish: boolean) => {
     if (!user) {
       setError('You must be logged in to save gameweeks')
       return
@@ -192,25 +207,24 @@ export function GameweekForm({
     try {
       const start = parseDateTimeLocal(startDate)
       const end = parseDateTimeLocal(endDate)
-      // Calculate deadline automatically (offset minutes after first game starts)
-      const calculatedDeadline = calculateDeadline()
-      if (!calculatedDeadline) {
-        setError('Cannot save: deadline cannot be calculated without fixtures')
+      const lockDate = resolveLockDate()
+      if (!lockDate) {
+        setError('Cannot save: pick lock time is required')
         return
       }
-      const deadlineDate = calculatedDeadline
 
       const fixtureIds = selectedFixtures.map((f) => f.fixture.id)
+      const nextStatus: GameweekStatus = publish ? 'active' : status
 
       if (isEditing && gameweekId) {
-        // Update existing gameweek
         await updateGameweek(gameweekId!, {
           name,
           description,
           startDate: start,
           endDate: end,
-          deadline: deadlineDate,
-          status: publish ? 'active' : status,
+          deadline: lockDate,
+          lockAt: lockDate,
+          status: nextStatus,
           fixtureIds,
         })
 
@@ -223,7 +237,8 @@ export function GameweekForm({
           description,
           startDate: start,
           endDate: end,
-          deadline: deadlineDate,
+          deadline: lockDate,
+          lockAt: lockDate,
           status: publish ? 'active' : 'draft',
           fixtureIds,
           createdBy: user.uid,
@@ -240,7 +255,24 @@ export function GameweekForm({
       setError(err.message || 'Failed to save gameweek')
     } finally {
       setLoading(false)
+      setPendingPublish(false)
     }
+  }
+
+  const handleSave = async (publish: boolean = false) => {
+    if (!validateForm()) return
+    if (!user) {
+      setError('You must be logged in to save gameweeks')
+      return
+    }
+
+    if (!publish && status === 'completed') {
+      setPendingPublish(false)
+      setCompleteConfirmOpen(true)
+      return
+    }
+
+    await performSave(publish)
   }
 
   if (loadingExisting) {
@@ -329,6 +361,23 @@ export function GameweekForm({
                     className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-[10px] text-ivory focus:outline-none focus:border-lime-yellow"
                   />
                 </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm text-ivory mb-2">
+                    Pick lock (deadline){' '}
+                    <span className="text-ivory/60 text-xs">
+                      default {minutesBeforeKickoff} min before first kickoff
+                    </span>
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={lockAt}
+                    onChange={(e) => {
+                      setLockAt(e.target.value)
+                      setLockManuallyEdited(true)
+                    }}
+                    className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-[10px] text-ivory focus:outline-none focus:border-lime-yellow"
+                  />
+                </div>
                 <div>
                   <label className="block text-sm text-ivory mb-2">Description</label>
                   <textarea
@@ -387,6 +436,20 @@ export function GameweekForm({
           </div>
         </div>
       </div>
+
+      <ConfirmDialog
+        isOpen={completeConfirmOpen}
+        title="Mark gameweek completed?"
+        message="Completing this gameweek awards podium bonus points (once). Prefer Archive for test weeks you want to hide without paying bonuses."
+        onConfirm={() => {
+          setCompleteConfirmOpen(false)
+          void performSave(pendingPublish)
+        }}
+        onCancel={() => setCompleteConfirmOpen(false)}
+        confirmText="Complete & award podium"
+        cancelText="Cancel"
+        confirmVariant="danger"
+      />
     </div>
   )
 }

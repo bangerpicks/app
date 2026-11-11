@@ -41,6 +41,7 @@ export interface MatchCardData {
     home: number
     away: number
   }
+  whyItMatters?: string
 }
 
 export type RankingView = 'all-time' | 'this-week' | 'past-weeks'

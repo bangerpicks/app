@@ -60,7 +60,12 @@
     "noPastGameweeks": "Aún no hay semanas anteriores. Cuando se completen las semanas aparecerán aquí.",
     "gameweekNoteNoPicks": "Haz tus selecciones antes de que cierre la semana.",
     "gameweekNoteHasPicks": "Haz los cambios que quieras y guarda antes de que cierre la semana.",
-    "gameweekNoteClosed": "Semana cerrada. ¡Buena suerte!"
+    "gameweekNoteClosed": "Semana cerrada. ¡Buena suerte!",
+    "loading": "Cargando jornada…",
+    "loadError": "No pudimos cargar esta jornada.",
+    "noActiveGameweekTitle": "No hay jornada activa",
+    "noActiveGameweekBody": "Cuando publiquen la próxima Banger Week, aquí verás los partidos y tus pronósticos.",
+    "fixturesLoading": "Los partidos de esta jornada aún no están disponibles."
   },
   "rankings": {
     "title": "Clasificaciones",

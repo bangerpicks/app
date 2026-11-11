@@ -1,7 +1,7 @@
 {
   "name": "functions",
   "scripts": {
-    "test": "npm run build && node --test test/fixture-window.test.mjs test/api-football-client.test.mjs",
+    "test": "npm run build && node --test test/fixture-window.test.mjs test/api-football-client.test.mjs test/gameweek-utils.test.mjs test/gameweek-podium.test.mjs",
     "build": "tsc",
     "serve": "npm run build && firebase emulators:start --only functions",
     "shell": "npm run build && firebase functions:shell",

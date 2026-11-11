@@ -16,6 +16,16 @@ import {
 } from './fixture-window'
 import { isUserAdmin } from './admin-auth'
 import { adminGetStandings, adminSearchFixtures, adminSearchPlayers } from './admin-api-football-handlers'
+import {
+  isFlagshipGameweek,
+  shouldAwardPodiumBonuses,
+  shouldEnforceSingleActiveFlagshipOnWrite,
+} from './gameweek-utils'
+import {
+  applyPodiumAwardInTransaction,
+  buildWeeklyPointsByUid,
+  rankPodiumFromWeeklyPoints,
+} from './gameweek-podium'
 
 admin.initializeApp()
 
@@ -454,8 +464,79 @@ export const autoScoring = functions
     }
   })
 
-/** Weekly placement bonus multipliers */
-const BONUS_MULTIPLIERS = [0.5, 0.3, 0.2] as const
+async function archiveOtherActiveFlagshipWeeks(
+  db: admin.firestore.Firestore,
+  keepGameweekId: string
+): Promise<void> {
+  const snapshot = await db.collection('gameweeks').where('status', '==', 'active').get()
+  const batch = db.batch()
+  let count = 0
+
+  snapshot.docs.forEach((docSnap) => {
+    if (docSnap.id === keepGameweekId) {
+      return
+    }
+    if (!isFlagshipGameweek(docSnap.data())) {
+      return
+    }
+    batch.update(docSnap.ref, {
+      status: 'archived',
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    })
+    count++
+  })
+
+  if (count > 0) {
+    await batch.commit()
+    console.log(
+      `[gameweek] Archived ${count} other active flagship week(s); keeping ${keepGameweekId}`
+    )
+  }
+}
+
+async function awardPodiumIfNeeded(
+  db: admin.firestore.Firestore,
+  gameweekId: string,
+  after: FirebaseFirestore.DocumentData
+): Promise<void> {
+  const fixtureIds: number[] = after?.fixtureIds || []
+  if (fixtureIds.length === 0) {
+    return
+  }
+
+  const entryGroups: Array<Array<{ uid: string; awarded?: boolean; points?: number }>> = []
+
+  for (const fixtureId of fixtureIds) {
+    const entriesSnapshot = await db
+      .collection('predictions')
+      .doc(String(fixtureId))
+      .collection('entries')
+      .get()
+
+    entryGroups.push(
+      entriesSnapshot.docs.map((docSnap) => {
+        const data = docSnap.data()
+        return {
+          uid: (data.uid || docSnap.id) as string,
+          awarded: data.awarded,
+          points: data.points,
+        }
+      })
+    )
+  }
+
+  const weeklyPointsByUid = buildWeeklyPointsByUid(entryGroups)
+  const podium = rankPodiumFromWeeklyPoints(weeklyPointsByUid)
+  const gameweekRef = db.collection('gameweeks').doc(gameweekId)
+
+  const outcome = await db.runTransaction((tx) =>
+    applyPodiumAwardInTransaction(tx, gameweekRef, gameweekId, podium)
+  )
+
+  if (outcome === 'skipped-already-awarded') {
+    console.log(`[onGameweekUpdate] Podium already awarded for ${gameweekId}; skipping duplicate delivery`)
+  }
+}
 
 export const onGameweekUpdate = functions.firestore
   .document('gameweeks/{gameweekId}')
@@ -468,94 +549,37 @@ export const onGameweekUpdate = functions.firestore
     const prevStatus = before?.status
     const newStatus = after?.status
 
-    if (newStatus !== 'completed' || prevStatus === 'completed') {
-      return null
-    }
-
-    const fixtureIds: number[] = after?.fixtureIds || []
-    if (fixtureIds.length === 0) {
-      return null
-    }
-
     try {
-      const weeklyPointsByUid = new Map<string, number>()
-
-      for (const fixtureId of fixtureIds) {
-        const entriesSnapshot = await db
-          .collection('predictions')
-          .doc(String(fixtureId))
-          .collection('entries')
-          .get()
-
-        entriesSnapshot.docs.forEach((docSnap) => {
-          const data = docSnap.data()
-          const uid = data.uid || docSnap.id
-          if (data.awarded === true && typeof data.points === 'number') {
-            const current = weeklyPointsByUid.get(uid) || 0
-            weeklyPointsByUid.set(uid, current + data.points)
-          }
-        })
+      if (shouldEnforceSingleActiveFlagshipOnWrite(prevStatus, newStatus, after)) {
+        await archiveOtherActiveFlagshipWeeks(db, gameweekId)
       }
 
-      const entries: { uid: string; weeklyPoints: number }[] = []
-      weeklyPointsByUid.forEach((weeklyPoints, uid) => {
-        entries.push({ uid, weeklyPoints })
-      })
-      entries.sort((a, b) => b.weeklyPoints - a.weeklyPoints)
-
-      let currentRank = 1
-      let previousPoints: number | null = null
-      let usersAtCurrentRank = 0
-      const rankByUid = new Map<string, number>()
-
-      entries.forEach(({ uid, weeklyPoints }) => {
-        if (previousPoints === null) {
-          currentRank = 1
-          usersAtCurrentRank = 1
-        } else if (weeklyPoints < previousPoints) {
-          currentRank += usersAtCurrentRank
-          usersAtCurrentRank = 1
-        } else {
-          usersAtCurrentRank++
-        }
-        rankByUid.set(uid, currentRank)
-        previousPoints = weeklyPoints
-      })
-
-      const podium: { uid: string; rank: 1 | 2 | 3; weeklyPoints: number }[] = []
-      entries.forEach(({ uid, weeklyPoints }) => {
-        const rank = rankByUid.get(uid)
-        if (rank === 1 || rank === 2 || rank === 3) {
-          podium.push({ uid, rank: rank as 1 | 2 | 3, weeklyPoints })
-        }
-      })
-
-      for (const { uid, rank, weeklyPoints } of podium) {
-        const bonusFraction = BONUS_MULTIPLIERS[rank - 1]
-        const bonus = Math.round(weeklyPoints * bonusFraction)
-
-        const userRef = db.collection('users').doc(uid)
-        const updates: Record<string, unknown> = {
-          points: admin.firestore.FieldValue.increment(bonus),
-          lastWeekPlace: rank,
-          lastCompletedGameweekId: gameweekId,
-        }
-        if (rank === 1) {
-          updates.weekWins1st = admin.firestore.FieldValue.increment(1)
-        } else if (rank === 2) {
-          updates.weekWins2nd = admin.firestore.FieldValue.increment(1)
-        } else {
-          updates.weekWins3rd = admin.firestore.FieldValue.increment(1)
-        }
-
-        await userRef.update(updates)
+      if (
+        !shouldAwardPodiumBonuses(prevStatus, newStatus, after?.podiumAwardedAt)
+      ) {
+        return null
       }
 
+      await awardPodiumIfNeeded(db, gameweekId, after)
       return null
     } catch (error: unknown) {
       console.error(`[onGameweekUpdate] Error processing gameweek ${gameweekId}:`, error)
       throw error
     }
+  })
+
+export const onGameweekCreate = functions.firestore
+  .document('gameweeks/{gameweekId}')
+  .onCreate(async (snap, context) => {
+    const db = admin.firestore()
+    const gameweekId = context.params.gameweekId as string
+    const data = snap.data()
+
+    if (data?.status === 'active' && isFlagshipGameweek(data)) {
+      await archiveOtherActiveFlagshipWeeks(db, gameweekId)
+    }
+
+    return null
   })
 
 export const trackReferralSignup = functions.https.onCall(async (data: { referralCode?: string }, context) => {
