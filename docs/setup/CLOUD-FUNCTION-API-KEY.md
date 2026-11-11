@@ -1,97 +1,54 @@
 # Cloud Function API Key Setup
 
-This guide explains how to configure the API-Football API key for the cloud function that updates live scores.
+API-Football credentials are **server-only**. The Next.js static export never embeds the key.
 
-## Problem
+## Set the secret (production)
 
-The `updateLiveFixtures` cloud function requires an API-Football API key to fetch live match data. Without it, the function will fail with the error:
-```
-Error: API_FOOTBALL_KEY not configured
-```
-
-## Solution: Set Firebase Config
-
-The cloud function uses Firebase config to store the API key. This is the simplest and most reliable method for v1 functions.
-
-### Step 1: Get Your API Key
-
-1. Go to [API-Football Dashboard](https://dashboard.api-football.com/)
-2. Navigate to your API key section
-3. Copy your API key
-
-**OR** if you already have it in your `.env.local` file:
-- Check `.env.local` for `NEXT_PUBLIC_API_FOOTBALL_KEY`
-- Copy that value
-
-### Step 2: Set the Config in Firebase
-
-Run this command in your terminal (from the project root):
-
-**Windows (PowerShell):**
-```powershell
-firebase functions:config:set api_football.key="your-api-key-here"
-```
-
-**Mac/Linux:**
-```bash
-firebase functions:config:set api_football.key="your-api-key-here"
-```
-
-**Important**: Replace `your-api-key-here` with your actual API key. Keep the quotes around it.
-
-### Step 3: Redeploy the Cloud Function
-
-After setting the config, redeploy the function:
+Martin (or anyone deploying functions) must set Secret Manager before deploying scheduled/callable functions:
 
 ```bash
-cd functions
+firebase functions:secrets:set API_FOOTBALL_KEY
+```
+
+Paste the API-Football key when prompted. Then build and deploy functions:
+
+```bash
+cd functions && npm run build && cd ..
+firebase deploy --only functions
+```
+
+Redeploy hosting after the client bundle update (no env var needed for API-Football on the client):
+
+```bash
 npm run build
-cd ..
-firebase deploy --only functions:updateLiveFixtures
+firebase deploy --only hosting
 ```
 
-### Step 4: Verify It's Working
+### Rotate the old key
 
-1. Check the function logs:
-   ```bash
-   firebase functions:log --only updateLiveFixtures
-   ```
+The key was previously shipped as `NEXT_PUBLIC_API_FOOTBALL_KEY` in the public JS bundle. After deploy, **rotate or revoke that key** in the [API-Football dashboard](https://dashboard.api-football.com/) and use the new value for `API_FOOTBALL_KEY` above.
 
-2. Wait a minute for the scheduled function to run, then check logs again.
+## Local / emulator
 
-3. You should see logs like:
-   ```
-   [updateLiveFixtures] Starting live fixture update...
-   [updateLiveFixtures] Found 1 active gameweek(s)
-   [updateLiveFixtures] Fetching X fixtures from API-Football...
-   [updateLiveFixtures] Received X fixtures from API-Football
-   [updateLiveFixtures] Updated X fixtures for gameweek ...
-   ```
+For Firebase emulators or `functions:shell`, export the key in the environment (not in `NEXT_PUBLIC_*`):
 
-   **NOT** errors about `API_FOOTBALL_KEY not configured`.
+```bash
+export API_FOOTBALL_KEY=your-key-here
+```
 
-## Troubleshooting
+Legacy `firebase functions:config:set api_football.key="..."` is still read as a fallback but secrets are preferred.
 
-### Secret Not Working
+## Verify
 
-If you set the secret but it's still not working:
+```bash
+firebase functions:secrets:access API_FOOTBALL_KEY
+firebase functions:log --only updateLiveFixtures
+```
 
-1. Make sure you redeployed the function after setting the secret
-2. Check that the secret name matches exactly: `API_FOOTBALL_KEY`
-3. View secret status:
-   ```bash
-   firebase functions:secrets:access API_FOOTBALL_KEY
-   ```
+Healthy logs include early-exit lines when no fixtures are in the live window (`0 API calls`), not repeated HTTP 429 errors.
 
-### Function Still Failing
+## Important notes
 
-1. Check function logs for specific errors
-2. Verify your API key is valid and has available requests
-3. Make sure the function has the correct permissions
-
-## Important Notes
-
-- **Never commit API keys to Git** - Secrets are stored securely in Firebase
-- **Secrets are environment-specific** - Set them for each Firebase project (dev, staging, production)
-- **Function must be redeployed** after setting secrets for them to take effect
-- **Live scores update every 1 minute** - The function runs automatically via a scheduled trigger
+- Never commit API keys to Git.
+- Secrets are per Firebase project — set them for dev/staging/production separately.
+- Functions must be **redeployed** after creating or updating a secret.
