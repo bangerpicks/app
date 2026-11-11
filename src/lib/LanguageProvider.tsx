@@ -2,7 +2,8 @@
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
 import { useAuth } from './AuthProvider'
-import { getUserLanguage, updateUserLanguage, UserDocument } from './users'
+import { getUserLanguage, updateUserLanguage } from './users'
+import { detectBrowserLanguage } from './browser-locale'
 import type { Locale } from '@/i18n/config'
 
 interface LanguageContextType {
@@ -17,22 +18,6 @@ const LanguageContext = createContext<LanguageContextType>({
   loading: true,
 })
 
-// Function to detect browser/system language
-function detectBrowserLanguage(): Locale {
-  if (typeof window === 'undefined') return 'en'
-  
-  // Get browser's preferred languages
-  const browserLang = navigator.language || (navigator as any).userLanguage || 'en'
-  
-  // Check if it starts with 'es' (Spanish)
-  if (browserLang.startsWith('es')) {
-    return 'es-MX'
-  }
-  
-  // Default to English
-  return 'en'
-}
-
 export function LanguageProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth()
   const [locale, setLocaleState] = useState<Locale>('en')
@@ -45,7 +30,17 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
         try {
           // If user is logged in, use their saved preference
           const userLang = await getUserLanguage(user)
-          setLocaleState(userLang)
+          if (userLang) {
+            setLocaleState(userLang)
+          } else {
+            const browser = detectBrowserLanguage()
+            setLocaleState(browser)
+            try {
+              await updateUserLanguage(user, browser)
+            } catch (persistError) {
+              console.error('Error persisting initial browser language:', persistError)
+            }
+          }
         } catch (error) {
           console.error('Error loading user language:', error)
           // Fallback to browser language if user preference fails

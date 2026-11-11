@@ -21,6 +21,7 @@ import { db } from './firebase'
 import { APIFootballFixture, getStandings } from './api-football'
 import { withTimeout } from './firestore-utils'
 import { isFlagshipGameweek } from './gameweek-constants'
+import type { GameweekFixtureEditorial } from '@/types/admin'
 
 /**
  * Generate cache key for fixture search
@@ -178,6 +179,44 @@ export interface GameweekFixtureData {
   addedBy: string
   addedAt: Timestamp
   whyItMatters?: string
+  whyItMatters_esMX?: string
+  officialPick?: 'H' | 'D' | 'A'
+  officialConfidence?: 'Strong' | 'Lean' | 'Toss-up'
+}
+
+function pickFixtureEditorial(data: Record<string, unknown>): GameweekFixtureEditorial {
+  const editorial: GameweekFixtureEditorial = {}
+  if (typeof data.whyItMatters === 'string' && data.whyItMatters.trim()) {
+    editorial.whyItMatters = data.whyItMatters
+  }
+  if (typeof data.whyItMatters_esMX === 'string' && data.whyItMatters_esMX.trim()) {
+    editorial.whyItMatters_esMX = data.whyItMatters_esMX
+  }
+  if (data.officialPick === 'H' || data.officialPick === 'D' || data.officialPick === 'A') {
+    editorial.officialPick = data.officialPick
+  }
+  if (
+    data.officialConfidence === 'Strong' ||
+    data.officialConfidence === 'Lean' ||
+    data.officialConfidence === 'Toss-up'
+  ) {
+    editorial.officialConfidence = data.officialConfidence
+  }
+  return editorial
+}
+
+function editorialFieldsForWrite(
+  editorial: GameweekFixtureEditorial | undefined
+): Partial<GameweekFixtureEditorial> {
+  if (!editorial) return {}
+  const out: Partial<GameweekFixtureEditorial> = {}
+  const why = editorial.whyItMatters?.trim()
+  if (why) out.whyItMatters = why
+  const whyEs = editorial.whyItMatters_esMX?.trim()
+  if (whyEs) out.whyItMatters_esMX = whyEs
+  if (editorial.officialPick) out.officialPick = editorial.officialPick
+  if (editorial.officialConfidence) out.officialConfidence = editorial.officialConfidence
+  return out
 }
 
 /**
@@ -643,7 +682,8 @@ export async function fetchAndStoreStandings(
 export async function saveGameweekFixtures(
   gameweekId: string,
   fixtures: APIFootballFixture[],
-  addedBy: string
+  addedBy: string,
+  editorialByFixtureId?: Record<number, GameweekFixtureEditorial>
 ): Promise<void> {
   try {
     // Get existing fixtures to find ones that need to be deleted
@@ -661,12 +701,13 @@ export async function saveGameweekFixtures(
     const batch = writeBatch(db)
     const now = Timestamp.now()
     
-    const existingWhy = new Map<number, string | undefined>()
+    const existingEditorial = new Map<number, GameweekFixtureEditorial>()
     existingSnapshot.forEach((docSnapshot) => {
       const fixtureData = docSnapshot.data()
       const fixtureId = fixtureData.fixtureId
-      if (typeof fixtureData.whyItMatters === 'string') {
-        existingWhy.set(fixtureId, fixtureData.whyItMatters)
+      const editorial = pickFixtureEditorial(fixtureData)
+      if (Object.keys(editorial).length > 0) {
+        existingEditorial.set(fixtureId, editorial)
       }
 
       if (!newFixtureIds.has(fixtureId)) {
@@ -675,7 +716,9 @@ export async function saveGameweekFixtures(
     })
 
     fixtures.forEach((fixture) => {
-      const preservedWhy = existingWhy.get(fixture.fixture.id)
+      const fixtureId = fixture.fixture.id
+      const mergedEditorial =
+        editorialByFixtureId?.[fixtureId] ?? existingEditorial.get(fixtureId)
       const fixtureData: GameweekFixtureData = {
         fixtureId: fixture.fixture.id,
         fixture,
@@ -699,7 +742,7 @@ export async function saveGameweekFixtures(
         },
         addedBy,
         addedAt: now,
-        ...(preservedWhy ? { whyItMatters: preservedWhy } : {}),
+        ...editorialFieldsForWrite(mergedEditorial),
       }
 
       const fixtureRef = doc(

@@ -1,7 +1,20 @@
+'use client'
+
+import { useTranslations } from 'next-intl'
 import { MatchCardData, Prediction } from '@/types/dashboard'
 import { TeamInfo } from './TeamInfo'
 import { MatchStats } from './MatchStats'
 import { PredictionButtons } from './PredictionButtons'
+import { useLanguage } from '@/lib/LanguageProvider'
+import {
+  officialConfidenceTranslationKey,
+  officialPickTranslationKey,
+  resolveWhyItMatters,
+} from '@/lib/match-card-display'
+import {
+  formatMatchCardHeaderDate,
+  formatMatchKickoffTime,
+} from '@/lib/locale-format'
 
 interface MatchCardProps {
   match: MatchCardData
@@ -12,36 +25,6 @@ interface MatchCardProps {
   readOnly?: boolean
 }
 
-function getOrdinalSuffix(day: number): string {
-  if (day > 3 && day < 21) return 'th'
-  switch (day % 10) {
-    case 1:
-      return 'st'
-    case 2:
-      return 'nd'
-    case 3:
-      return 'rd'
-    default:
-      return 'th'
-  }
-}
-
-function formatDate(date: Date): string {
-  const weekday = new Intl.DateTimeFormat('en-US', { weekday: 'long' }).format(date)
-  const month = new Intl.DateTimeFormat('en-US', { month: 'short' }).format(date)
-  const day = date.getDate()
-  const suffix = getOrdinalSuffix(day)
-  return `${weekday}, ${month} ${day}${suffix}`
-}
-
-function formatTime(date: Date): string {
-  return new Intl.DateTimeFormat('en-US', {
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-  }).format(date)
-}
-
 export function MatchCard({
   match,
   userPrediction,
@@ -49,6 +32,18 @@ export function MatchCard({
   disabled = false,
   readOnly = false,
 }: MatchCardProps) {
+  const t = useTranslations('dashboard')
+  const { locale } = useLanguage()
+
+  const whyText = resolveWhyItMatters(
+    match.whyItMatters,
+    match.whyItMatters_esMX,
+    locale
+  )
+
+  const showOfficialPreview =
+    Boolean(match.officialPick) || Boolean(match.officialConfidence)
+
   const handlePredictionSelect = (prediction: Prediction) => {
     if (!readOnly) onPredictionSelect(match.fixtureId, prediction)
   }
@@ -61,13 +56,15 @@ export function MatchCard({
           {match.league.name}
         </div>
         <div className="text-[10px] sm:text-xs font-medium text-midnight-violet text-center truncate min-w-0 px-1">
-          {match.matchStatus === 'LIVE' ? 'LIVE' : formatDate(match.date)}
+          {match.matchStatus === 'LIVE'
+            ? t('matchStatusLive')
+            : formatMatchCardHeaderDate(match.date, locale)}
         </div>
         <div className="text-[10px] sm:text-xs font-medium text-midnight-violet text-right truncate min-w-0 flex items-center justify-end gap-1.5">
           {match.matchStatus === 'HT' ? (
             <>
-              <span>HT</span>
-              <span 
+              <span>{t('matchStatusHt')}</span>
+              <span
                 className="w-1.5 h-1.5 rounded-full bg-cinnabar animate-pulse"
                 style={{
                   boxShadow: '0 0 6px #ee4136',
@@ -80,7 +77,7 @@ export function MatchCard({
                 {match.minute}
                 {match.stoppageTime ? `+${match.stoppageTime}` : ''}'
               </span>
-              <span 
+              <span
                 className="w-1.5 h-1.5 rounded-full bg-cinnabar animate-pulse"
                 style={{
                   boxShadow: '0 0 6px #ee4136',
@@ -88,17 +85,17 @@ export function MatchCard({
               />
             </>
           ) : match.matchStatus === 'FT' ? (
-            <span>FT</span>
+            <span>{t('matchStatusFt')}</span>
           ) : (
-            <span>{formatTime(match.date)}</span>
+            <span>{formatMatchKickoffTime(match.date, locale)}</span>
           )}
         </div>
       </div>
 
       <div className="border border-ivory rounded-b-[10px] px-2.5 py-2.5 flex flex-col gap-3">
-        {match.whyItMatters ? (
+        {whyText ? (
           <p className="text-xs text-ivory/80 text-center leading-snug line-clamp-2">
-            {match.whyItMatters}
+            {whyText}
           </p>
         ) : null}
         <div className="flex items-center gap-2.5">
@@ -116,6 +113,34 @@ export function MatchCard({
           {/* Away Team */}
           <TeamInfo team={match.awayTeam} />
         </div>
+
+        {showOfficialPreview ? (
+          <div
+            className="rounded-lg border border-ivory/25 bg-ivory/5 px-3 py-2 text-center"
+            aria-label={t('officialPreviewAria')}
+          >
+            <p className="text-[10px] uppercase tracking-wide text-ivory/60 font-semibold">
+              {t('officialPreviewLabel')}
+            </p>
+            <p className="text-sm text-ivory mt-1">
+              {match.officialPick ? (
+                <span>
+                  {t('officialPickLine', {
+                    pick: t(officialPickTranslationKey(match.officialPick)),
+                  })}
+                </span>
+              ) : null}
+              {match.officialPick && match.officialConfidence ? (
+                <span className="text-ivory/70"> · </span>
+              ) : null}
+              {match.officialConfidence ? (
+                <span className="text-ivory/90">
+                  {t(officialConfidenceTranslationKey(match.officialConfidence))}
+                </span>
+              ) : null}
+            </p>
+          </div>
+        ) : null}
 
         {/* Prediction Buttons or read-only prediction */}
         {readOnly ? (

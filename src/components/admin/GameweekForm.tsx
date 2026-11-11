@@ -2,7 +2,11 @@
 
 import { useState, useEffect } from 'react'
 import { APIFootballFixture } from '@/lib/api-football'
-import { AdminGameweekData, GameweekStatus } from '@/types/admin'
+import {
+  AdminGameweekData,
+  GameweekFixtureEditorial,
+  GameweekStatus,
+} from '@/types/admin'
 import {
   createGameweek,
   updateGameweek,
@@ -48,6 +52,19 @@ export function GameweekForm({
   )
   const [completeConfirmOpen, setCompleteConfirmOpen] = useState(false)
   const [pendingPublish, setPendingPublish] = useState(false)
+  const [fixtureEditorial, setFixtureEditorial] = useState<
+    Record<number, GameweekFixtureEditorial>
+  >({})
+
+  const updateFixtureEditorial = (
+    fixtureId: number,
+    patch: Partial<GameweekFixtureEditorial>
+  ) => {
+    setFixtureEditorial((prev) => ({
+      ...prev,
+      [fixtureId]: { ...prev[fixtureId], ...patch },
+    }))
+  }
 
   // Load settings to get deadline offset
   useEffect(() => {
@@ -98,6 +115,16 @@ export function GameweekForm({
         // Convert fixture data back to APIFootballFixture format
         const apiFixtures: APIFootballFixture[] = fixtures.map((f) => f.fixture)
         setSelectedFixtures(apiFixtures)
+        const editorial: Record<number, GameweekFixtureEditorial> = {}
+        fixtures.forEach((f) => {
+          editorial[f.fixtureId] = {
+            whyItMatters: f.whyItMatters ?? '',
+            whyItMatters_esMX: f.whyItMatters_esMX ?? '',
+            officialPick: f.officialPick,
+            officialConfidence: f.officialConfidence,
+          }
+        })
+        setFixtureEditorial(editorial)
       } catch (err: any) {
         console.error('Error loading gameweek:', err)
         setError(err.message || 'Failed to load gameweek')
@@ -154,11 +181,20 @@ export function GameweekForm({
       return // Already selected
     }
     setSelectedFixtures([...selectedFixtures, fixture])
+    setFixtureEditorial((prev) => ({
+      ...prev,
+      [fixture.fixture.id]: prev[fixture.fixture.id] ?? {},
+    }))
     setError(null)
   }
 
   const handleDeselectFixture = (fixtureId: number) => {
     setSelectedFixtures(selectedFixtures.filter((f) => f.fixture.id !== fixtureId))
+    setFixtureEditorial((prev) => {
+      const next = { ...prev }
+      delete next[fixtureId]
+      return next
+    })
   }
 
   const validateForm = (): boolean => {
@@ -229,7 +265,12 @@ export function GameweekForm({
         })
 
         // Update fixtures subcollection
-        await saveGameweekFixtures(gameweekId!, selectedFixtures, user.uid)
+        await saveGameweekFixtures(
+          gameweekId!,
+          selectedFixtures,
+          user.uid,
+          fixtureEditorial
+        )
       } else {
         // Create new gameweek
         const newGameweekId = await createGameweek({
@@ -245,7 +286,12 @@ export function GameweekForm({
         })
 
         // Save fixtures subcollection
-        await saveGameweekFixtures(newGameweekId, selectedFixtures, user.uid)
+        await saveGameweekFixtures(
+          newGameweekId,
+          selectedFixtures,
+          user.uid,
+          fixtureEditorial
+        )
       }
 
       onSuccess()
@@ -406,6 +452,115 @@ export function GameweekForm({
                 onSearchResultsChange={setSearchResults}
               />
             </div>
+
+            {selectedFixtures.length > 0 ? (
+              <div className="bg-gray-900 border border-gray-700 rounded-[10px] p-4">
+                <h3 className="text-lg font-bold text-ivory mb-2">
+                  Match card copy (optional)
+                </h3>
+                <p className="text-sm text-ivory/70 mb-4">
+                  Why it matters, Spanish copy, and Gaffer preview for each fixture.
+                </p>
+                <div className="space-y-4">
+                  {selectedFixtures.map((fixture) => {
+                    const fixtureId = fixture.fixture.id
+                    const editorial = fixtureEditorial[fixtureId] ?? {}
+                    return (
+                      <div
+                        key={fixtureId}
+                        className="border border-gray-700 rounded-[10px] p-3 space-y-3"
+                      >
+                        <p className="text-sm font-semibold text-lime-yellow">
+                          {fixture.teams.home.name} vs {fixture.teams.away.name}
+                        </p>
+                        <div>
+                          <label className="block text-xs text-ivory mb-1">
+                            Why it matters (English)
+                          </label>
+                          <textarea
+                            value={editorial.whyItMatters ?? ''}
+                            onChange={(e) =>
+                              updateFixtureEditorial(fixtureId, {
+                                whyItMatters: e.target.value,
+                              })
+                            }
+                            rows={2}
+                            className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-[10px] text-ivory text-sm focus:outline-none focus:border-lime-yellow"
+                            placeholder="One line for the match card…"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-ivory mb-1">
+                            Why it matters (es-MX)
+                          </label>
+                          <textarea
+                            value={editorial.whyItMatters_esMX ?? ''}
+                            onChange={(e) =>
+                              updateFixtureEditorial(fixtureId, {
+                                whyItMatters_esMX: e.target.value,
+                              })
+                            }
+                            rows={2}
+                            className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-[10px] text-ivory text-sm focus:outline-none focus:border-lime-yellow"
+                            placeholder="Una línea para la tarjeta del partido…"
+                          />
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs text-ivory mb-1">
+                              Official pick (Gaffer)
+                            </label>
+                            <select
+                              value={editorial.officialPick ?? ''}
+                              onChange={(e) => {
+                                const value = e.target.value
+                                updateFixtureEditorial(fixtureId, {
+                                  officialPick:
+                                    value === 'H' || value === 'D' || value === 'A'
+                                      ? value
+                                      : undefined,
+                                })
+                              }}
+                              className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-[10px] text-ivory text-sm focus:outline-none focus:border-lime-yellow"
+                            >
+                              <option value="">—</option>
+                              <option value="H">Home (1)</option>
+                              <option value="D">Draw (X)</option>
+                              <option value="A">Away (2)</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-xs text-ivory mb-1">
+                              Confidence
+                            </label>
+                            <select
+                              value={editorial.officialConfidence ?? ''}
+                              onChange={(e) => {
+                                const value = e.target.value
+                                updateFixtureEditorial(fixtureId, {
+                                  officialConfidence:
+                                    value === 'Strong' ||
+                                    value === 'Lean' ||
+                                    value === 'Toss-up'
+                                      ? value
+                                      : undefined,
+                                })
+                              }}
+                              className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-[10px] text-ivory text-sm focus:outline-none focus:border-lime-yellow"
+                            >
+                              <option value="">—</option>
+                              <option value="Strong">Strong</option>
+                              <option value="Lean">Lean</option>
+                              <option value="Toss-up">Toss-up</option>
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            ) : null}
 
             {/* Actions */}
             <div className="flex flex-wrap gap-3 justify-end pt-4 border-t border-gray-700">

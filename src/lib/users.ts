@@ -315,31 +315,30 @@ export async function getUserData(
 }
 
 /**
- * Gets the user's language preference from Firestore, defaulting to 'en' if not found
- * 
- * @param user - The Firebase Auth user object
- * @returns Promise<'en' | 'es-MX'> - The user's language preference
+ * Saved language on the user doc, or null when unset (no preference yet).
  */
-export async function getUserLanguage(user: User): Promise<'en' | 'es-MX'> {
+export async function getUserLanguage(user: User): Promise<'en' | 'es-MX' | null> {
   try {
-    if (!user || !user.uid) {
-      return 'en'
+    if (!user?.uid) {
+      return null
     }
 
     const userRef = doc(db, 'users', user.uid)
     const userDoc = await getDoc(userRef)
 
-    if (userDoc.exists()) {
-      const data = userDoc.data() as UserDocument
-      return data.language || 'en'
+    if (!userDoc.exists()) {
+      return null
     }
 
-    // Return default 'en' if document doesn't exist
-    return 'en'
+    const data = userDoc.data() as UserDocument
+    if (data.language === 'en' || data.language === 'es-MX') {
+      return data.language
+    }
+
+    return null
   } catch (error) {
     console.error('Error fetching user language:', error)
-    // Return default 'en' on error
-    return 'en'
+    return null
   }
 }
 

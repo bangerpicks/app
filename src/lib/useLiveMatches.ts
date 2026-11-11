@@ -6,17 +6,9 @@ import { db } from './firebase'
 import { MatchCardData, Prediction } from '@/types/dashboard'
 import { GameweekFixtureData } from '@/lib/admin'
 import { FormResult } from '@/types/dashboard'
-
-/**
- * Format time for display
- */
-function formatTime(date: Date): string {
-  return new Intl.DateTimeFormat('en-US', {
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-  }).format(date)
-}
+import { formatMatchKickoffTime } from '@/lib/locale-format'
+import { mapApiFootballStatusToMatchStatus } from '@/lib/match-card-display'
+import type { Locale } from '@/i18n/config'
 
 /**
  * Convert GameweekFixtureData to MatchCardData, preserving team positions and forms
@@ -24,21 +16,13 @@ function formatTime(date: Date): string {
 function convertFixtureToMatchCard(
   fixtureData: GameweekFixtureData,
   teamPositions: Map<number, number> = new Map(),
-  teamForms: Map<number, FormResult[]> = new Map()
+  teamForms: Map<number, FormResult[]> = new Map(),
+  locale: Locale = 'en'
 ): MatchCardData {
   const fixture = fixtureData.fixture.fixture
   const fixtureDate = new Date(fixture.date)
 
-  // Map API-Football status to dashboard match status
-  const apiStatus = fixture.status.short
-  let matchStatus: string
-  if (apiStatus === 'NS' || apiStatus === 'TBD') {
-    matchStatus = 'TBP' // To Be Played
-  } else if (apiStatus === '1H' || apiStatus === '2H' || apiStatus === 'HT' || apiStatus === 'ET' || apiStatus === 'P') {
-    matchStatus = 'LIVE' // Live match
-  } else {
-    matchStatus = apiStatus // 'FT', 'AET', 'PEN', etc.
-  }
+  const matchStatus = mapApiFootballStatusToMatchStatus(fixture.status.short)
 
   // Get score if available
   const score = fixtureData.fixture.goals.home !== null && fixtureData.fixture.goals.away !== null
@@ -59,7 +43,7 @@ function convertFixtureToMatchCard(
       logo: fixtureData.league.logo,
     },
     date: fixtureDate,
-    time: formatTime(fixtureDate),
+    time: formatMatchKickoffTime(fixtureDate, locale),
     homeTeam: {
       id: fixtureData.teams.home.id,
       name: fixtureData.teams.home.name,
@@ -78,6 +62,9 @@ function convertFixtureToMatchCard(
     minute,
     score,
     whyItMatters: fixtureData.whyItMatters,
+    whyItMatters_esMX: fixtureData.whyItMatters_esMX,
+    officialPick: fixtureData.officialPick,
+    officialConfidence: fixtureData.officialConfidence,
   }
 }
 
@@ -112,7 +99,8 @@ function matchesChanged(prev: MatchCardData[], next: MatchCardData[]): boolean {
  */
 export function useLiveMatches(
   gameweekId: string | null,
-  initialMatches: MatchCardData[]
+  initialMatches: MatchCardData[],
+  locale: Locale = 'en'
 ): MatchCardData[] {
   const [matches, setMatches] = useState<MatchCardData[]>(initialMatches)
   const unsubscribeRef = useRef<Unsubscribe | null>(null)
@@ -127,7 +115,22 @@ export function useLiveMatches(
   const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const retryCountRef = useRef(0)
   const listenerErrorRef = useRef<Error | null>(null)
+  const localeRef = useRef(locale)
   const MAX_RETRIES = 3
+
+  useEffect(() => {
+    localeRef.current = locale
+  }, [locale])
+
+  useEffect(() => {
+    const localizeTimes = (list: MatchCardData[]) =>
+      list.map((m) => ({
+        ...m,
+        time: formatMatchKickoffTime(m.date, locale),
+      }))
+    setMatches((prev) => localizeTimes(prev))
+    currentMatchesRef.current = localizeTimes(currentMatchesRef.current)
+  }, [locale])
   
   // Throttle delay: 100ms minimum between updates
   const THROTTLE_MS = 100
@@ -326,7 +329,12 @@ export function useLiveMatches(
             const homeHasForm = teamFormsRef.current.has(homeId)
             const awayHasForm = teamFormsRef.current.has(awayId)
             
-            const match = convertFixtureToMatchCard(fixtureData, teamPositionsRef.current, teamFormsRef.current)
+            const match = convertFixtureToMatchCard(
+              fixtureData,
+              teamPositionsRef.current,
+              teamFormsRef.current,
+              localeRef.current
+            )
             // Merge back user predictions from initial matches
             const userPrediction = userPredictionsRef.current.get(match.fixtureId)
             

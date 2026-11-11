@@ -29,13 +29,13 @@ export function SettingsClient() {
     if (user && !languageLoading) {
       getUserLanguage(user)
         .then((lang) => {
-          setSelectedLanguage(lang)
+          setSelectedLanguage(lang ?? locale)
         })
         .catch((error) => {
           console.error('Error fetching user language:', error)
         })
     }
-  }, [user, languageLoading])
+  }, [user, languageLoading, locale])
 
   // Fetch username for header
   useEffect(() => {

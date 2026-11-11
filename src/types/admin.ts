@@ -80,6 +80,16 @@ export interface GameweekFixtureData {
   addedBy: string
   addedAt: Timestamp
   whyItMatters?: string
+  whyItMatters_esMX?: string
+  officialPick?: 'H' | 'D' | 'A'
+  officialConfidence?: 'Strong' | 'Lean' | 'Toss-up'
+}
+
+export interface GameweekFixtureEditorial {
+  whyItMatters?: string
+  whyItMatters_esMX?: string
+  officialPick?: 'H' | 'D' | 'A'
+  officialConfidence?: 'Strong' | 'Lean' | 'Toss-up'
 }
 
 /**
