@@ -106,10 +106,6 @@ NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your-project.appspot.com
 NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your-sender-id
 NEXT_PUBLIC_FIREBASE_APP_ID=your-app-id
 
-# API-Football Configuration
-NEXT_PUBLIC_API_FOOTBALL_KEY=your-api-football-key
-API_FOOTBALL_KEY=your-api-football-key  # For Cloud Functions
-
 # Environment
 NEXT_PUBLIC_APP_ENV=development
 ```
@@ -182,10 +178,7 @@ Firebase configuration is managed through environment variables (see `.env.examp
 
 ### API-Football Configuration
 
-1. Sign up at [api-football.com](https://www.api-football.com/)
-2. Get your API key from the dashboard
-3. Add it to `.env.local` as `NEXT_PUBLIC_API_FOOTBALL_KEY`
-4. For Cloud Functions, also add it as `API_FOOTBALL_KEY`
+The API key is stored only in Firebase Functions (Secret Manager). See [docs/setup/CLOUD-FUNCTION-API-KEY.md](docs/setup/CLOUD-FUNCTION-API-KEY.md).
 
 ### Brand Colors
 

@@ -42,7 +42,7 @@ setPersistence(auth, browserLocalPersistence).catch((error) => {
 export const db = getFirestore(app)
 
 // Initialize Functions (for callable functions like trackReferralSignup)
-export const functions = getFunctions(app)
+export const functions = getFunctions(app, 'us-central1')
 
 // Export initialization state
 export const firebaseInitialized = initError === null

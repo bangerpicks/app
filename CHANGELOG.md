@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.1.1 — 2026-11-11
+
+### P0-2: Scheduled functions API quota and 429 handling
+
+- `updateLiveFixtures` and `autoScoring` call API-Football only when fixtures are in the live/scoring window or need stale-status recovery; idle ticks make zero API calls.
+- Fixture lookups are batched (`ids=` up to 20 per request). HTTP 429 is logged once and skips the rest of the tick without failing the scheduler.
+- Live updater schedule relaxed to every 2 minutes (was 1 minute).
+
+### P0-3: Remove API-Football key from the client bundle
+
+- Admin fixture/player search uses the `adminApiFootball` callable; the browser no longer reads `NEXT_PUBLIC_API_FOOTBALL_KEY`.
+- Cloud Functions load the key from Secret Manager via `defineSecret('API_FOOTBALL_KEY')` (with emulator/local `API_FOOTBALL_KEY` fallback).
+
+**Deploy (Martin):** `firebase functions:secrets:set API_FOOTBALL_KEY`, deploy functions, deploy hosting. Rotate the previous key at API-Football — it was exposed in the public bundle.
+
 ## 1.1.0 — 2026-11-06
 
 First production release of Banger Picks rules and the client that can satisfy them.

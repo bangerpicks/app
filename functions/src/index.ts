@@ -1,116 +1,63 @@
 import * as functions from 'firebase-functions'
+import { defineSecret } from 'firebase-functions/params'
 import * as admin from 'firebase-admin'
+import {
+  fetchFixturesByIdsBatched,
+  ApiFootballRateLimitError,
+  resetApiFootballRateLimitWarning,
+  logApiFootballRateLimitWarning,
+} from './api-football-client'
+import type { APIFootballFixture } from './api-football-types'
+import {
+  extractFixturePollContext,
+  fixtureNeedsLiveApiPoll,
+  fixtureNeedsScoringApiPoll,
+  isMatchFinished,
+} from './fixture-window'
+import { isUserAdmin } from './admin-auth'
+import { adminGetStandings, adminSearchFixtures, adminSearchPlayers } from './admin-api-football-handlers'
 
 admin.initializeApp()
 
-const API_FOOTBALL_BASE_URL = 'https://v3.football.api-sports.io'
+const apiFootballKey = defineSecret('API_FOOTBALL_KEY')
+
+const scheduledOpts = { secrets: [apiFootballKey] }
 
 /**
- * API-Football Fixture interface
+ * Resolve API-Football key: Secret Manager in production, env for emulator/local.
  */
-interface APIFootballFixture {
-  fixture: {
-    id: number
-    referee: string | null
-    timezone: string
-    date: string
-    timestamp: number
-    venue: {
-      id: number | null
-      name: string
-      city: string
+function resolveApiFootballKey(): string {
+  try {
+    const secretValue = apiFootballKey.value()
+    if (secretValue) {
+      return secretValue
     }
-    status: {
-      long: string
-      short: string
-      elapsed: number | null
-    }
+  } catch {
+    // Secret not available (e.g. local shell without binding)
   }
-  league: {
-    id: number
-    name: string
-    country: string
-    logo: string
-    flag: string | null
-    season: number
-    round: string
-  }
-  teams: {
-    home: {
-      id: number
-      name: string
-      logo: string
-      winner: boolean | null
-    }
-    away: {
-      id: number
-      name: string
-      logo: string
-      winner: boolean | null
-    }
-  }
-  goals: {
-    home: number | null
-    away: number | null
-  }
-  score: {
-    halftime: {
-      home: number | null
-      away: number | null
-    }
-    fulltime: {
-      home: number | null
-      away: number | null
-    }
-    extratime: {
-      home: number | null
-      away: number | null
-    }
-    penalty: {
-      home: number | null
-      away: number | null
-    }
-  }
-}
 
-/**
- * Get API key from Firebase config or environment variables
- */
-function getApiKey(): string {
-  // Try Firebase config first (recommended for v1 functions)
-  const configKey = functions.config().api_football?.key
-  if (configKey) {
-    return configKey
-  }
-  
-  // Fallback to environment variable (useful for local testing)
   const envKey = process.env.API_FOOTBALL_KEY
   if (envKey) {
     return envKey
   }
-  
+
+  const legacyConfigKey = functions.config().api_football?.key
+  if (legacyConfigKey) {
+    return legacyConfigKey
+  }
+
   throw new Error(
-    'API_FOOTBALL_KEY not configured. ' +
-    'Please set it using: firebase functions:config:set api_football.key="your-api-key" ' +
-    'Then redeploy: firebase deploy --only functions:updateLiveFixtures'
+    'API_FOOTBALL_KEY not configured. Run: firebase functions:secrets:set API_FOOTBALL_KEY, then redeploy functions.'
   )
 }
 
 /**
- * Check if a match status indicates the match is finished
- */
-function isMatchFinished(status: string): boolean {
-  return status === 'FT' || status === 'AET' || status === 'PEN'
-}
-
-/**
  * Determine match winner from fixture results
- * Returns 'H' for home win, 'D' for draw, 'A' for away win, or null if match not finished
  */
 function determineMatchWinner(fixture: APIFootballFixture): 'H' | 'D' | 'A' | null {
   const status = fixture.fixture.status.short
   if (status !== 'FT' && status !== 'AET' && status !== 'PEN') {
-    return null // Match not finished
+    return null
   }
 
   const homeGoals = fixture.goals.home ?? 0
@@ -118,140 +65,140 @@ function determineMatchWinner(fixture: APIFootballFixture): 'H' | 'D' | 'A' | nu
 
   if (homeGoals > awayGoals) return 'H'
   if (homeGoals < awayGoals) return 'A'
-  return 'D' // Draw
+  return 'D'
 }
 
-/**
- * Fetch fixtures from API-Football
- */
-async function fetchFixturesByIds(fixtureIds: number[]): Promise<APIFootballFixture[]> {
-  if (fixtureIds.length === 0) {
-    return []
+async function fixtureHasUnawardedPredictions(db: admin.firestore.Firestore, fixtureId: number): Promise<boolean> {
+  const predictionsSnapshot = await db
+    .collection('predictions')
+    .doc(String(fixtureId))
+    .collection('entries')
+    .limit(50)
+    .get()
+
+  if (predictionsSnapshot.empty) {
+    return false
   }
 
-  const apiKey = getApiKey()
-  const ids = fixtureIds.join('-')
-  const url = `${API_FOOTBALL_BASE_URL}/fixtures?ids=${ids}`
-
-  const response = await fetch(url, {
-    method: 'GET',
-    headers: {
-      'x-apisports-key': apiKey,
-    },
-  })
-
-  if (!response.ok) {
-    const errorText = await response.text()
-    throw new Error(`API-Football request failed: ${response.status} ${response.statusText} - ${errorText}`)
-  }
-
-  const data = await response.json()
-
-  // Check for API errors
-  if (data.errors) {
-    const errorKeys = Object.keys(data.errors)
-    if (errorKeys.length > 0) {
-      const errorMessages = errorKeys.map((key) => `${key}: ${data.errors[key]}`).join(', ')
-      throw new Error(`API-Football errors: ${errorMessages}`)
+  for (const doc of predictionsSnapshot.docs) {
+    const data = doc.data()
+    if (data.awarded !== true && data.pick && (data.pick === 'H' || data.pick === 'D' || data.pick === 'A')) {
+      return true
     }
   }
 
-  return data.response || []
+  if (predictionsSnapshot.size >= 50) {
+    const unawarded = await db
+      .collection('predictions')
+      .doc(String(fixtureId))
+      .collection('entries')
+      .where('awarded', '==', false)
+      .limit(1)
+      .get()
+    return !unawarded.empty
+  }
+
+  return false
 }
 
 /**
- * Update live fixtures for all active gameweeks
+ * Update live fixtures for all active gameweeks (every 2 minutes).
  */
-export const updateLiveFixtures = functions.pubsub
-  .schedule('every 1 minutes')
-  .onRun(async (context) => {
+export const updateLiveFixtures = functions
+  .runWith(scheduledOpts)
+  .pubsub.schedule('every 2 minutes')
+  .onRun(async () => {
+    resetApiFootballRateLimitWarning()
     const db = admin.firestore()
+    let apiKey: string
 
     try {
-      // Query all active gameweeks
-      const gameweeksSnapshot = await db
-        .collection('gameweeks')
-        .where('status', '==', 'active')
-        .get()
+      apiKey = resolveApiFootballKey()
+    } catch (error: unknown) {
+      console.error('[updateLiveFixtures]', error instanceof Error ? error.message : error)
+      return null
+    }
+
+    try {
+      const gameweeksSnapshot = await db.collection('gameweeks').where('status', '==', 'active').get()
 
       if (gameweeksSnapshot.empty) {
+        console.log('[updateLiveFixtures] No active gameweeks; exiting with 0 API calls')
         return null
       }
 
-      // Process each active gameweek
       for (const gameweekDoc of gameweeksSnapshot.docs) {
         const gameweekId = gameweekDoc.id
 
         try {
-          // Get all fixtures for this gameweek
-          const fixturesSnapshot = await db
-            .collection('gameweeks')
-            .doc(gameweekId)
-            .collection('fixtures')
-            .get()
+          const fixturesSnapshot = await db.collection('gameweeks').doc(gameweekId).collection('fixtures').get()
 
           if (fixturesSnapshot.empty) {
             continue
           }
 
-          // Get fixture IDs
-          const fixtureIds: number[] = []
           const fixtureDocs = fixturesSnapshot.docs
+          const idsToFetch: number[] = []
 
           for (const fixtureDoc of fixtureDocs) {
             const fixtureData = fixtureDoc.data()
-            if (fixtureData.fixtureId) {
-              fixtureIds.push(fixtureData.fixtureId)
+            const fixtureId = fixtureData.fixtureId as number | undefined
+            if (!fixtureId) continue
+
+            const cachedFixture = fixtureData.fixture as APIFootballFixture | undefined
+            const pollCtx = extractFixturePollContext(cachedFixture)
+
+            if (fixtureNeedsLiveApiPoll(pollCtx)) {
+              idsToFetch.push(fixtureId)
             }
           }
 
-          if (fixtureIds.length === 0) {
+          if (idsToFetch.length === 0) {
+            console.log(
+              `[updateLiveFixtures] Gameweek ${gameweekId}: no fixtures in live/scoring window; 0 API calls`
+            )
             continue
           }
 
-          // Fetch updated fixtures from API-Football
-          const updatedFixtures = await fetchFixturesByIds(fixtureIds)
+          let updatedFixtures: APIFootballFixture[]
+          try {
+            updatedFixtures = await fetchFixturesByIdsBatched(apiKey, idsToFetch)
+          } catch (error: unknown) {
+            if (error instanceof ApiFootballRateLimitError) {
+              logApiFootballRateLimitWarning('updateLiveFixtures')
+              return null
+            }
+            throw error
+          }
 
-          // Create a map of fixture ID to updated fixture data
           const fixtureMap = new Map<number, APIFootballFixture>()
           for (const fixture of updatedFixtures) {
             fixtureMap.set(fixture.fixture.id, fixture)
           }
 
-          // Update fixture documents in Firestore
           const batch = db.batch()
           let updateCount = 0
 
           for (const fixtureDoc of fixtureDocs) {
             const fixtureData = fixtureDoc.data()
-            const fixtureId = fixtureData.fixtureId
+            const fixtureId = fixtureData.fixtureId as number
 
-            // Get updated fixture data
             const updatedFixture = fixtureMap.get(fixtureId)
             if (!updatedFixture) {
               continue
             }
 
-            // Check if match is finished
             const status = updatedFixture.fixture.status.short
-            const isFinished = isMatchFinished(status)
-            
-            // Check current status in Firestore to see if we need to update
+            const finished = isMatchFinished(status)
+
             const currentFixture = fixtureData.fixture as APIFootballFixture | undefined
             const currentStatus = currentFixture?.fixture?.status?.short
-            
-            // Skip if match is finished AND already updated to finished status
-            // This prevents unnecessary updates but still allows the final status update
-            if (isFinished && currentStatus === status) {
+
+            if (finished && currentStatus === status) {
               continue
             }
 
-            // Update only the fixture field (preserve other fields)
-            const fixtureRef = db
-              .collection('gameweeks')
-              .doc(gameweekId)
-              .collection('fixtures')
-              .doc(fixtureDoc.id)
+            const fixtureRef = db.collection('gameweeks').doc(gameweekId).collection('fixtures').doc(fixtureDoc.id)
 
             batch.update(fixtureRef, {
               fixture: updatedFixture,
@@ -260,112 +207,121 @@ export const updateLiveFixtures = functions.pubsub
             updateCount++
           }
 
-          // Commit batch update
           if (updateCount > 0) {
             await batch.commit()
+            console.log(
+              `[updateLiveFixtures] Gameweek ${gameweekId}: updated ${updateCount} fixture(s); API fixtures requested: ${idsToFetch.length}`
+            )
           }
-        } catch (error: any) {
+        } catch (error: unknown) {
           console.error(`[updateLiveFixtures] Error processing gameweek ${gameweekId}:`, error)
-          // Continue with next gameweek instead of failing completely
         }
       }
 
       return null
-    } catch (error: any) {
+    } catch (error: unknown) {
+      if (error instanceof ApiFootballRateLimitError) {
+        logApiFootballRateLimitWarning('updateLiveFixtures')
+        return null
+      }
       console.error('[updateLiveFixtures] Error in live fixture update:', error)
-      throw error
+      return null
     }
   })
 
 /**
- * Auto-scoring function that awards points for finished matches
- * Runs every 5 minutes to check finished matches and award points
+ * Auto-scoring: award points for finished matches (every 5 minutes).
  */
-export const autoScoring = functions.pubsub
-  .schedule('every 5 minutes')
-  .onRun(async (context) => {
+export const autoScoring = functions
+  .runWith(scheduledOpts)
+  .pubsub.schedule('every 5 minutes')
+  .onRun(async () => {
+    resetApiFootballRateLimitWarning()
     const db = admin.firestore()
+    let apiKey: string
 
     try {
-      // Query all active gameweeks
-      const gameweeksSnapshot = await db
-        .collection('gameweeks')
-        .where('status', '==', 'active')
-        .get()
+      apiKey = resolveApiFootballKey()
+    } catch (error: unknown) {
+      console.error('[autoScoring]', error instanceof Error ? error.message : error)
+      return null
+    }
+
+    try {
+      const gameweeksSnapshot = await db.collection('gameweeks').where('status', '==', 'active').get()
 
       if (gameweeksSnapshot.empty) {
+        console.log('[autoScoring] No active gameweeks; exiting with 0 API calls')
         return null
       }
 
       let totalAwarded = 0
       let totalProcessed = 0
 
-      // Process each active gameweek
       for (const gameweekDoc of gameweeksSnapshot.docs) {
         const gameweekId = gameweekDoc.id
 
         try {
-          // Get all fixtures for this gameweek
-          const fixturesSnapshot = await db
-            .collection('gameweeks')
-            .doc(gameweekId)
-            .collection('fixtures')
-            .get()
+          const fixturesSnapshot = await db.collection('gameweeks').doc(gameweekId).collection('fixtures').get()
 
           if (fixturesSnapshot.empty) {
             continue
           }
 
-          // Get fixture IDs and filter finished fixtures
-          const finishedFixtureIds: number[] = []
           const fixtureMap = new Map<number, admin.firestore.DocumentSnapshot>()
+          const idsToFetch: number[] = []
 
           for (const fixtureDoc of fixturesSnapshot.docs) {
             const fixtureData = fixtureDoc.data()
-            const fixtureId = fixtureData.fixtureId
+            const fixtureId = fixtureData.fixtureId as number | undefined
             if (!fixtureId) continue
 
-            // Check if fixture is finished using cached fixture data
             const cachedFixture = fixtureData.fixture as APIFootballFixture | undefined
-            if (cachedFixture) {
-              const status = cachedFixture.fixture.status.short
-              if (isMatchFinished(status)) {
-                finishedFixtureIds.push(fixtureId)
-                fixtureMap.set(fixtureId, fixtureDoc)
-              }
+            const pollCtx = extractFixturePollContext(cachedFixture)
+            const hasUnawarded = await fixtureHasUnawardedPredictions(db, fixtureId)
+
+            if (!fixtureNeedsScoringApiPoll(pollCtx, hasUnawarded)) {
+              continue
             }
+
+            idsToFetch.push(fixtureId)
+            fixtureMap.set(fixtureId, fixtureDoc)
           }
 
-          if (finishedFixtureIds.length === 0) {
+          if (idsToFetch.length === 0) {
+            console.log(`[autoScoring] Gameweek ${gameweekId}: nothing to score; 0 API calls`)
             continue
           }
 
-          // Fetch latest fixture results from API-Football
-          const updatedFixtures = await fetchFixturesByIds(finishedFixtureIds)
+          let updatedFixtures: APIFootballFixture[]
+          try {
+            updatedFixtures = await fetchFixturesByIdsBatched(apiKey, idsToFetch)
+          } catch (error: unknown) {
+            if (error instanceof ApiFootballRateLimitError) {
+              logApiFootballRateLimitWarning('autoScoring')
+              return null
+            }
+            throw error
+          }
+
           const fixtureResultsMap = new Map<number, APIFootballFixture>()
           for (const fixture of updatedFixtures) {
             fixtureResultsMap.set(fixture.fixture.id, fixture)
           }
 
-          // Process each finished fixture
-          for (const fixtureId of finishedFixtureIds) {
+          for (const fixtureId of idsToFetch) {
             const fixtureResult = fixtureResultsMap.get(fixtureId)
             if (!fixtureResult) {
               continue
             }
 
-            // Determine match winner
             const winner = determineMatchWinner(fixtureResult)
             if (!winner) {
               continue
             }
 
             try {
-              // Get all prediction entries for this fixture
-              const predictionsRef = db
-                .collection('predictions')
-                .doc(String(fixtureId))
-                .collection('entries')
+              const predictionsRef = db.collection('predictions').doc(String(fixtureId)).collection('entries')
 
               const predictionsSnapshot = await predictionsRef.get()
 
@@ -373,12 +329,10 @@ export const autoScoring = functions.pubsub
                 continue
               }
 
-              // Batch updates for this fixture
               const batch = db.batch()
               let batchCount = 0
-              const maxBatchSize = 500 // Firestore batch limit
+              const maxBatchSize = 500
 
-              // Track user stats updates (we'll update these separately)
               const userStatsUpdates = new Map<
                 string,
                 { pointsIncrement: number; correctIncrement: number; totalIncrement: number }
@@ -387,7 +341,6 @@ export const autoScoring = functions.pubsub
               for (const predictionDoc of predictionsSnapshot.docs) {
                 const prediction = predictionDoc.data()
 
-                // Skip if already awarded
                 if (prediction.awarded === true) {
                   continue
                 }
@@ -399,16 +352,10 @@ export const autoScoring = functions.pubsub
                   continue
                 }
 
-                // Compare prediction with actual result
                 const isCorrect = pick === winner
                 const points = isCorrect ? 1 : 0
 
-                // Update prediction entry
-                const predictionRef = db
-                  .collection('predictions')
-                  .doc(String(fixtureId))
-                  .collection('entries')
-                  .doc(predictionDoc.id)
+                const predictionRef = db.collection('predictions').doc(String(fixtureId)).collection('entries').doc(predictionDoc.id)
 
                 batch.update(predictionRef, {
                   awarded: true,
@@ -426,7 +373,6 @@ export const autoScoring = functions.pubsub
 
                 batchCount++
 
-                // Track user stats updates
                 if (!userStatsUpdates.has(uid)) {
                   userStatsUpdates.set(uid, {
                     pointsIncrement: 0,
@@ -442,7 +388,6 @@ export const autoScoring = functions.pubsub
                   stats.pointsIncrement += 1
                 }
 
-                // Commit batch if we're approaching the limit
                 if (batchCount >= maxBatchSize) {
                   await batch.commit()
                   totalProcessed += batchCount
@@ -450,14 +395,11 @@ export const autoScoring = functions.pubsub
                 }
               }
 
-              // Commit remaining predictions in batch
               if (batchCount > 0) {
                 await batch.commit()
                 totalProcessed += batchCount
               }
 
-              // Update user documents with points and stats
-              // Use transactions to ensure atomic updates for user stats
               for (const [uid, stats] of userStatsUpdates.entries()) {
                 try {
                   await db.runTransaction(async (transaction) => {
@@ -473,8 +415,6 @@ export const autoScoring = functions.pubsub
                     const currentCorrect = (currentData?.correctPredictions || 0) + stats.correctIncrement
                     const accuracy = currentTotal > 0 ? Math.round((currentCorrect / currentTotal) * 100) : 0
 
-                    // Use increment for points (atomic operation)
-                    // Update total/correct predictions and accuracy (calculated values)
                     transaction.update(userRef, {
                       points: admin.firestore.FieldValue.increment(stats.pointsIncrement),
                       totalPredictions: currentTotal,
@@ -486,36 +426,37 @@ export const autoScoring = functions.pubsub
                   if (stats.pointsIncrement > 0) {
                     totalAwarded += stats.pointsIncrement
                   }
-                } catch (error: any) {
+                } catch (error: unknown) {
                   console.error(`[autoScoring] Error updating user ${uid}:`, error)
-                  // Continue with other users even if one fails
                 }
               }
-            } catch (error: any) {
+            } catch (error: unknown) {
               console.error(`[autoScoring] Error processing fixture ${fixtureId}:`, error)
-              // Continue with next fixture
             }
           }
-        } catch (error: any) {
+        } catch (error: unknown) {
           console.error(`[autoScoring] Error processing gameweek ${gameweekId}:`, error)
-          // Continue with next gameweek
         }
       }
 
+      if (totalProcessed > 0 || totalAwarded > 0) {
+        console.log(`[autoScoring] Processed ${totalProcessed} predictions; awarded ${totalAwarded} points`)
+      }
+
       return null
-    } catch (error: any) {
+    } catch (error: unknown) {
+      if (error instanceof ApiFootballRateLimitError) {
+        logApiFootballRateLimitWarning('autoScoring')
+        return null
+      }
       console.error('[autoScoring] Error in auto-scoring:', error)
-      throw error
+      return null
     }
   })
 
-/** Weekly placement bonus multipliers: 1st +50%, 2nd +30%, 3rd +20% of that week's points */
+/** Weekly placement bonus multipliers */
 const BONUS_MULTIPLIERS = [0.5, 0.3, 0.2] as const
 
-/**
- * When a gameweek is marked completed, compute weekly rankings for that gameweek,
- * apply placement bonuses to top 3 (×1.5, ×1.3, ×1.2), and update user docs.
- */
 export const onGameweekUpdate = functions.firestore
   .document('gameweeks/{gameweekId}')
   .onUpdate(async (change, context) => {
@@ -537,7 +478,6 @@ export const onGameweekUpdate = functions.firestore
     }
 
     try {
-      // Aggregate weekly points per user from predictions (awarded points only)
       const weeklyPointsByUid = new Map<string, number>()
 
       for (const fixtureId of fixtureIds) {
@@ -557,7 +497,6 @@ export const onGameweekUpdate = functions.firestore
         })
       }
 
-      // Build sorted array and assign ranks (tie handling)
       const entries: { uid: string; weeklyPoints: number }[] = []
       weeklyPointsByUid.forEach((weeklyPoints, uid) => {
         entries.push({ uid, weeklyPoints })
@@ -583,7 +522,6 @@ export const onGameweekUpdate = functions.firestore
         previousPoints = weeklyPoints
       })
 
-      // Top 3 by rank (rank 1, 2, 3) get bonuses
       const podium: { uid: string; rank: 1 | 2 | 3; weeklyPoints: number }[] = []
       entries.forEach(({ uid, weeklyPoints }) => {
         const rank = rankByUid.get(uid)
@@ -614,18 +552,13 @@ export const onGameweekUpdate = functions.firestore
       }
 
       return null
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(`[onGameweekUpdate] Error processing gameweek ${gameweekId}:`, error)
       throw error
     }
   })
 
-/**
- * Callable function to track a referral signup and award 5 points to the referrer.
- * Runs with admin privileges to create referrals docs and update the referrer's user doc.
- * Only the newly signed-up user (authenticated caller) can trigger this.
- */
-export const trackReferralSignup = functions.https.onCall(async (data: { referralCode?: string }, context: functions.https.CallableContext) => {
+export const trackReferralSignup = functions.https.onCall(async (data: { referralCode?: string }, context) => {
   if (!context.auth) {
     throw new functions.https.HttpsError('unauthenticated', 'Must be signed in to process referral')
   }
@@ -640,7 +573,6 @@ export const trackReferralSignup = functions.https.onCall(async (data: { referra
   const db = admin.firestore()
 
   try {
-    // Validate referral code and get referrer UID
     const usersSnapshot = await db.collection('users').where('referralCode', '==', trimmedCode).limit(1).get()
     if (usersSnapshot.empty) {
       throw new functions.https.HttpsError('invalid-argument', 'Invalid referral code')
@@ -649,12 +581,10 @@ export const trackReferralSignup = functions.https.onCall(async (data: { referra
     const referrerDoc = usersSnapshot.docs[0]
     const referrerUid = referrerDoc.id
 
-    // Prevent self-referral
     if (referrerUid === newUserUid) {
       throw new functions.https.HttpsError('invalid-argument', 'Self-referral is not allowed')
     }
 
-    // Check if referral already exists
     const existingSnapshot = await db
       .collection('referrals')
       .where('referrerUid', '==', referrerUid)
@@ -666,7 +596,6 @@ export const trackReferralSignup = functions.https.onCall(async (data: { referra
       throw new functions.https.HttpsError('already-exists', 'Referral already exists')
     }
 
-    // Create referral document
     await db.collection('referrals').add({
       referrerUid,
       referredUid: newUserUid,
@@ -677,14 +606,13 @@ export const trackReferralSignup = functions.https.onCall(async (data: { referra
       completedAt: admin.firestore.FieldValue.serverTimestamp(),
     })
 
-    // Award 5 referral points to the referrer (atomic increment)
     await db.collection('users').doc(referrerUid).update({
       referralPoints: admin.firestore.FieldValue.increment(5),
       lastUpdated: admin.firestore.FieldValue.serverTimestamp(),
     })
 
     return { success: true }
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (error instanceof functions.https.HttpsError) {
       throw error
     }
@@ -692,3 +620,67 @@ export const trackReferralSignup = functions.https.onCall(async (data: { referra
     throw new functions.https.HttpsError('internal', 'Failed to process referral')
   }
 })
+
+type AdminApiFootballRequest =
+  | { action: 'searchFixtures'; from: string; to: string; league?: number; team?: number; status?: string; timezone?: string; season?: number }
+  | { action: 'getStandings'; leagueId: number; season: number }
+  | { action: 'searchPlayers'; query: string; league?: number; season?: number }
+
+/**
+ * Admin-only proxy for API-Football (keeps API key server-side).
+ */
+export const adminApiFootball = functions
+  .runWith(scheduledOpts)
+  .https.onCall(async (data: AdminApiFootballRequest, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Must be signed in')
+    }
+
+    const uid = context.auth.uid
+    if (!(await isUserAdmin(uid))) {
+      throw new functions.https.HttpsError('permission-denied', 'Admin only')
+    }
+
+    let apiKey: string
+    try {
+      apiKey = resolveApiFootballKey()
+    } catch {
+      throw new functions.https.HttpsError('failed-precondition', 'API_FOOTBALL_KEY not configured on functions')
+    }
+
+    try {
+      switch (data?.action) {
+        case 'searchFixtures': {
+          const fixtures = await adminSearchFixtures(apiKey, {
+            from: data.from,
+            to: data.to,
+            league: data.league,
+            team: data.team,
+            status: data.status,
+            timezone: data.timezone,
+            season: data.season,
+          })
+          return { fixtures }
+        }
+        case 'getStandings': {
+          const standings = await adminGetStandings(apiKey, data.leagueId, data.season)
+          return { standings }
+        }
+        case 'searchPlayers': {
+          const players = await adminSearchPlayers(apiKey, data.query, data.league, data.season)
+          return { players }
+        }
+        default:
+          throw new functions.https.HttpsError('invalid-argument', 'Unknown action')
+      }
+    } catch (error: unknown) {
+      if (error instanceof ApiFootballRateLimitError) {
+        throw new functions.https.HttpsError('resource-exhausted', 'API-Football rate limit; try again shortly')
+      }
+      console.error('[adminApiFootball] Error:', error)
+      throw new functions.https.HttpsError(
+        'internal',
+        error instanceof Error ? error.message : 'API-Football request failed'
+      )
+    }
+  })
