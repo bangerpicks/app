@@ -27,3 +27,41 @@ test('resolveWhyItMatters uses English for en locale even if Spanish present', (
     'English line'
   )
 })
+
+// Keep in sync with src/lib/match-card-display.ts
+function mapApiFootballStatusToMatchStatus(apiStatus) {
+  if (apiStatus === 'NS' || apiStatus === 'TBD') {
+    return 'TBP'
+  }
+  if (apiStatus === 'HT') {
+    return 'HT'
+  }
+  if (
+    apiStatus === '1H' ||
+    apiStatus === '2H' ||
+    apiStatus === 'ET' ||
+    apiStatus === 'P'
+  ) {
+    return 'LIVE'
+  }
+  return apiStatus
+}
+
+test('mapApiFootballStatusToMatchStatus maps HT to HT', () => {
+  assert.equal(mapApiFootballStatusToMatchStatus('HT'), 'HT')
+})
+
+test('mapApiFootballStatusToMatchStatus maps in-play to LIVE', () => {
+  for (const code of ['1H', '2H', 'ET', 'P']) {
+    assert.equal(mapApiFootballStatusToMatchStatus(code), 'LIVE', code)
+  }
+})
+
+test('mapApiFootballStatusToMatchStatus maps not started to TBP', () => {
+  assert.equal(mapApiFootballStatusToMatchStatus('NS'), 'TBP')
+  assert.equal(mapApiFootballStatusToMatchStatus('TBD'), 'TBP')
+})
+
+test('mapApiFootballStatusToMatchStatus passes through FT', () => {
+  assert.equal(mapApiFootballStatusToMatchStatus('FT'), 'FT')
+})

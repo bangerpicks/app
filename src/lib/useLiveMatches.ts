@@ -7,6 +7,7 @@ import { MatchCardData, Prediction } from '@/types/dashboard'
 import { GameweekFixtureData } from '@/lib/admin'
 import { FormResult } from '@/types/dashboard'
 import { formatMatchKickoffTime } from '@/lib/locale-format'
+import { mapApiFootballStatusToMatchStatus } from '@/lib/match-card-display'
 import type { Locale } from '@/i18n/config'
 
 /**
@@ -21,16 +22,7 @@ function convertFixtureToMatchCard(
   const fixture = fixtureData.fixture.fixture
   const fixtureDate = new Date(fixture.date)
 
-  // Map API-Football status to dashboard match status
-  const apiStatus = fixture.status.short
-  let matchStatus: string
-  if (apiStatus === 'NS' || apiStatus === 'TBD') {
-    matchStatus = 'TBP' // To Be Played
-  } else if (apiStatus === '1H' || apiStatus === '2H' || apiStatus === 'HT' || apiStatus === 'ET' || apiStatus === 'P') {
-    matchStatus = 'LIVE' // Live match
-  } else {
-    matchStatus = apiStatus // 'FT', 'AET', 'PEN', etc.
-  }
+  const matchStatus = mapApiFootballStatusToMatchStatus(fixture.status.short)
 
   // Get score if available
   const score = fixtureData.fixture.goals.home !== null && fixtureData.fixture.goals.away !== null

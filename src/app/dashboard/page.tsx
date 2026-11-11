@@ -14,6 +14,7 @@ import { getGameweekFixtures, AdminGameweekData, GameweekFixtureData } from '@/l
 import { useLiveMatches } from '@/lib/useLiveMatches'
 import { useLanguage } from '@/lib/LanguageProvider'
 import { formatMatchKickoffTime } from '@/lib/locale-format'
+import { mapApiFootballStatusToMatchStatus } from '@/lib/match-card-display'
 import type { Locale } from '@/i18n/config'
 import {
   fetchCurrentGameweek,
@@ -53,21 +54,7 @@ function convertFixtureToMatchCard(
   const fixture = fixtureData.fixture.fixture
   const fixtureDate = new Date(fixture.date)
 
-  const apiStatus = fixture.status.short
-  let matchStatus: string
-  if (apiStatus === 'NS' || apiStatus === 'TBD') {
-    matchStatus = 'TBP'
-  } else if (
-    apiStatus === '1H' ||
-    apiStatus === '2H' ||
-    apiStatus === 'HT' ||
-    apiStatus === 'ET' ||
-    apiStatus === 'P'
-  ) {
-    matchStatus = 'LIVE'
-  } else {
-    matchStatus = apiStatus
-  }
+  const matchStatus = mapApiFootballStatusToMatchStatus(fixture.status.short)
 
   const score =
     fixtureData.fixture.goals.home !== null && fixtureData.fixture.goals.away !== null

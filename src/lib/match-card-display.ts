@@ -34,3 +34,24 @@ export function officialConfidenceTranslationKey(
 ): string {
   return CONFIDENCE_I18N_KEY[confidence]
 }
+
+/**
+ * Map API-Football fixture.status.short to dashboard match card status.
+ */
+export function mapApiFootballStatusToMatchStatus(apiStatus: string): string {
+  if (apiStatus === 'NS' || apiStatus === 'TBD') {
+    return 'TBP'
+  }
+  if (apiStatus === 'HT') {
+    return 'HT'
+  }
+  if (
+    apiStatus === '1H' ||
+    apiStatus === '2H' ||
+    apiStatus === 'ET' ||
+    apiStatus === 'P'
+  ) {
+    return 'LIVE'
+  }
+  return apiStatus
+}
