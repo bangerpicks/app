@@ -287,7 +287,10 @@ Firestore Database
   };
   addedBy: string;                  // Admin user ID
   addedAt: Timestamp;
-  whyItMatters?: string;            // One-line context for match card (optional)
+  whyItMatters?: string;            // One-line context for match card (optional, English)
+  whyItMatters_esMX?: string;       // Spanish (Mexico) why-it-matters line (optional)
+  officialPick?: 'H' | 'D' | 'A';    // Gaffer / house preview pick (optional)
+  officialConfidence?: 'Strong' | 'Lean' | 'Toss-up'; // Preview confidence (optional)
 }
 ```
 

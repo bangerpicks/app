@@ -110,6 +110,9 @@ function convertFixtureToMatchCard(
     minute,
     score,
     whyItMatters: fixtureData.whyItMatters,
+    whyItMatters_esMX: fixtureData.whyItMatters_esMX,
+    officialPick: fixtureData.officialPick,
+    officialConfidence: fixtureData.officialConfidence,
   }
 }
 
