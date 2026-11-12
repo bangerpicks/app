@@ -20,6 +20,7 @@
     "build-test-deploy": "npm run type-check && npm run lint && npm run test:unit && npm run build"
   },
   "dependencies": {
+    "@heroicons/react": "^2.2.0",
     "@tanstack/react-query": "^5.0.0",
     "firebase": "^10.14.1",
     "lucide-react": "^0.344.0",

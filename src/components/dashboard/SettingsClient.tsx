@@ -16,6 +16,7 @@ import {
   saveGafferDisplayPrefs,
 } from '@/lib/gaffer-display-prefs'
 import { GafferOnLoadToggle } from './GafferOnLoadToggle'
+import { resendVerificationEmail } from '@/lib/auth-email'
 import { Settings, Check, ArrowLeft } from 'lucide-react'
 import type { Locale } from '@/i18n/config'
 
@@ -24,7 +25,10 @@ export function SettingsClient() {
   const { locale, setLocale, loading: languageLoading } = useLanguage()
   const router = useRouter()
   const t = useTranslations('settings')
+  const tAuth = useTranslations('auth')
   const tCommon = useTranslations('common')
+  const [verificationResendLoading, setVerificationResendLoading] = useState(false)
+  const [verificationResent, setVerificationResent] = useState(false)
 
   const [selectedLanguage, setSelectedLanguage] = useState<Locale>(locale)
   const [isSaving, setIsSaving] = useState(false)
@@ -195,6 +199,35 @@ export function SettingsClient() {
               </button>
             </div>
           </div>
+
+          {user?.email && !user.emailVerified ? (
+            <div className="bg-ivory/5 border border-ivory/10 rounded-lg px-4 py-4 mt-4">
+              <p className="text-ivory/70 text-sm mb-3">{tAuth('emailNotVerifiedHint')}</p>
+              {verificationResent ? (
+                <p className="text-lime-yellow text-sm">{tAuth('verificationEmailResent')}</p>
+              ) : (
+                <button
+                  type="button"
+                  disabled={verificationResendLoading}
+                  onClick={async () => {
+                    if (!user) return
+                    setVerificationResendLoading(true)
+                    try {
+                      await resendVerificationEmail(user)
+                      setVerificationResent(true)
+                    } catch (error) {
+                      console.error('Resend verification failed:', error)
+                    } finally {
+                      setVerificationResendLoading(false)
+                    }
+                  }}
+                  className="text-sm font-semibold text-lime-yellow hover:underline disabled:opacity-50"
+                >
+                  {verificationResendLoading ? t('saving') : tAuth('resendVerificationEmail')}
+                </button>
+              )}
+            </div>
+          ) : null}
 
           <div className="bg-ivory/5 border border-ivory/10 rounded-lg px-4 py-4 mt-4">
             <h2 className="text-ivory font-semibold text-lg mb-2">

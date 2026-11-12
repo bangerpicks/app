@@ -3,7 +3,7 @@
 import { NextIntlClientProvider } from 'next-intl'
 import { ReactNode, useMemo } from 'react'
 import { useLanguage } from './LanguageProvider'
-import type { Locale } from '@/i18n/config'
+import { timeZone, type Locale } from '@/i18n/config'
 import enMessages from '@/messages/en.json'
 import esMXMessages from '@/messages/es-MX.json'
 
@@ -22,7 +22,7 @@ export function IntlProvider({ children }: IntlProviderProps) {
   const currentMessages = useMemo(() => messages[locale] || messages['en'], [locale])
 
   return (
-    <NextIntlClientProvider locale={locale} messages={currentMessages}>
+    <NextIntlClientProvider locale={locale} messages={currentMessages} timeZone={timeZone}>
       {children}
     </NextIntlClientProvider>
   )
