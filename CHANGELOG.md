@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.8 — 2026-11-12
+
+### Hosting: revalidate clean URL HTML routes
+
+- Firebase Hosting headers: catch-all `**` sets `Cache-Control: no-cache, max-age=0, must-revalidate` so extensionless routes (`/profile/`, `/dashboard/`, etc.) revalidate after deploy; hashed JS/CSS/images keep `public, max-age=31536000, immutable` via the later matching rule (last match wins).
+- App version label 1.1.8.
+
 ## 1.1.7 — 2026-11-12
 
 ### P0: first gameweek join save (rules eval order + chunking)
