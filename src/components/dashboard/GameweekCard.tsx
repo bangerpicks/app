@@ -19,7 +19,18 @@ interface StatusBadgeProps {
   deadline?: Date
 }
 
+const STATUS_LABEL_KEY: Record<
+  GameweekData['status'],
+  'gameweekStatusOpen' | 'gameweekStatusClosed' | 'gameweekStatusUpcoming' | 'gameweekStatusCompleted'
+> = {
+  OPEN: 'gameweekStatusOpen',
+  CLOSED: 'gameweekStatusClosed',
+  UPCOMING: 'gameweekStatusUpcoming',
+  COMPLETED: 'gameweekStatusCompleted',
+}
+
 function StatusBadge({ status, deadline }: StatusBadgeProps) {
+  const t = useTranslations('dashboard')
   const { time, formatted } = useCountdown(status === 'OPEN' ? deadline : null)
 
   // Determine urgency level based on time remaining
@@ -75,11 +86,11 @@ function StatusBadge({ status, deadline }: StatusBadgeProps) {
       aria-label={
         status === 'OPEN' && deadline && !time.isExpired
           ? `Gameweek is open. Time remaining: ${formatted}`
-          : `Gameweek status: ${status}`
+          : `Gameweek status: ${t(STATUS_LABEL_KEY[status])}`
       }
     >
       <span className="text-base font-bold italic text-midnight-violet">
-        {status}
+        {t(STATUS_LABEL_KEY[status])}
       </span>
       {status === 'OPEN' && deadline && !time.isExpired && (
         <>

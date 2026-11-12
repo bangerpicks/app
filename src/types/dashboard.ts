@@ -19,7 +19,7 @@ export interface TeamInfo {
   id: number
   name: string
   logo: string
-  position: number // League position
+  position?: number // League table rank when known
   form: FormResult[] // Last 5 matches
 }
 

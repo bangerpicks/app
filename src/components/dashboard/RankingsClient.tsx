@@ -231,7 +231,7 @@ export function RankingsClient({
       <ReferralPopup />
 
       {/* Main Content */}
-      <main className={`flex-1 px-4 sm:px-5 pb-20 sm:pb-24 flex flex-col items-center overflow-x-hidden ${
+      <main className={`flex-1 px-4 sm:px-5 pb-bottom-nav flex flex-col items-center overflow-x-hidden ${
         activeView === 'this-week' ? 'py-2 gap-2' : 'py-2.5 gap-5'
       }`}>
         {/* Title Section - Only show for All Time view */}

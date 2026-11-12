@@ -17,7 +17,7 @@ export function ShopComingSoon({ username }: ShopComingSoonProps) {
       <Header username={username} />
 
       {/* Main Content */}
-      <main className="flex-1 px-4 sm:px-5 pb-20 sm:pb-24 py-8 sm:py-12 overflow-x-hidden flex items-center justify-center">
+      <main className="flex-1 px-4 sm:px-5 pb-bottom-nav py-8 sm:py-12 overflow-x-hidden flex items-center justify-center">
         <div className="w-full max-w-2xl mx-auto flex flex-col items-center gap-6 sm:gap-8">
           {/* Animated Main Icon Container */}
           <div className="relative flex items-center justify-center mb-4">

@@ -135,7 +135,7 @@ export function SettingsClient() {
       <Header username={username} />
 
       {/* Main Content */}
-      <main className="flex-1 px-4 sm:px-5 pb-20 sm:pb-24 py-4 sm:py-5 overflow-x-hidden">
+      <main className="flex-1 px-4 sm:px-5 pb-bottom-nav py-4 sm:py-5 overflow-x-hidden">
         {/* Back Button */}
         <button
           onClick={handleBack}
