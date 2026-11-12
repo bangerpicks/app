@@ -4,10 +4,10 @@
  */
 
 /** Max fixtures per batch when the first batch also creates cache + gameweek playerCount. */
-export const JOIN_BATCH_MAX_FIXTURES = 2
+export const JOIN_BATCH_MAX_FIXTURES = 1
 
 /** Max fixtures per follow-up batch (cache update only, no gameweek join). */
-export const FOLLOW_UP_BATCH_MAX_FIXTURES = 3
+export const FOLLOW_UP_BATCH_MAX_FIXTURES = 2
 
 /**
  * @param {number[]} fixtureIds - fixtures to write, in save order

@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.7 — 2026-11-12
+
+### P0: first gameweek join save (rules eval order + chunking)
+
+- Firestore allow rules: evaluate player save path before `isAdmin()` so boolean `||` short-circuits and does not burn exists/get budget on every write in a batch (per-op 10, batch 20 caps).
+- Client `savePredictions`: join batch max 1 fixture; follow-up batches max 2.
+- App version label 1.1.7.
+
 ## 1.1.6 — 2026-11-12
 
 ### Dashboard polish (i18n, match cards, hosting)
