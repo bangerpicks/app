@@ -28,6 +28,30 @@ export interface MatchVenue {
   city: string
 }
 
+export interface MarketOddsDecimal {
+  home: number
+  draw: number
+  away: number
+}
+
+export interface MarketImpliedPercents {
+  home: number
+  draw: number
+  away: number
+}
+
+/** Pre-match 1X2 snapshot persisted on gameweek fixture docs. */
+export interface MarketOddsSnapshot {
+  source: 'api-football'
+  betId: 1
+  bookmakerId: number
+  bookmakerName: string
+  decimalOdds: MarketOddsDecimal
+  impliedPercents: MarketImpliedPercents
+  overround: number
+  apiUpdatedAt?: string
+}
+
 export interface MatchCardData {
   fixtureId: number
   league: {
@@ -52,6 +76,7 @@ export interface MatchCardData {
   whyItMatters_esMX?: string
   officialPick?: Prediction
   officialConfidence?: OfficialConfidence
+  marketOdds?: MarketOddsSnapshot
 }
 
 export type RankingView = 'all-time' | 'this-week' | 'past-weeks'

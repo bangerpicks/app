@@ -55,35 +55,6 @@ export function formatMatchVenue(
   return name || city || undefined
 }
 
-const CONFIDENCE_WIN_SPLITS: Record<
-  OfficialConfidence,
-  { primary: number; secondary: number; draw: number }
-> = {
-  Strong: { primary: 65, secondary: 22, draw: 13 },
-  Lean: { primary: 55, secondary: 28, draw: 17 },
-  'Toss-up': { primary: 40, secondary: 30, draw: 30 },
-}
-
-/** Implied win % for the Gaffer bar when an official pick is set (not stored in Firestore). */
-export function deriveGafferWinProbabilities(
-  pick: Prediction | undefined,
-  confidence: OfficialConfidence | undefined
-): GafferWinProbabilities | undefined {
-  if (!pick) return undefined
-  const split = CONFIDENCE_WIN_SPLITS[confidence ?? 'Lean']
-  if (pick === 'H') {
-    return { home: split.primary, draw: split.draw, away: split.secondary }
-  }
-  if (pick === 'A') {
-    return { home: split.secondary, draw: split.draw, away: split.primary }
-  }
-  return {
-    home: split.secondary,
-    draw: split.primary,
-    away: split.secondary,
-  }
-}
-
 export function venueFromApiFootball(
   venue: { name?: string | null; city?: string | null } | undefined
 ): MatchVenue | undefined {

@@ -86,31 +86,13 @@ test('formatMatchVenue handles partial venue', () => {
   assert.equal(formatMatchVenue({ name: '', city: 'London' }), 'London')
 })
 
-const CONFIDENCE_WIN_SPLITS = {
-  Strong: { primary: 65, secondary: 22, draw: 13 },
-  Lean: { primary: 55, secondary: 28, draw: 17 },
-  'Toss-up': { primary: 40, secondary: 30, draw: 30 },
+function officialPickTranslationKey(pick) {
+  const map = { H: 'home', D: 'draw', A: 'away' }
+  return map[pick]
 }
 
-function deriveGafferWinProbabilities(pick, confidence) {
-  if (!pick) return undefined
-  const split = CONFIDENCE_WIN_SPLITS[confidence ?? 'Lean']
-  if (pick === 'H') {
-    return { home: split.primary, draw: split.draw, away: split.secondary }
-  }
-  if (pick === 'A') {
-    return { home: split.secondary, draw: split.draw, away: split.primary }
-  }
-  return {
-    home: split.secondary,
-    draw: split.primary,
-    away: split.secondary,
-  }
-}
-
-test('deriveGafferWinProbabilities matches Strong away pick mock', () => {
-  const p = deriveGafferWinProbabilities('A', 'Strong')
-  assert.equal(p.home, 22)
-  assert.equal(p.away, 65)
-  assert.equal(p.draw, 13)
+test('officialPickTranslationKey maps prediction codes', () => {
+  assert.equal(officialPickTranslationKey('H'), 'home')
+  assert.equal(officialPickTranslationKey('D'), 'draw')
+  assert.equal(officialPickTranslationKey('A'), 'away')
 })
