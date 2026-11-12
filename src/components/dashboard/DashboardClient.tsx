@@ -13,11 +13,11 @@ import {
   savePendingPicksToSession,
   setSaveAfterSignInIntent,
 } from '@/lib/pending-picks-storage'
-import { Header } from './Header'
+import { AppShell } from './AppShell'
 import { IntroSection } from './IntroSection'
 import { GameweekCard } from './GameweekCard'
+import { GameweekHowItWorks } from './GameweekHowItWorks'
 import { MatchCard } from './MatchCard'
-import { BottomNavigation } from './BottomNavigation'
 import { SignInModal } from './SignInModal'
 import { GameweekData, MatchCardData, Prediction } from '@/types/dashboard'
 import { GafferDisplayPrefsProvider } from '@/lib/gaffer-display-prefs'
@@ -305,73 +305,107 @@ export function DashboardClient({
     return t('noChangesToSave')
   }
 
+  const saveBlock = !isDisabled && matches.length > 0 && (
+    <div className="w-full flex flex-col gap-3 max-w-md lg:max-w-none">
+      {saveError && (
+        <div className="bg-cinnabar/20 border border-cinnabar/40 rounded-lg px-4 py-3 text-cinnabar text-sm">
+          {saveError}
+        </div>
+      )}
+
+      {saveSuccess && (
+        <div className="bg-lime-yellow/20 border border-lime-yellow/40 rounded-lg px-4 py-3 text-lime-yellow text-sm">
+          {t('savedSuccessfully')}
+        </div>
+      )}
+
+      {!allPicksMade && (
+        <p className="text-center text-sm text-amber-glow lg:text-left">
+          {t('picksRemainingToSave', { count: missingPickCount })}
+        </p>
+      )}
+
+      {!user && allPicksMade && (
+        <p className="text-center text-sm text-ivory/80 lg:text-left">{t('guestSaveHint')}</p>
+      )}
+
+      <button
+        type="button"
+        onClick={user ? handleSubmit : handleGuestSave}
+        disabled={user ? !canSaveSignedIn : !canSaveGuest}
+        className="w-full bg-lime-yellow text-midnight-violet py-3 px-4 rounded-lg font-semibold hover:bg-lime-yellow/90 active:bg-lime-yellow/80 disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px] transition-colors"
+      >
+        {saveButtonLabel()}
+      </button>
+    </div>
+  )
+
+  const matchList = (
+  <>
+    {fixturesPending && (
+      <p className="text-ivory/80 text-sm text-center py-6">{t('fixturesLoading')}</p>
+    )}
+    {matches.map((match) => (
+      <MatchCard
+        key={match.fixtureId}
+        match={match}
+        userPrediction={getDisplayPrediction(match.fixtureId)}
+        onPredictionSelect={handlePredictionSelect}
+        disabled={isDisabled || isSaving}
+        crowdPickStats={crowdStatsByFixture.get(match.fixtureId)}
+        crowdPickPercents={crowdPercentsByFixture.get(match.fixtureId)}
+        crowdPickCount={playerCountByFixture.get(match.fixtureId) ?? 0}
+      />
+    ))}
+  </>
+  )
+
   return (
-    <div ref={containerRef} className="min-h-[100dvh] min-h-screen bg-midnight-violet flex flex-col">
-      <Header username={username} />
+    <AppShell
+      containerRef={containerRef}
+      username={username}
+      mainClassName="flex-1 px-4 sm:px-5 py-2.5 pb-bottom-nav flex flex-col items-center gap-5 overflow-x-hidden"
+      footer={<SignInModal isOpen={isSignInOpen} onClose={() => setIsSignInOpen(false)} />}
+    >
+      <div className="w-full max-w-6xl mx-auto flex flex-col items-center gap-5 lg:gap-6">
+        <div className="w-full lg:hidden">
+          <IntroSection />
+        </div>
 
-      <main className="flex-1 px-4 sm:px-5 py-2.5 pb-bottom-nav flex flex-col items-center gap-5 overflow-x-hidden">
-        <IntroSection />
+        <div className="w-full flex flex-col items-center gap-5 lg:hidden">
+          <GameweekCard
+            gameweek={gameweek}
+            playerCount={playerCount}
+            hasAnyPicks={hasAnyPicks}
+          />
 
-        <GameweekCard gameweek={gameweek} playerCount={playerCount} hasAnyPicks={hasAnyPicks} />
+          {gameweek.status === 'OPEN' ? (
+            <div className="w-full max-w-md">
+              <GameweekHowItWorks />
+            </div>
+          ) : null}
+        </div>
 
         <GafferDisplayPrefsProvider>
-          <div className="w-full flex flex-col gap-5">
-            {fixturesPending && (
-              <p className="text-ivory/80 text-sm text-center py-6">{t('fixturesLoading')}</p>
-            )}
-            {matches.map((match) => (
-              <MatchCard
-                key={match.fixtureId}
-                match={match}
-                userPrediction={getDisplayPrediction(match.fixtureId)}
-                onPredictionSelect={handlePredictionSelect}
-                disabled={isDisabled || isSaving}
-                crowdPickStats={crowdStatsByFixture.get(match.fixtureId)}
-                crowdPickPercents={crowdPercentsByFixture.get(match.fixtureId)}
-                crowdPickCount={playerCountByFixture.get(match.fixtureId) ?? 0}
+          <div className="w-full lg:grid lg:grid-cols-[minmax(0,1fr)_20rem] lg:gap-6 lg:items-start">
+            <div className="flex flex-col gap-5 w-full min-w-0">{matchList}</div>
+
+            <aside className="hidden lg:flex flex-col gap-5 lg:sticky lg:top-[calc(var(--header-height)+1rem)] lg:self-start w-full">
+              <GameweekCard
+                gameweek={gameweek}
+                playerCount={playerCount}
+                hasAnyPicks={hasAnyPicks}
               />
-            ))}
+
+              {gameweek.status === 'OPEN' ? <GameweekHowItWorks /> : null}
+
+              {saveBlock}
+            </aside>
           </div>
         </GafferDisplayPrefsProvider>
 
-        {!isDisabled && matches.length > 0 && (
-          <div className="w-full flex flex-col gap-3 max-w-md">
-            {saveError && (
-              <div className="bg-cinnabar/20 border border-cinnabar/40 rounded-lg px-4 py-3 text-cinnabar text-sm">
-                {saveError}
-              </div>
-            )}
-
-            {saveSuccess && (
-              <div className="bg-lime-yellow/20 border border-lime-yellow/40 rounded-lg px-4 py-3 text-lime-yellow text-sm">
-                {t('savedSuccessfully')}
-              </div>
-            )}
-
-            {!allPicksMade && (
-              <p className="text-center text-sm text-amber-glow">
-                {t('picksRemainingToSave', { count: missingPickCount })}
-              </p>
-            )}
-
-            {!user && allPicksMade && (
-              <p className="text-center text-sm text-ivory/80">{t('guestSaveHint')}</p>
-            )}
-
-            <button
-              type="button"
-              onClick={user ? handleSubmit : handleGuestSave}
-              disabled={user ? !canSaveSignedIn : !canSaveGuest}
-              className="w-full bg-lime-yellow text-midnight-violet py-3 px-4 rounded-lg font-semibold hover:bg-lime-yellow/90 active:bg-lime-yellow/80 disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px] transition-colors"
-            >
-              {saveButtonLabel()}
-            </button>
-          </div>
-        )}
-      </main>
-
-      <BottomNavigation />
-      <SignInModal isOpen={isSignInOpen} onClose={() => setIsSignInOpen(false)} />
-    </div>
+        <div className="w-full lg:hidden">{saveBlock}</div>
+      </div>
+    </AppShell>
   )
 }

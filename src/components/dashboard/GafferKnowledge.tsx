@@ -13,6 +13,7 @@ import {
 } from '@/lib/market-odds'
 import { crowdStatsToPercents, type CrowdPickStats } from '@/lib/crowd-picks'
 import type { MarketOddsSnapshot } from '@/types/dashboard'
+import { FlatCapIcon } from '@/components/icons/FlatCapIcon'
 
 interface GafferKnowledgeProps {
   whyText?: string
@@ -59,14 +60,18 @@ function PickDistributionSection({
 
   return (
     <div className="flex flex-col gap-1.5">
-      <p
-        className={`text-[8px] sm:text-[9px] font-semibold uppercase tracking-wide text-center ${titleClassName}`}
-      >
-        {title}
-      </p>
-      {subtitle ? (
-        <p className="text-[8px] text-ivory/45 text-center -mt-0.5">{subtitle}</p>
-      ) : null}
+      <div className="flex items-baseline justify-between gap-2">
+        <p
+          className={`text-[8px] sm:text-[9px] font-semibold uppercase tracking-wide shrink-0 ${titleClassName}`}
+        >
+          {title}
+        </p>
+        {subtitle ? (
+          <p className="text-[8px] text-ivory/45 text-right min-w-0 truncate">
+            {subtitle}
+          </p>
+        ) : null}
+      </div>
       <div className="grid grid-cols-3 items-center gap-1 text-[9px] sm:text-[10px] font-semibold uppercase">
         <span className="text-lime-yellow text-left">
           {homeLabel} ({probs.home}%)
@@ -89,6 +94,17 @@ const hideBtnClass =
 const showBtnClass =
   'text-[9px] font-semibold uppercase tracking-wide text-lime-yellow/80 hover:text-lime-yellow transition-colors shrink-0'
 
+function shouldShowMatchContentOnLoad(
+  hasContext: boolean,
+  showOddsDisclosure: boolean,
+  knowledgeOpenOnLoad: boolean,
+  pickOpenOnLoad: boolean
+): boolean {
+  if (hasContext && knowledgeOpenOnLoad) return true
+  if (showOddsDisclosure && pickOpenOnLoad) return true
+  return false
+}
+
 export function GafferKnowledge({
   whyText,
   marketOdds,
@@ -106,130 +122,118 @@ export function GafferKnowledge({
   const showCrowd = Boolean(crowdPickStats && crowdPickCount > 0)
   const showOddsDisclosure = showMarketBar || showCrowd
 
+  const hasContext = Boolean(whyText)
+
   const { prefs, ready } = useGafferDisplayPrefs()
-  const [contextHidden, setContextHidden] = useState(
-    () => !readGafferDisplayPrefsFromStorage().knowledgeOpenOnLoad
-  )
-  const [oddsDisclosureHidden, setOddsDisclosureHidden] = useState(
-    () => !readGafferDisplayPrefsFromStorage().pickOpenOnLoad
-  )
+  const [contentHidden, setContentHidden] = useState(() => {
+    const stored = readGafferDisplayPrefsFromStorage()
+    return !shouldShowMatchContentOnLoad(
+      Boolean(whyText),
+      showOddsDisclosure,
+      stored.knowledgeOpenOnLoad,
+      stored.pickOpenOnLoad
+    )
+  })
   const [defaultsApplied, setDefaultsApplied] = useState(false)
 
   useEffect(() => {
     if (!ready || defaultsApplied) return
-    setContextHidden(!prefs.knowledgeOpenOnLoad)
-    setOddsDisclosureHidden(!prefs.pickOpenOnLoad)
+    setContentHidden(
+      !shouldShowMatchContentOnLoad(
+        hasContext,
+        showOddsDisclosure,
+        prefs.knowledgeOpenOnLoad,
+        prefs.pickOpenOnLoad
+      )
+    )
     setDefaultsApplied(true)
-  }, [ready, prefs, defaultsApplied])
+  }, [ready, prefs, defaultsApplied, hasContext, showOddsDisclosure])
 
-  const hasContext = Boolean(whyText)
-  const contextVisible = hasContext && !contextHidden
-  const oddsDisclosureOpen = showOddsDisclosure && !oddsDisclosureHidden
+  const contentOpen = !contentHidden
 
   if (!hasContext && !showOddsDisclosure) {
     return null
   }
 
-  const ariaLabel = hasContext
-    ? t('matchContextAria')
-    : showOddsDisclosure
-      ? t('oddsAndCrowdPicksAria')
-      : undefined
+  const ariaLabel =
+    hasContext && showOddsDisclosure
+      ? t('matchContentAria')
+      : hasContext
+        ? t('matchContextAria')
+        : showOddsDisclosure
+          ? t('oddsAndCrowdPicksAria')
+          : undefined
 
   return (
     <div
       className="rounded-lg border border-ivory/20 bg-[#321045] px-2.5 py-2"
       aria-label={ariaLabel}
     >
-      {hasContext ? (
+      <div className="flex items-center justify-between gap-2 mb-1.5 min-h-[14px]">
+        <div className="flex items-center gap-1.5 shrink-0 text-ivory/80">
+          <FlatCapIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+          <p className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wide">
+            {t('gafferLabel')}
+          </p>
+        </div>
+        {contentOpen ? (
+          <button
+            type="button"
+            className={hideBtnClass}
+            onClick={() => setContentHidden(true)}
+          >
+            {t('matchContentHide')}
+          </button>
+        ) : (
+          <button
+            type="button"
+            className={showBtnClass}
+            onClick={() => setContentHidden(false)}
+          >
+            {t('matchContentShow')}
+          </button>
+        )}
+      </div>
+
+      {contentOpen ? (
         <>
-          <div className="flex items-center justify-between gap-2 mb-1.5 min-h-[14px]">
-            <p className="text-[9px] font-semibold uppercase tracking-wider text-ivory/55 leading-none truncate">
-              {t('matchContextTitle')}
-            </p>
-            <div className="flex items-center gap-2 shrink-0">
-              {contextVisible ? (
-                <button
-                  type="button"
-                  className={hideBtnClass}
-                  onClick={() => setContextHidden(true)}
-                >
-                  {t('matchContextHide')}
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  className={showBtnClass}
-                  onClick={() => setContextHidden(false)}
-                >
-                  {t('matchContextShow')}
-                </button>
-              )}
-            </div>
-          </div>
-          {contextVisible ? (
-            <p className="text-xs text-ivory leading-snug line-clamp-2 mb-2">
+          {hasContext ? (
+            <p className="text-xs text-ivory/85 leading-snug line-clamp-4 mb-2">
               {whyText}
             </p>
           ) : null}
-        </>
-      ) : null}
 
-      {showOddsDisclosure ? (
-        <div
-          className={
-            hasContext && contextVisible
-              ? 'mt-2 pt-2 border-t border-ivory/10'
-              : hasContext
-                ? 'mt-1'
-                : ''
-          }
-        >
-          <div className="flex items-center justify-end gap-2 mb-1.5 min-h-[14px]">
-            {oddsDisclosureOpen ? (
-              <button
-                type="button"
-                className={hideBtnClass}
-                onClick={() => setOddsDisclosureHidden(true)}
-              >
-                {t('marketOddsHide')}
-              </button>
-            ) : (
-              <button
-                type="button"
-                className={showBtnClass}
-                onClick={() => setOddsDisclosureHidden(false)}
-              >
-                {t('marketOddsShow')}
-              </button>
-            )}
-          </div>
+          {showOddsDisclosure ? (
+            <div
+              className={
+                hasContext ? 'mt-2 pt-2 border-t border-ivory/10' : ''
+              }
+            >
+              <div className="flex flex-col gap-2.5">
+                {showMarketBar && marketSnapshot && marketPercents ? (
+                  <PickDistributionSection
+                    title={t('marketOddsTitle')}
+                    titleClassName="text-ivory/80"
+                    probs={marketPercents}
+                    subtitle={t('marketOddsBookmaker', {
+                      bookmaker: marketSnapshot.bookmakerName,
+                    })}
+                    decimalOdds={marketSnapshot.decimalOdds}
+                  />
+                ) : null}
 
-          {oddsDisclosureOpen ? (
-            <div className="flex flex-col gap-2.5">
-              {showMarketBar && marketSnapshot && marketPercents ? (
-                <PickDistributionSection
-                  title={t('marketOddsTitle')}
-                  titleClassName="text-ivory/80"
-                  probs={marketPercents}
-                  subtitle={t('marketOddsBookmaker', {
-                    bookmaker: marketSnapshot.bookmakerName,
-                  })}
-                  decimalOdds={marketSnapshot.decimalOdds}
-                />
-              ) : null}
-
-              {showCrowd && crowdPickStats ? (
-                <CrowdPickSection
-                  showMarketBar={showMarketBar}
-                  crowdPickStats={crowdPickStats}
-                  crowdPickPercents={crowdPickPercents}
-                  crowdPickCount={crowdPickCount}
-                />
-              ) : null}
+                {showCrowd && crowdPickStats ? (
+                  <CrowdPickSection
+                    showMarketBar={showMarketBar}
+                    crowdPickStats={crowdPickStats}
+                    crowdPickPercents={crowdPickPercents}
+                    crowdPickCount={crowdPickCount}
+                  />
+                ) : null}
+              </div>
             </div>
           ) : null}
-        </div>
+        </>
       ) : null}
     </div>
   )
@@ -257,12 +261,14 @@ function CrowdPickSection({
   return (
     <div className={showMarketBar ? 'pt-2.5 border-t border-ivory/10' : ''}>
       <div className="flex flex-col gap-1.5">
-        <p className="text-[8px] sm:text-[9px] font-semibold uppercase tracking-wide text-center text-ivory/70">
-          {t('crowdPicksTitle')}
-        </p>
-        <p className="text-[8px] text-ivory/45 text-center -mt-0.5">
-          {t('crowdPicksSubtitle', { count: crowdPickCount })}
-        </p>
+        <div className="flex items-baseline justify-between gap-2">
+          <p className="text-[8px] sm:text-[9px] font-semibold uppercase tracking-wide shrink-0 text-ivory/70">
+            {t('crowdPicksTitle')}
+          </p>
+          <p className="text-[8px] text-ivory/45 text-right min-w-0 truncate">
+            {t('crowdPicksSubtitle', { count: crowdPickCount })}
+          </p>
+        </div>
         <div className="grid grid-cols-3 items-center gap-1 text-[9px] sm:text-[10px] font-semibold uppercase">
           <span className="text-lime-yellow text-left">
             {t('home')} {crowdPickStats.home}

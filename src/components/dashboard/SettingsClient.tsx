@@ -3,8 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
-import { Header } from './Header'
-import { BottomNavigation } from './BottomNavigation'
+import { AppShell } from './AppShell'
 import { useAuth } from '@/lib/AuthProvider'
 import { useLanguage } from '@/lib/LanguageProvider'
 import { getUserLanguage } from '@/lib/users'
@@ -126,16 +125,14 @@ export function SettingsClient() {
   }
 
   const handleBack = () => {
-    router.push('/profile')
+    router.push('/profile/')
   }
 
   return (
-    <div className="min-h-[100dvh] min-h-screen bg-midnight-violet flex flex-col">
-      {/* Header */}
-      <Header username={username} />
-
-      {/* Main Content */}
-      <main className="flex-1 px-4 sm:px-5 pb-bottom-nav py-4 sm:py-5 overflow-x-hidden">
+    <AppShell
+      username={username}
+      mainClassName="flex-1 px-4 sm:px-5 pb-bottom-nav py-4 sm:py-5 overflow-x-hidden"
+    >
         {/* Back Button */}
         <button
           onClick={handleBack}
@@ -299,10 +296,6 @@ export function SettingsClient() {
             )}
           </div>
         </div>
-      </main>
-
-      {/* Bottom Navigation */}
-      <BottomNavigation />
-    </div>
+    </AppShell>
   )
 }

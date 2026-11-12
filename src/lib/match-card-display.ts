@@ -67,17 +67,32 @@ function englishOrdinalSuffix(num: number): string {
   }
 }
 
+export type LeagueRankParts = {
+  rank: number
+  suffix: string
+}
+
+/** Rank + ordinal/suffix parts for styled rendering (e.g. smaller st/nd). */
+export function formatLeagueRankParts(
+  position: number | null | undefined,
+  locale: Locale
+): LeagueRankParts | null {
+  if (!isDisplayableLeagueRank(position)) return null
+  const rank = Math.trunc(position)
+  if (locale === 'es-MX') {
+    return { rank, suffix: '.º' }
+  }
+  return { rank, suffix: englishOrdinalSuffix(rank) }
+}
+
 /** Player-facing league rank label; Spanish uses superscript º, not English ordinals. */
 export function formatLeagueRankLabel(
   position: number | null | undefined,
   locale: Locale
 ): string | null {
-  if (!isDisplayableLeagueRank(position)) return null
-  const n = Math.trunc(position)
-  if (locale === 'es-MX') {
-    return `${n}.º`
-  }
-  return `${n}${englishOrdinalSuffix(n)}`
+  const parts = formatLeagueRankParts(position, locale)
+  if (!parts) return null
+  return `${parts.rank}${parts.suffix}`
 }
 
 export function shouldShowLeaguePositionRow(

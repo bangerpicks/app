@@ -7,8 +7,7 @@ import { useTranslations } from 'next-intl'
 import { User } from 'firebase/auth'
 import { signOut } from 'firebase/auth'
 import { auth } from '@/lib/firebase'
-import { Header } from './Header'
-import { BottomNavigation } from './BottomNavigation'
+import { AppShell } from './AppShell'
 import { UserDocument } from '@/lib/users'
 import { useIsAdmin } from '@/lib/useIsAdmin'
 import { User as UserIcon, Trophy, Target, Coins, LogOut, Settings, Shield } from 'lucide-react'
@@ -38,11 +37,11 @@ export function ProfileClient({ user, userData }: ProfileClientProps) {
   }
 
   const handleSettingsClick = () => {
-    router.push('/settings')
+    router.push('/settings/')
   }
 
   const handleAdminClick = () => {
-    router.push('/admin')
+    router.push('/admin/')
   }
 
   const displayName = userData.displayName || user.displayName || 'Player'
@@ -54,12 +53,11 @@ export function ProfileClient({ user, userData }: ProfileClientProps) {
   const accuracy = userData.accuracy || (totalPredictions > 0 ? Math.round((correctPredictions / totalPredictions) * 100) : 0)
 
   return (
-    <div className="min-h-[100dvh] min-h-screen bg-midnight-violet flex flex-col">
-      {/* Header */}
-      <Header username={displayName} userPhotoUrl={photoURL || undefined} />
-
-      {/* Main Content */}
-      <main className="flex flex-1 flex-col px-4 sm:px-5 pb-bottom-nav py-4 sm:py-5 overflow-x-hidden">
+    <AppShell
+      username={displayName}
+      userPhotoUrl={photoURL || undefined}
+      mainClassName="flex flex-1 flex-col px-4 sm:px-5 pb-bottom-nav py-4 sm:py-5 overflow-x-hidden"
+    >
         {/* Profile Header Section */}
         <div className="w-full flex flex-col items-center gap-4 mb-6">
           {/* Profile Picture */}
@@ -205,10 +203,6 @@ export function ProfileClient({ user, userData }: ProfileClientProps) {
             date: process.env.NEXT_PUBLIC_BUILD_DATE || 'unknown',
           })}
         </p>
-      </main>
-
-      {/* Bottom Navigation */}
-      <BottomNavigation />
-    </div>
+    </AppShell>
   )
 }

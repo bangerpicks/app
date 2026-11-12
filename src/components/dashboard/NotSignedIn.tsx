@@ -2,8 +2,7 @@
 
 import { useState } from 'react'
 import { useTranslations } from 'next-intl'
-import { Header } from './Header'
-import { BottomNavigation } from './BottomNavigation'
+import { AppShell } from './AppShell'
 import { SignInModal } from './SignInModal'
 import { Lock } from 'lucide-react'
 
@@ -12,13 +11,11 @@ export function NotSignedIn() {
   const [isModalOpen, setIsModalOpen] = useState(false)
 
   return (
-    <div className="min-h-[100dvh] min-h-screen bg-midnight-violet flex flex-col">
-      {/* Header */}
-      <Header />
-
-      {/* Main Content */}
-      <main className="flex-1 px-4 sm:px-5 pb-bottom-nav flex flex-col items-center justify-center overflow-x-hidden">
-        <div className="w-full max-w-md flex flex-col items-center gap-6 text-center">
+    <AppShell
+      mainClassName="flex-1 px-4 sm:px-5 pb-bottom-nav flex flex-col items-center justify-center overflow-x-hidden"
+      footer={<SignInModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />}
+    >
+      <div className="w-full max-w-md flex flex-col items-center gap-6 text-center">
           {/* Icon */}
           <div className="w-20 h-20 rounded-full bg-ivory/10 flex items-center justify-center">
             <Lock className="w-10 h-10 text-lime-yellow" />
@@ -41,14 +38,7 @@ export function NotSignedIn() {
           >
             {t('signIn')}
           </button>
-        </div>
-      </main>
-
-      {/* Bottom Navigation */}
-      <BottomNavigation />
-
-      {/* Sign In Modal */}
-      <SignInModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
-    </div>
+      </div>
+    </AppShell>
   )
 }

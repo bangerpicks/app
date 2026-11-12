@@ -3,8 +3,9 @@
 import { useTranslations } from 'next-intl'
 import { useLanguage } from '@/lib/LanguageProvider'
 import {
-  formatLeagueRankLabel,
+  formatLeagueRankParts,
   shouldShowLeaguePositionRow,
+  type LeagueRankParts,
 } from '@/lib/match-card-display'
 
 interface MatchStatsProps {
@@ -23,8 +24,8 @@ export function MatchStats({
   const t = useTranslations('dashboard')
   const { locale } = useLanguage()
 
-  const homeLabel = formatLeagueRankLabel(homePosition, locale)
-  const awayLabel = formatLeagueRankLabel(awayPosition, locale)
+  const homeParts = formatLeagueRankParts(homePosition, locale)
+  const awayParts = formatLeagueRankParts(awayPosition, locale)
   const showLeagueRow = shouldShowLeaguePositionRow(homePosition, awayPosition)
 
   return (
@@ -59,20 +60,31 @@ export function MatchStats({
 
       {showLeagueRow ? (
         <div className="flex flex-col items-center gap-1.5">
-          <span className="text-xs font-semibold text-white/70 uppercase tracking-wider text-center">
+          <span className="text-[10px] font-semibold text-white/70 uppercase tracking-wider text-center">
             {t('leaguePosition')}
           </span>
           <div className="flex items-baseline gap-4">
-            <span className="text-base font-semibold text-white">
-              {homeLabel ?? '—'}
-            </span>
+            <LeagueRankText parts={homeParts} />
             <span className="text-sm text-white/50">|</span>
-            <span className="text-base font-semibold text-white">
-              {awayLabel ?? '—'}
-            </span>
+            <LeagueRankText parts={awayParts} />
           </div>
         </div>
       ) : null}
     </div>
+  )
+}
+
+function LeagueRankText({ parts }: { parts: LeagueRankParts | null }) {
+  if (!parts) {
+    return <span className="text-base font-semibold text-white">—</span>
+  }
+
+  return (
+    <span className="text-base font-semibold text-white">
+      {parts.rank}
+      <span className="ml-px text-[0.65em] font-semibold align-super leading-none">
+        {parts.suffix}
+      </span>
+    </span>
   )
 }

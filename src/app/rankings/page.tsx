@@ -122,7 +122,6 @@ export default function RankingsPage() {
           setWeeklyRankings(undefined)
           setGameweekData(undefined)
           setSelectedGameweekId(null)
-          setWeeklyLoading(false)
           return
         }
 
@@ -139,7 +138,6 @@ export default function RankingsPage() {
           setWeeklyRankings(undefined)
           setGameweekData(undefined)
           setSelectedGameweekId(null)
-          setWeeklyLoading(false)
           return
         }
 
@@ -160,13 +158,9 @@ export default function RankingsPage() {
         setGameweekData(transformedData)
         setWeeklyRankings(rankings)
         setSelectedGameweekId(currentGameweek.gameweekId)
-        setWeeklyLoading(false)
       } catch (error) {
         if (abortController.signal.aborted) return
         console.error('Error fetching rankings:', error)
-        // Ensure loading states are cleared on error
-        setRankingsLoading(false)
-        setWeeklyLoading(false)
         // Only set error if we don't have all-time rankings loaded
         if (allTimeRankingsResult.length === 0) {
           setRankingsError('Failed to load rankings. Please try again later.')
@@ -178,6 +172,11 @@ export default function RankingsPage() {
         setWeeklyRankings(undefined)
         setGameweekData(undefined)
         setSelectedGameweekId(null)
+      } finally {
+        if (!abortController.signal.aborted) {
+          setRankingsLoading(false)
+          setWeeklyLoading(false)
+        }
       }
     }
 
@@ -204,19 +203,24 @@ export default function RankingsPage() {
 
   // Lazy-load past week when user selects a different gameweek
   useEffect(() => {
-    if (!user || !selectedGameweekId || selectedGameweekId === currentGameweekId) return
+    if (!user || !selectedGameweekId || selectedGameweekId === currentGameweekId) {
+      setWeeklyLoading(false)
+      return
+    }
     const abortController = new AbortController()
     setWeeklyLoading(true)
     setWeeklyError(null)
     const loadPastWeek = async () => {
       try {
         const gameweek = await getGameweekById(selectedGameweekId)
-        if (abortController.signal.aborted || !gameweek) {
+        if (abortController.signal.aborted) return
+        if (!gameweek) {
           setWeeklyLoading(false)
           return
         }
         const fixtures = await getGameweekFixtureDetails(selectedGameweekId)
-        if (abortController.signal.aborted || fixtures.length === 0) {
+        if (abortController.signal.aborted) return
+        if (fixtures.length === 0) {
           setWeeklyRankings(undefined)
           setGameweekData(undefined)
           setWeeklyLoading(false)

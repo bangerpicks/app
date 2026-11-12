@@ -5,7 +5,6 @@ import { useTranslations } from 'next-intl'
 import { GameweekData } from '@/types/dashboard'
 import { useCountdown } from '@/hooks/useCountdown'
 import { useMemo } from 'react'
-import { GameweekHowItWorks } from './GameweekHowItWorks'
 
 interface GameweekCardProps {
   gameweek: GameweekData
@@ -149,8 +148,6 @@ export function GameweekCard({ gameweek, playerCount, hasAnyPicks = false }: Gam
         <p className="text-center text-sm text-ivory/80 italic">
           {noteMessage}
         </p>
-
-        {isOpen ? <GameweekHowItWorks /> : null}
       </div>
     </div>
   )

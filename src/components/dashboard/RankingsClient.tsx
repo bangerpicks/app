@@ -2,8 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useTranslations } from 'next-intl'
-import { Header } from './Header'
-import { BottomNavigation } from './BottomNavigation'
+import { AppShell } from './AppShell'
 import { RankingsTable } from './RankingsTable'
 import { ReferralPopup } from './ReferralPopup'
 import { RankingEntry, RankingView, GameweekRankingData, PastGameweekOption } from '@/types/dashboard'
@@ -223,17 +222,14 @@ export function RankingsClient({
   // Next.js manages scroll restoration internally
 
   return (
-    <div ref={containerRef} className="min-h-[100dvh] min-h-screen bg-midnight-violet flex flex-col">
-      {/* Header */}
-      <Header username={username} />
-
-      {/* Referral Popup */}
-      <ReferralPopup />
-
-      {/* Main Content */}
-      <main className={`flex-1 px-4 sm:px-5 pb-bottom-nav flex flex-col items-center overflow-x-hidden ${
+    <AppShell
+      containerRef={containerRef}
+      username={username}
+      banner={<ReferralPopup />}
+      mainClassName={`flex-1 px-4 sm:px-5 pb-bottom-nav flex flex-col items-center overflow-x-hidden ${
         activeView === 'this-week' ? 'py-2 gap-2' : 'py-2.5 gap-5'
-      }`}>
+      }`}
+    >
         {/* Title Section - Only show for All Time view */}
         {!isWeeklyView && (
           <div className="w-full flex flex-col items-center gap-2 mt-4">
@@ -251,7 +247,9 @@ export function RankingsClient({
         )}
 
         {/* View Toggle Buttons */}
-        <div className={`w-full max-w-2xl flex gap-2 sm:gap-3 ${isWeeklyView ? 'mt-2' : ''}`}>
+        <div
+          className={`w-full max-w-2xl lg:max-w-4xl flex gap-2 sm:gap-3 ${isWeeklyView ? 'mt-2' : ''}`}
+        >
           <button
             onClick={() => setActiveView('all-time')}
             className={`flex-1 py-3 px-3 sm:px-4 rounded-lg font-semibold text-xs sm:text-sm transition-colors ${
@@ -293,7 +291,7 @@ export function RankingsClient({
         {/* Gameweek Banner and Table (This Week / Past Weeks view) */}
         {isWeeklyView &&
         ((weeklyRankings || weeklyLoading) && (gameweekData || weeklyLoading) || (activeView === 'past-weeks' && completedGameweeks.length > 0)) ? (
-          <div className="w-full max-w-2xl">
+          <div className="w-full max-w-2xl lg:max-w-4xl">
             {/* Week selector: This week + past weeks */}
             {showWeekSelector && (
               <div className="w-full mb-2">
@@ -374,7 +372,7 @@ export function RankingsClient({
           </div>
         ) : (
           // Card view for all-time rankings
-          <div className="w-full flex flex-col gap-3 max-w-2xl">
+          <div className="w-full flex flex-col gap-3 max-w-2xl lg:max-w-4xl">
             {currentRankings.length === 0 ? (
               <div className="text-center py-12">
                 <p className="text-ivory/70 text-lg">
@@ -396,10 +394,6 @@ export function RankingsClient({
             )}
           </div>
         )}
-      </main>
-
-      {/* Bottom Navigation */}
-      <BottomNavigation />
-    </div>
+    </AppShell>
   )
 }

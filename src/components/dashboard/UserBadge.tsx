@@ -15,7 +15,7 @@ export function UserBadge({ username }: UserBadgeProps) {
   if (username) {
     return (
       <Link
-        href="/profile"
+        href="/profile/"
         className="bg-lime-yellow text-midnight-violet rounded-[10px] px-2.5 h-[25px] flex items-center justify-center hover:opacity-90 cursor-pointer"
       >
         <span className="text-sm font-bold leading-normal tracking-[0.28px] text-right">

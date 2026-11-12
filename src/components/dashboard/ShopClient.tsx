@@ -3,8 +3,7 @@
 import { useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { useAuth } from '@/lib/AuthProvider'
-import { Header } from './Header'
-import { BottomNavigation } from './BottomNavigation'
+import { AppShell } from './AppShell'
 import { ShopItem } from './ShopItem'
 import { ReferralPopup } from './ReferralPopup'
 import { RedemptionActionModal } from './RedemptionActionModal'
@@ -150,15 +149,11 @@ export function ShopClient({ items, userPoints, username }: ShopClientProps) {
   const activeItems = items.filter((item) => item.status === 'active')
 
   return (
-    <div className="min-h-[100dvh] min-h-screen bg-midnight-violet flex flex-col">
-      {/* Header */}
-      <Header username={username} />
-
-      {/* Referral Popup */}
-      <ReferralPopup />
-
-      {/* Main Content */}
-      <main className="flex-1 px-4 sm:px-5 pb-bottom-nav py-4 sm:py-5 overflow-x-hidden">
+    <AppShell
+      username={username}
+      banner={<ReferralPopup />}
+      mainClassName="flex-1 px-4 sm:px-5 pb-bottom-nav py-4 sm:py-5 overflow-x-hidden"
+    >
         {/* Title Section */}
         <div className="w-full flex flex-col items-center gap-2 mb-6">
           <ShoppingBag className="w-12 h-12 text-lime-yellow mb-2" />
@@ -200,10 +195,6 @@ export function ShopClient({ items, userPoints, username }: ShopClientProps) {
             ))}
           </div>
         )}
-      </main>
-
-      {/* Bottom Navigation */}
-      <BottomNavigation />
 
       {/* Player Picker Modal (for Favorite Player items) */}
       {showPlayerPicker && isFavoritePlayerCustomization(showPlayerPicker.customization) && (
@@ -300,6 +291,6 @@ export function ShopClient({ items, userPoints, username }: ShopClientProps) {
         onClose={onRedemptionComplete}
         onSuccess={onRedemptionComplete}
       />
-    </div>
+    </AppShell>
   )
 }

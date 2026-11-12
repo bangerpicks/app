@@ -2,9 +2,10 @@
 
 import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
+import Image from 'next/image'
 import { useRouter, usePathname } from 'next/navigation'
 import { useTranslations } from 'next-intl'
-import { Target, Calendar, Trophy, ShoppingBag, ArrowRight, X, ArrowLeft } from 'lucide-react'
+import { Target, Calendar, Trophy, ShoppingBag, ArrowRight } from 'lucide-react'
 import { auth } from '@/lib/firebase'
 import { updateProfile } from 'firebase/auth'
 import { markOnboardingIntroSeen, ensureUserDocument, isDisplayNameAvailable } from '@/lib/users'
@@ -17,9 +18,11 @@ interface OnboardingIntroProps {
   requiresDisplayName?: boolean // If true, show displayName step first
   referralCode?: string | null
   referralMessage?: string | null
+  /** Local preview: walk the steps without writing Auth or Firestore. */
+  previewOnly?: boolean
 }
 
-export function OnboardingIntro({ isOpen, onClose, requiresDisplayName = false, referralCode = null, referralMessage = null }: OnboardingIntroProps) {
+export function OnboardingIntro({ isOpen, onClose, requiresDisplayName = false, referralCode = null, referralMessage = null, previewOnly = false }: OnboardingIntroProps) {
   const t = useTranslations('onboarding')
   const tCommon = useTranslations('common')
   const tSettings = useTranslations('settings')
@@ -57,6 +60,29 @@ export function OnboardingIntro({ isOpen, onClose, requiresDisplayName = false, 
       setReferralStatus(null)
     }
   }, [isOpen, requiresDisplayName, referralMessage])
+
+  useEffect(() => {
+    if (!isOpen) return
+
+    const html = document.documentElement
+    const body = document.body
+    const prevHtmlOverflow = html.style.overflow
+    const prevBodyOverflow = body.style.overflow
+    const scrollbarWidth = window.innerWidth - html.clientWidth
+    const prevBodyPaddingRight = body.style.paddingRight
+
+    html.style.overflow = 'hidden'
+    body.style.overflow = 'hidden'
+    if (scrollbarWidth > 0) {
+      body.style.paddingRight = `${scrollbarWidth}px`
+    }
+
+    return () => {
+      html.style.overflow = prevHtmlOverflow
+      body.style.overflow = prevBodyOverflow
+      body.style.paddingRight = prevBodyPaddingRight
+    }
+  }, [isOpen])
 
   const validateDisplayName = (name: string): string | null => {
     if (!name || name.trim().length === 0) {
@@ -96,12 +122,18 @@ export function OnboardingIntro({ isOpen, onClose, requiresDisplayName = false, 
         return
       }
 
+      const trimmedDisplayName = displayName.trim()
+
+      if (previewOnly) {
+        setStep('instructions')
+        setLoading(false)
+        return
+      }
+
       const user = auth.currentUser
       if (!user) {
         throw new Error(t('noUserFoundSignIn'))
       }
-
-      const trimmedDisplayName = displayName.trim()
 
       // Check if display name is available (case-insensitive)
       const isAvailable = await isDisplayNameAvailable(trimmedDisplayName, user.uid)
@@ -138,76 +170,82 @@ export function OnboardingIntro({ isOpen, onClose, requiresDisplayName = false, 
     }
   }
 
-  const handleComplete = async (skip: boolean = false) => {
+  const handleComplete = async () => {
     setLoading(true)
     try {
       const user = auth.currentUser
-      if (user) {
+      if (user && !previewOnly) {
         await markOnboardingIntroSeen(user)
       }
       onClose()
       // Navigate to dashboard only if we're not already there
-      if (pathname !== '/dashboard') {
-        router.push('/dashboard')
+      const onDashboard =
+        pathname === '/dashboard' || pathname === '/dashboard/'
+      if (!onDashboard) {
+        router.push('/dashboard/')
       }
     } catch (error) {
       console.error('Error marking onboarding as seen:', error)
       // Still close even if there's an error
       onClose()
-      // Navigate to dashboard only if we're not already there
-      if (pathname !== '/dashboard') {
-        router.push('/dashboard')
+      const onDashboard =
+        pathname === '/dashboard' || pathname === '/dashboard/'
+      if (!onDashboard) {
+        router.push('/dashboard/')
       }
     } finally {
       setLoading(false)
     }
   }
 
-  const handleSkip = () => {
-    handleComplete(true)
-  }
-
   const handleStart = () => {
-    handleComplete(false)
+    handleComplete()
   }
 
-  if (!isOpen || !mounted) {
+  if (!mounted) {
     return null
   }
 
   // Use step directly - the useEffect should handle setting it correctly
   const currentStep = step
 
-  const modalContent = (
-    <div 
-      className="fixed inset-0 z-[110] flex items-center justify-center bg-black bg-opacity-50 p-4 overflow-y-auto overflow-x-hidden"
-      onClick={handleSkip}
-      style={{ paddingTop: 'env(safe-area-inset-top, 1rem)', paddingBottom: 'env(safe-area-inset-bottom, 1rem)' }}
+  const modalContent = isOpen ? (
+    <div
+      className="fixed inset-0 z-[110] flex flex-col bg-midnight-violet overflow-y-auto overflow-x-hidden overscroll-contain"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="onboarding-title"
+      style={{
+        paddingTop: 'env(safe-area-inset-top, 0px)',
+        paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+        paddingLeft: 'env(safe-area-inset-left, 0px)',
+        paddingRight: 'env(safe-area-inset-right, 0px)',
+      }}
     >
-      <div 
-        className="bg-midnight-violet rounded-lg p-6 sm:p-8 w-full max-w-md my-auto shadow-xl max-h-[90vh] overflow-y-auto overflow-x-hidden"
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div className="flex flex-col flex-1 w-full max-w-lg mx-auto p-4 sm:p-6 min-h-full">
         {/* Header */}
-        <div className="flex justify-between items-start mb-6">
-          <div className="flex-1">
-            <h2 className="text-2xl sm:text-3xl font-bold text-lime-yellow pr-2">
-              {currentStep === 'displayName' ? t('chooseDisplayName') : t('welcome')}
-            </h2>
-            {currentStep === 'instructions' && (
-              <div className="flex items-center gap-2 mt-2">
-                <span className="text-xs text-ivory/60">{t('step2Of2')}</span>
-              </div>
-            )}
+        <div className="mb-6 shrink-0">
+          <div className="flex justify-center pt-1 pb-4">
+            <Image
+              src="/logo.svg"
+              alt="Banger Picks"
+              width={195}
+              height={50}
+              priority
+              className="object-contain w-[156px] h-[40px] sm:w-[195px] sm:h-[50px]"
+            />
           </div>
-          <button
-            onClick={handleSkip}
-            disabled={loading}
-            className="text-ivory hover:text-lime-yellow text-2xl sm:text-3xl font-bold min-w-[44px] min-h-[44px] flex items-center justify-center flex-shrink-0 transition-colors disabled:opacity-50"
-            aria-label={tCommon('skip')}
+          <h2
+            id="onboarding-title"
+            className="text-xl sm:text-2xl font-bold text-lime-yellow text-center"
           >
-            <X size={24} />
-          </button>
+            {currentStep === 'displayName' ? t('chooseDisplayName') : t('welcome')}
+          </h2>
+          {currentStep === 'instructions' && (
+            <div className="flex items-center justify-center gap-2 mt-2">
+              <span className="text-xs text-ivory/60">{t('step2Of2')}</span>
+            </div>
+          )}
         </div>
 
         {/* Step Indicator */}
@@ -226,8 +264,8 @@ export function OnboardingIntro({ isOpen, onClose, requiresDisplayName = false, 
 
         {/* Display Name Step */}
         {currentStep === 'displayName' && (
-          <form onSubmit={handleDisplayNameSubmit} className="space-y-4 overflow-x-hidden">
-            <p className="text-ivory/80 text-sm sm:text-base mb-4">
+          <form onSubmit={handleDisplayNameSubmit} className="space-y-4 overflow-x-hidden pb-6">
+            <p className="text-ivory/80 text-sm sm:text-base mb-4 text-center">
               {t('displayNameDescription')}
             </p>
 
@@ -272,7 +310,7 @@ export function OnboardingIntro({ isOpen, onClose, requiresDisplayName = false, 
                 }}
                 placeholder={t('enterDisplayName')}
                 maxLength={30}
-                className="w-full px-4 py-2.5 min-h-[44px] rounded border border-ivory/30 text-ivory bg-midnight-violet focus:outline-none focus:ring-2 focus:ring-lime-yellow text-base"
+                className="w-full px-4 py-2.5 min-h-[44px] rounded border border-ivory/30 text-ivory bg-midnight-violet focus:outline-none focus:ring-2 focus:ring-lime-yellow text-base placeholder:text-ivory/40"
               />
               <p className="mt-1 text-xs text-ivory/70">
                 {t('displayNameRequirements')}
@@ -291,7 +329,7 @@ export function OnboardingIntro({ isOpen, onClose, requiresDisplayName = false, 
 
         {/* Instructions Step */}
         {currentStep === 'instructions' && (
-          <>
+          <div className="pb-6">
             {referralStatus && (
               <div
                 className={`mb-6 p-3 rounded text-sm ${
@@ -303,7 +341,7 @@ export function OnboardingIntro({ isOpen, onClose, requiresDisplayName = false, 
                 {referralStatus}
               </div>
             )}
-            <p className="text-ivory/80 text-base sm:text-lg mb-8 leading-relaxed">
+            <p className="text-ivory/80 text-base sm:text-lg mb-8 leading-relaxed text-center">
               {t('howItWorks')}
             </p>
 
@@ -380,19 +418,12 @@ export function OnboardingIntro({ isOpen, onClose, requiresDisplayName = false, 
                 {t('letsStart')}
                 <ArrowRight className="w-5 h-5" />
               </button>
-              <button
-                onClick={handleSkip}
-                disabled={loading}
-                className="w-full text-ivory/70 hover:text-ivory text-sm sm:text-base py-2 min-h-[44px] flex items-center justify-center transition-colors disabled:opacity-50"
-              >
-                {t('skipForNow')}
-              </button>
             </div>
-          </>
+          </div>
         )}
       </div>
     </div>
-  )
+  ) : null
 
-  return createPortal(modalContent, document.body)
+  return <>{isOpen && createPortal(modalContent, document.body)}</>
 }

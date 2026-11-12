@@ -30,12 +30,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false)
     })
     
-    // Timeout after 5 seconds if auth state doesn't resolve
+    // Timeout after 5 seconds if auth state doesn't resolve — still keep the
+    // listener so a late Firebase callback can update the user afterward.
     timeoutId = setTimeout(() => {
       console.warn('Auth state check timed out - assuming unauthenticated')
       setUser(null)
       setLoading(false)
-      unsubscribe() // Clean up listener
     }, 5000)
     
     return () => {

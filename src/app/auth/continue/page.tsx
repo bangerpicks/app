@@ -4,8 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import Link from 'next/link'
-import { Header } from '@/components/dashboard/Header'
-import { BottomNavigation } from '@/components/dashboard/BottomNavigation'
+import { AppShell } from '@/components/dashboard/AppShell'
 import {
   completeEmailLinkSignIn,
   isEmailSignInLink,
@@ -72,9 +71,7 @@ export default function AuthContinuePage() {
   }
 
   return (
-    <div className="min-h-[100dvh] min-h-screen bg-midnight-violet flex flex-col">
-      <Header />
-      <main className="flex-1 px-4 sm:px-5 py-8 pb-24 flex flex-col items-center justify-center gap-4 text-center max-w-md mx-auto w-full">
+    <AppShell mainClassName="flex-1 px-4 sm:px-5 py-8 pb-bottom-nav lg:pb-8 flex flex-col items-center justify-center gap-4 text-center max-w-md mx-auto w-full overflow-x-hidden">
         {state === 'loading' && (
           <p className="text-ivory/80 text-sm">{t('emailLinkCompleting')}</p>
         )}
@@ -125,8 +122,6 @@ export default function AuthContinuePage() {
         {state === 'success' && (
           <p className="text-ivory/80 text-sm">{t('emailLinkSuccess')}</p>
         )}
-      </main>
-      <BottomNavigation />
-    </div>
+    </AppShell>
   )
 }

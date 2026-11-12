@@ -16,8 +16,8 @@
   --safe-area-inset-left: env(safe-area-inset-left, 0px);
   --safe-area-inset-right: env(safe-area-inset-right, 0px);
   /* Header height for sticky table positioning */
-  --header-height: 80px;
-  --bottom-nav-height: 100px;
+  --header-height: 64px;
+  --bottom-nav-height: 84px;
 }
 
 @layer utilities {
@@ -26,12 +26,22 @@
       var(--bottom-nav-height) + var(--safe-area-inset-bottom) + 1.25rem
     );
   }
+
+  @media (min-width: 1024px) {
+    .pb-bottom-nav {
+      padding-bottom: 2rem;
+    }
+  }
 }
 
 html {
   scroll-padding-bottom: calc(
     var(--bottom-nav-height) + var(--safe-area-inset-bottom) + 1rem
   );
+
+  @media (min-width: 1024px) {
+    scroll-padding-bottom: 2rem;
+  }
   /* Don't constrain height - let content determine height */
   /* Prevent elastic/bounce scrolling on iOS */
   overscroll-behavior-y: none;

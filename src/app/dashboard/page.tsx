@@ -7,8 +7,7 @@ import { getUserDisplayName, hasSeenOnboardingIntro } from '@/lib/users'
 import { getUserPredictionsForGameweek, getGameweekPlayerCount } from '@/lib/predictions'
 import { DashboardClient } from '@/components/dashboard/DashboardClient'
 import { OnboardingIntro } from '@/components/dashboard/OnboardingIntro'
-import { BottomNavigation } from '@/components/dashboard/BottomNavigation'
-import { Header } from '@/components/dashboard/Header'
+import { AppShell } from '@/components/dashboard/AppShell'
 import { GameweekData, MatchCardData, FormResult } from '@/types/dashboard'
 import { getGameweekFixtures, AdminGameweekData, GameweekFixtureData } from '@/lib/admin'
 import { useLiveMatches } from '@/lib/useLiveMatches'
@@ -113,13 +112,12 @@ function DashboardShell({
   username?: string
 }) {
   return (
-    <div className="min-h-[100dvh] min-h-screen bg-midnight-violet flex flex-col">
-      <Header username={username} />
-      <main className="flex-1 px-4 sm:px-5 py-8 pb-bottom-nav flex flex-col items-center justify-center gap-4 text-center">
-        {children}
-      </main>
-      <BottomNavigation />
-    </div>
+    <AppShell
+      username={username}
+      mainClassName="flex-1 px-4 sm:px-5 py-8 pb-bottom-nav flex flex-col items-center justify-center gap-4 text-center overflow-x-hidden"
+    >
+      {children}
+    </AppShell>
   )
 }
 
@@ -135,7 +133,15 @@ export default function DashboardPage() {
   const [loadingPredictions, setLoadingPredictions] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showOnboarding, setShowOnboarding] = useState(false)
+  const [devPreviewDismissed, setDevPreviewDismissed] = useState(false)
   const [emptyReason, setEmptyReason] = useState<'none' | 'no-week' | 'no-fixtures' | null>(null)
+
+  const isDevOnboardingPreview =
+    process.env.NODE_ENV === 'development' &&
+    process.env.NEXT_PUBLIC_DEV_SHOW_ONBOARDING === 'true'
+  const isDevNameStep =
+    isDevOnboardingPreview &&
+    process.env.NEXT_PUBLIC_DEV_ONBOARDING_NAME_STEP === 'true'
 
   useEffect(() => {
     const abortController = new AbortController()
@@ -194,7 +200,6 @@ export default function DashboardPage() {
 
         if (!currentGameweek) {
           setEmptyReason('no-week')
-          setLoadingGameweek(false)
           return
         }
 
@@ -206,7 +211,6 @@ export default function DashboardPage() {
           setGameweek(convertGameweekData(currentGameweek))
           setGameweekId(currentGameweek.gameweekId)
           setEmptyReason('no-fixtures')
-          setLoadingGameweek(false)
           return
         }
 
@@ -238,7 +242,6 @@ export default function DashboardPage() {
         setGameweekId(currentGameweek.gameweekId)
         setGameweek(convertGameweekData(currentGameweek))
         setInitialMatches(sortedMatches)
-        setLoadingGameweek(false)
 
         const storedCount = resolvePlayerCountFromGameweek(currentGameweek)
         if (
@@ -299,8 +302,13 @@ export default function DashboardPage() {
         setGameweek(null)
         setInitialMatches([])
         setGameweekId(null)
-        setLoadingGameweek(false)
         setLoadingPredictions(false)
+      } finally {
+        // Always leave the loading gate when this attempt finishes (success, error, or empty).
+        // Aborted runs skip this so a newer effect owns the flag.
+        if (!abortController.signal.aborted) {
+          setLoadingGameweek(false)
+        }
       }
     }
 
@@ -321,20 +329,49 @@ export default function DashboardPage() {
   )
   const liveMatches = useLiveMatches(gameweekId, baseMatches, locale)
 
+  const onboardingOpen =
+    showOnboarding || (isDevOnboardingPreview && !devPreviewDismissed)
+  const needsDisplayName = Boolean(
+    user && (!user.displayName || user.displayName.trim() === 'Player')
+  )
+  const closeOnboarding = () => {
+    setShowOnboarding(false)
+    if (isDevOnboardingPreview) {
+      setDevPreviewDismissed(true)
+    }
+  }
+
+  const onboardingLayer = (
+    <OnboardingIntro
+      isOpen={onboardingOpen}
+      onClose={closeOnboarding}
+      previewOnly={isDevOnboardingPreview && !devPreviewDismissed}
+      requiresDisplayName={
+        isDevOnboardingPreview && !devPreviewDismissed ? isDevNameStep : needsDisplayName
+      }
+    />
+  )
+
   if (authLoading || loadingGameweek) {
     return (
-      <DashboardShell username={username}>
-        <p className="text-ivory">{t('loading')}</p>
-      </DashboardShell>
+      <>
+        <DashboardShell username={username}>
+          <p className="text-ivory">{t('loading')}</p>
+        </DashboardShell>
+        {onboardingLayer}
+      </>
     )
   }
 
   if (error) {
     return (
-      <DashboardShell username={username}>
-        <p className="text-cinnabar">{t('loadError')}</p>
-        <p className="text-ivory/70 text-sm">{error}</p>
-      </DashboardShell>
+      <>
+        <DashboardShell username={username}>
+          <p className="text-cinnabar">{t('loadError')}</p>
+          <p className="text-ivory/70 text-sm">{error}</p>
+        </DashboardShell>
+        {onboardingLayer}
+      </>
     )
   }
 
@@ -345,22 +382,19 @@ export default function DashboardPage() {
           <p className="text-ivory text-lg font-semibold">{t('noActiveGameweekTitle')}</p>
           <p className="text-ivory/70 text-sm max-w-md">{t('noActiveGameweekBody')}</p>
         </DashboardShell>
-        <OnboardingIntro
-          isOpen={showOnboarding}
-          onClose={() => setShowOnboarding(false)}
-          requiresDisplayName={
-            user ? !user.displayName || user.displayName.trim() === 'Player' : false
-          }
-        />
+        {onboardingLayer}
       </>
     )
   }
 
   if (!gameweek) {
     return (
-      <DashboardShell username={username}>
-        <p className="text-ivory">{t('loadError')}</p>
-      </DashboardShell>
+      <>
+        <DashboardShell username={username}>
+          <p className="text-ivory">{t('loadError')}</p>
+        </DashboardShell>
+        {onboardingLayer}
+      </>
     )
   }
 
@@ -374,13 +408,7 @@ export default function DashboardPage() {
           username={username}
           fixturesPending
         />
-        <OnboardingIntro
-          isOpen={showOnboarding}
-          onClose={() => setShowOnboarding(false)}
-          requiresDisplayName={
-            user ? !user.displayName || user.displayName.trim() === 'Player' : false
-          }
-        />
+        {onboardingLayer}
       </>
     )
   }
@@ -393,13 +421,7 @@ export default function DashboardPage() {
         matches={liveMatches}
         username={username}
       />
-      <OnboardingIntro
-        isOpen={showOnboarding}
-        onClose={() => setShowOnboarding(false)}
-        requiresDisplayName={
-          user ? !user.displayName || user.displayName.trim() === 'Player' : false
-        }
-      />
+      {onboardingLayer}
     </>
   )
 }
