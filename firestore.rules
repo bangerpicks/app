@@ -283,12 +283,19 @@ service cloud.firestore {
       return /databases/$(database)/documents/gameweeks/$(gameweekId);
     }
 
+    function effectiveGameweekLock(gameweek) {
+      return gameweek.keys().hasAny(['lockAt']) && gameweek.lockAt is timestamp
+        ? gameweek.lockAt
+        : gameweek.deadline;
+    }
+
     function gameweekStillOpen(gameweekId) {
       let gameweek = get(gameweekPath(gameweekId)).data;
+      let lock = effectiveGameweekLock(gameweek);
       return gameweek.status == 'active'
         && (
           gameweek.get('forceOpenForTesting', false) == true
-          || (gameweek.deadline is timestamp && request.time < gameweek.deadline)
+          || (lock is timestamp && request.time < lock)
         );
     }
 
@@ -298,11 +305,17 @@ service cloud.firestore {
     }
 
     // forceOpenForTesting skips the deadline only. Finished fixtures stay locked.
+    // One get() per doc — calling gameweekStillOpen/fixtureNotStarted again would double reads.
     function picksOpen(gameweekId, fixtureId) {
-      return exists(gameweekPath(gameweekId))
-        && exists(fixturePath(gameweekId, fixtureId))
-        && fixtureNotStarted(gameweekId, fixtureId)
-        && gameweekStillOpen(gameweekId);
+      let gameweek = get(gameweekPath(gameweekId)).data;
+      let fixture = get(fixturePath(gameweekId, fixtureId)).data;
+      let lock = effectiveGameweekLock(gameweek);
+      return gameweek.status == 'active'
+        && (
+          gameweek.get('forceOpenForTesting', false) == true
+          || (lock is timestamp && request.time < lock)
+        )
+        && fixture.fixture.fixture.status.short in ['NS', 'TBD'];
     }
 
     function scoringFieldsFresh() {
@@ -563,27 +576,38 @@ service cloud.firestore {
       return /databases/$(database)/documents/predictions/$(fixtureId)/entries/$(request.auth.uid);
     }
 
-    // First writer creates the parent with playerCount 1. Later new entrants
-    // add exactly 1. Repeat saves of an existing entry must not change the count.
+  // FieldValue.increment() is not visible in request.resource.data on create; allow
+  // exists-only parent creates proven by the same-batch entry write.
+    // FieldValue.increment() may omit playerCount from request.resource; getAfter holds the result.
     function parentCreateWithCount(fixtureId) {
       return isSignedIn()
         && fixtureId.matches('^[0-9]+$')
-        && request.resource.data.keys().hasOnly(['exists', 'playerCount'])
         && request.resource.data.exists == true
-        && request.resource.data.playerCount == 1
-        && existsAfter(predictionEntryPath(fixtureId));
+        && existsAfter(predictionEntryPath(fixtureId))
+        && (
+          (
+            request.resource.data.keys().hasOnly(['exists', 'playerCount'])
+            && request.resource.data.playerCount == 1
+          )
+          || request.resource.data.keys().hasOnly(['exists'])
+        );
+    }
+
+    function parentCountBefore() {
+      return resource.data.keys().hasAny(['playerCount']) && resource.data.playerCount is int
+        ? resource.data.playerCount
+        : 0;
     }
 
     function parentCountBump(fixtureId) {
+      let afterCount = getAfter(/databases/$(database)/documents/predictions/$(fixtureId)).data.get('playerCount', 0);
       return resource != null
         && isSignedIn()
         && fixtureId.matches('^[0-9]+$')
-        && request.resource.data.keys().hasOnly(['exists', 'playerCount'])
         && request.resource.data.exists == true
-        && resource.data.keys().hasAny(['playerCount'])
-        && resource.data.playerCount is int
         && changedKeys().hasOnly(['playerCount'])
-        && request.resource.data.playerCount == resource.data.playerCount + 1
+        && afterCount == parentCountBefore() + 1
+        && afterCount is int
         && !exists(predictionEntryPath(fixtureId))
         && existsAfter(predictionEntryPath(fixtureId));
     }
@@ -592,10 +616,15 @@ service cloud.firestore {
       return resource != null
         && isSignedIn()
         && fixtureId.matches('^[0-9]+$')
-        && request.resource.data.keys().hasOnly(['exists', 'playerCount'])
         && request.resource.data.exists == true
         && !changedKeys().hasAny(['playerCount'])
-        && changedKeys().hasOnly(['exists']);
+        && (
+          request.resource.data.keys().hasOnly(['exists'])
+          || (
+            request.resource.data.keys().hasOnly(['exists', 'playerCount'])
+            && changedKeys().hasOnly(['exists'])
+          )
+        );
     }
 
     match /predictions/{fixtureId} {
@@ -626,18 +655,24 @@ service cloud.firestore {
         && existsAfter(/databases/$(database)/documents/predictions/$(fixtureId)/entries/$(request.auth.uid));
     }
 
+    function gameweekPlayerCountBefore() {
+      return resource.data.keys().hasAny(['playerCount']) && resource.data.playerCount is int
+        ? resource.data.playerCount
+        : 0;
+    }
+
     // +1 only when this batch creates the user's first entry, proved by
     // joinedFixtureId on the new gameweek cache. A cache write alone cannot
-    // increment the count. playerCount must already exist.
+    // increment the count.
     function isPredictorJoin(gameweekId) {
       let cache = /databases/$(database)/documents/users/$(request.auth.uid)/gameweek_predictions/$(gameweekId);
+      let afterCount = getAfter(gameweekPath(gameweekId)).data.get('playerCount', 0);
       return isSignedIn()
         && !maintenanceOn()
         && resource != null
-        && resource.data.keys().hasAny(['playerCount'])
-        && resource.data.playerCount is int
         && changedKeys().hasOnly(['playerCount'])
-        && request.resource.data.playerCount == resource.data.playerCount + 1
+        && afterCount == gameweekPlayerCountBefore() + 1
+        && afterCount is int
         && !exists(cache)
         && existsAfter(cache)
         && cacheProvesNewEntry(cache);

@@ -556,12 +556,17 @@ export async function markOnboardingIntroSeen(user: User): Promise<void> {
     }
 
     const userRef = doc(db, 'users', user.uid)
+    const userDoc = await getDoc(userRef)
+    if (!userDoc.exists()) {
+      await ensureUserDocument(user, user.displayName || 'Player')
+    }
+
     const updates: Partial<UserDocument> = {
       hasSeenOnboardingIntro: true,
       lastUpdated: serverTimestamp() as any,
     }
 
-    await setDoc(userRef, updates, { merge: true })
+    await updateDoc(userRef, updates)
   } catch (error: any) {
     console.error(`Error marking onboarding intro as seen for ${user.uid}:`, error)
     

@@ -445,6 +445,67 @@ describe('predictions', () => {
     await assertSucceeds(savePick(dbAs(USER), USER, 'H'))
   })
 
+  it('lets a fresh user onboard and save ten picks in one batch (no pre-seeded profile)', async () => {
+    const FRESH = 'fresh-phone-user'
+    const fixtureIds = Array.from({ length: 10 }, (_, i) => FIXTURE_ID + i)
+    await seed(async (db) => {
+      await setDoc(doc(db, 'gameweeks', GAMEWEEK_ID), {
+        name: 'Gameweek',
+        status: 'active',
+        startDate: Timestamp.fromDate(new Date('2026-11-01T00:00:00Z')),
+        deadline: Timestamp.fromDate(new Date(Date.now() + 60 * 60 * 1000)),
+        fixtureIds,
+        playerCount: 0,
+      })
+      for (const fixtureId of fixtureIds) {
+        await setDoc(doc(db, 'gameweeks', GAMEWEEK_ID, 'fixtures', String(fixtureId)), {
+          fixtureId,
+          fixture: { fixture: { status: { short: 'NS' } } },
+        })
+      }
+    })
+
+    const freshDb = dbAs(FRESH)
+    await assertSucceeds(setDoc(doc(freshDb, 'users', FRESH), newUserPayload(FRESH, { displayName: 'Pitch Fresh' })))
+    await assertSucceeds(
+      updateDoc(doc(freshDb, 'users', FRESH), {
+        displayName: 'Pitch Fresh',
+        hasSeenOnboardingIntro: true,
+        lastUpdated: serverTimestamp(),
+      })
+    )
+    await assertDenied(
+      setDoc(
+        doc(dbAs('fresh-no-profile'), 'users', 'fresh-no-profile'),
+        { hasSeenOnboardingIntro: true, lastUpdated: serverTimestamp() },
+        { merge: true }
+      )
+    )
+    const batch = writeBatch(freshDb)
+    for (const fixtureId of fixtureIds) {
+      batch.set(
+        doc(freshDb, 'predictions', String(fixtureId)),
+        { exists: true, playerCount: increment(1) },
+        { merge: true }
+      )
+      batch.set(
+        doc(freshDb, 'predictions', String(fixtureId), 'entries', FRESH),
+        predictionEntry(FRESH, fixtureId, GAMEWEEK_ID, 'H', { status: 'TBP' }),
+        { merge: true }
+      )
+    }
+    batch.set(doc(freshDb, 'users', FRESH, 'gameweek_predictions', GAMEWEEK_ID), {
+      predictions: Object.fromEntries(fixtureIds.map((fid) => [String(fid), 'H'])),
+      updatedAt: serverTimestamp(),
+      joinedFixtureId: String(fixtureIds[0]),
+    })
+    batch.update(doc(freshDb, 'gameweeks', GAMEWEEK_ID), { playerCount: increment(1) })
+    await assertSucceeds(batch.commit())
+
+    const gameweek = await getDoc(doc(dbAnon(), 'gameweeks', GAMEWEEK_ID))
+    assert.equal(gameweek.data().playerCount, 1)
+  })
+
   it('publishes a player count without listing entries', async () => {
     await seedPlayableFixture()
     await seed(async (db) => {
