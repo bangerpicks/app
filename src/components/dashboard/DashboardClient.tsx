@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { useAuth } from '@/lib/AuthProvider'
 import { ensureUserDocument } from '@/lib/users'
@@ -12,6 +12,7 @@ import { MatchCard } from './MatchCard'
 import { BottomNavigation } from './BottomNavigation'
 import { GameweekData, MatchCardData, Prediction } from '@/types/dashboard'
 import { GafferDisplayPrefsProvider } from '@/lib/gaffer-display-prefs'
+import { useCrowdPickStats } from '@/hooks/useCrowdPickStats'
 
 interface DashboardClientProps {
   gameweek: GameweekData
@@ -44,6 +45,17 @@ export function DashboardClient({
   const [isSaving, setIsSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [saveSuccess, setSaveSuccess] = useState(false)
+  const [crowdStatsRefreshToken, setCrowdStatsRefreshToken] = useState(0)
+
+  const fixtureIds = useMemo(
+    () => matches.map((m) => m.fixtureId),
+    [matches]
+  )
+  const { crowdPercentsByFixture, playerCountByFixture } = useCrowdPickStats(
+    fixtureIds,
+    Boolean(user),
+    crowdStatsRefreshToken
+  )
 
   useEffect(() => {
     const handleScroll = () => {
@@ -113,6 +125,27 @@ export function DashboardClient({
     setSaveSuccess(false)
   }
 
+  const getDisplayPrediction = (fixtureId: number): Prediction | null => {
+    if (pendingPredictions.has(fixtureId)) {
+      return pendingPredictions.get(fixtureId) || null
+    }
+    return savedPredictions.get(fixtureId) || null
+  }
+
+  const missingPickCount = matches.filter((m) => getDisplayPrediction(m.fixtureId) == null).length
+  const allPicksMade = matches.length > 0 && missingPickCount === 0
+
+  const buildCompletePredictions = (): Map<number, Prediction> => {
+    const complete = new Map<number, Prediction>()
+    for (const match of matches) {
+      const pick = getDisplayPrediction(match.fixtureId)
+      if (pick) {
+        complete.set(match.fixtureId, pick)
+      }
+    }
+    return complete
+  }
+
   const handleSubmit = async () => {
     if (!user || pendingPredictions.size === 0 || isDisabled || isSaving) {
       return
@@ -124,6 +157,13 @@ export function DashboardClient({
       return
     }
 
+    if (!allPicksMade) {
+      setSaveError(t('saveRequiresAllPicks'))
+      return
+    }
+
+    const completePredictions = buildCompletePredictions()
+
     setIsSaving(true)
     setSaveError(null)
     setSaveSuccess(false)
@@ -133,13 +173,12 @@ export function DashboardClient({
       await ensureUserDocument(user, username || user.displayName || 'Player')
       // Note: We don't need to check isNewUser here since this is just ensuring the document exists
 
-      // Save predictions (pass gameweekId for cache - enables fast 1-read loading)
-      await savePredictions(user.uid, pendingPredictions, matches, gameweek.gameweekId)
+      // Save full slate (pending + already saved) so cache stays complete
+      await savePredictions(user.uid, completePredictions, matches, gameweek.gameweekId)
 
-      // Move pending predictions to saved
       setSavedPredictions((prev) => {
         const next = new Map(prev)
-        pendingPredictions.forEach((prediction, fixtureId) => {
+        completePredictions.forEach((prediction, fixtureId) => {
           next.set(fixtureId, prediction)
         })
         return next
@@ -148,6 +187,7 @@ export function DashboardClient({
       // Clear pending predictions
       setPendingPredictions(new Map())
       setSaveSuccess(true)
+      setCrowdStatsRefreshToken((n) => n + 1)
 
       // Clear success message after 3 seconds
       setTimeout(() => {
@@ -161,16 +201,6 @@ export function DashboardClient({
     }
   }
 
-  // Merge pending and saved predictions for display
-  const getDisplayPrediction = (fixtureId: number): Prediction | null => {
-    // Pending predictions take precedence (shows unsaved changes)
-    if (pendingPredictions.has(fixtureId)) {
-      return pendingPredictions.get(fixtureId) || null
-    }
-    // Otherwise show saved prediction
-    return savedPredictions.get(fixtureId) || null
-  }
-
   useEffect(() => {
     // REMOVED: Disabling scroll restoration - this was causing conflicts with Next.js router
     // Next.js manages scroll restoration internally, and setting it to 'manual' causes
@@ -182,6 +212,7 @@ export function DashboardClient({
 
   const hasPendingPredictions = pendingPredictions.size > 0
   const hasAnyPicks = matches.some((m) => getDisplayPrediction(m.fixtureId) != null)
+  const canSave = hasPendingPredictions && allPicksMade && !isSaving
 
   return (
     <div ref={containerRef} className="min-h-[100dvh] min-h-screen bg-midnight-violet flex flex-col">
@@ -208,6 +239,8 @@ export function DashboardClient({
                 userPrediction={getDisplayPrediction(match.fixtureId)}
                 onPredictionSelect={handlePredictionSelect}
                 disabled={isDisabled || isSaving}
+                crowdPickPercents={crowdPercentsByFixture.get(match.fixtureId)}
+                crowdPickCount={playerCountByFixture.get(match.fixtureId) ?? 0}
               />
             ))}
           </div>
@@ -231,18 +264,26 @@ export function DashboardClient({
             )}
 
             {/* Submit Button */}
+            {hasPendingPredictions && !allPicksMade && (
+              <p className="text-center text-sm text-amber-glow">
+                {t('picksRemainingToSave', { count: missingPickCount })}
+              </p>
+            )}
+
             <button
               onClick={handleSubmit}
-              disabled={!hasPendingPredictions || isSaving || !user}
+              disabled={!canSave || !user}
               className="w-full bg-lime-yellow text-midnight-violet py-3 px-4 rounded-lg font-semibold hover:bg-lime-yellow/90 active:bg-lime-yellow/80 disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px] transition-colors"
             >
               {isSaving
                 ? t('saving')
-                : hasPendingPredictions
-                ? pendingPredictions.size === 1
-                  ? t('savePrediction', { count: pendingPredictions.size })
-                  : t('savePredictions', { count: pendingPredictions.size })
-                : t('noChangesToSave')}
+                : hasPendingPredictions && !allPicksMade
+                  ? t('picksRemainingToSave', { count: missingPickCount })
+                  : hasPendingPredictions
+                    ? pendingPredictions.size === 1
+                      ? t('savePrediction', { count: pendingPredictions.size })
+                      : t('savePredictions', { count: pendingPredictions.size })
+                    : t('noChangesToSave')}
             </button>
           </div>
         )}

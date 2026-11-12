@@ -103,6 +103,15 @@ export async function savePredictions(
       throw new Error('gameweekId is required')
     }
 
+    if (matchData.length > 0) {
+      const missing = matchData.filter((match) => !predictions.has(match.fixtureId))
+      if (missing.length > 0) {
+        throw new Error(
+          `All ${matchData.length} matches must have a pick before saving (${missing.length} missing).`
+        )
+      }
+    }
+
     // Create a map of fixtureId -> matchData for quick lookup
     const matchDataMap = new Map<number, MatchCardData>()
     matchData.forEach((match) => {

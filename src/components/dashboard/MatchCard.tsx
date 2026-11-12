@@ -11,6 +11,7 @@ import { useLanguage } from '@/lib/LanguageProvider'
 import {
   formatMatchVenue,
   resolveWhyItMatters,
+  type GafferWinProbabilities,
 } from '@/lib/match-card-display'
 import {
   formatMatchCardHeaderDate,
@@ -24,6 +25,8 @@ interface MatchCardProps {
   disabled?: boolean
   /** When true, show prediction and result only (no buttons) */
   readOnly?: boolean
+  crowdPickPercents?: GafferWinProbabilities
+  crowdPickCount?: number
 }
 
 export function MatchCard({
@@ -32,6 +35,8 @@ export function MatchCard({
   onPredictionSelect,
   disabled = false,
   readOnly = false,
+  crowdPickPercents,
+  crowdPickCount = 0,
 }: MatchCardProps) {
   const t = useTranslations('dashboard')
   const { locale } = useLanguage()
@@ -43,7 +48,10 @@ export function MatchCard({
   )
 
   const venueLabel = formatMatchVenue(match.venue)
-  const showGaffer = Boolean(whyText) || Boolean(match.officialPick)
+  const showGaffer =
+    Boolean(whyText) ||
+    Boolean(match.officialPick) ||
+    (crowdPickPercents != null && crowdPickCount > 0)
 
   const handlePredictionSelect = (prediction: Prediction) => {
     if (!readOnly) onPredictionSelect(match.fixtureId, prediction)
@@ -109,13 +117,6 @@ export function MatchCard({
       </div>
 
       <div className="border border-ivory rounded-b-[10px] px-2.5 py-2.5 flex flex-col gap-3">
-        {showGaffer ? (
-          <GafferKnowledge
-            whyText={whyText}
-            officialPick={match.officialPick}
-            officialConfidence={match.officialConfidence}
-          />
-        ) : null}
         <div className="flex items-center gap-2.5">
           {/* Home Team */}
           <TeamInfo team={match.homeTeam} />
@@ -132,6 +133,16 @@ export function MatchCard({
           <TeamInfo team={match.awayTeam} />
         </div>
 
+        {showGaffer ? (
+          <GafferKnowledge
+            whyText={whyText}
+            officialPick={match.officialPick}
+            officialConfidence={match.officialConfidence}
+            crowdPickPercents={crowdPickPercents}
+            crowdPickCount={crowdPickCount}
+          />
+        ) : null}
+
         {/* Prediction Buttons or read-only prediction */}
         {readOnly ? (
           <div className="flex items-center justify-center gap-2 py-1">
@@ -145,6 +156,8 @@ export function MatchCard({
           </div>
         ) : (
           <PredictionButtons
+            homeTeamName={match.homeTeam.name}
+            awayTeamName={match.awayTeam.name}
             selected={userPrediction}
             onSelect={handlePredictionSelect}
             disabled={disabled}

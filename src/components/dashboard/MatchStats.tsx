@@ -19,9 +19,16 @@ function getOrdinalSuffix(num: number): string {
   }
 }
 
+function formatLeaguePosition(position: number) {
+  if (position <= 0) {
+    return null
+  }
+  return { value: position, suffix: getOrdinalSuffix(position) }
+}
+
 export function MatchStats({ score, homePosition, awayPosition, isLive = false }: MatchStatsProps) {
-  const homeSuffix = getOrdinalSuffix(homePosition)
-  const awaySuffix = getOrdinalSuffix(awayPosition)
+  const homePos = formatLeaguePosition(homePosition)
+  const awayPos = formatLeaguePosition(awayPosition)
 
   return (
     <div className="flex flex-col items-center justify-center gap-4 flex-1">
@@ -57,13 +64,25 @@ export function MatchStats({ score, homePosition, awayPosition, isLive = false }
         </span>
         <div className="flex items-baseline gap-4">
           <span className="text-base font-semibold text-white">
-            {homePosition}
-            <span className="text-[10px] leading-none relative -top-1">{homeSuffix}</span>
+            {homePos ? (
+              <>
+                {homePos.value}
+                <span className="text-[10px] leading-none relative -top-1">{homePos.suffix}</span>
+              </>
+            ) : (
+              '-'
+            )}
           </span>
           <span className="text-sm text-white/50">|</span>
           <span className="text-base font-semibold text-white">
-            {awayPosition}
-            <span className="text-[10px] leading-none relative -top-1">{awaySuffix}</span>
+            {awayPos ? (
+              <>
+                {awayPos.value}
+                <span className="text-[10px] leading-none relative -top-1">{awayPos.suffix}</span>
+              </>
+            ) : (
+              '-'
+            )}
           </span>
         </div>
       </div>
