@@ -88,7 +88,8 @@ export function MatchCard({
             <>
               <span>
                 {match.minute}
-                {match.stoppageTime ? `+${match.stoppageTime}` : ''}'
+                {match.stoppageTime ? `+${match.stoppageTime}` : ''}
+                &apos;
               </span>
               <span
                 className="w-1.5 h-1.5 rounded-full bg-cinnabar animate-pulse"

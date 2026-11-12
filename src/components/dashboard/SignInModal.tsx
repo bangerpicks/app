@@ -429,7 +429,7 @@ export function SignInModal({ isOpen, onClose }: SignInModalProps) {
 
         {step === 'phone' && (
           <p className="mb-4 text-xs sm:text-sm text-midnight-violet text-opacity-80">
-            Enter your phone number to sign in or create an account. We'll send you a verification code.
+            Enter your phone number to sign in or create an account. We&apos;ll send you a verification code.
           </p>
         )}
 

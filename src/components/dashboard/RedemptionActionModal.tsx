@@ -324,7 +324,7 @@ export function RedemptionActionModal({
           </div>
 
           <p className="text-ivory/70 mb-4">
-            You've redeemed <strong>{item.name}</strong>. Enter your new display name below.
+            You&apos;ve redeemed <strong>{item.name}</strong>. Enter your new display name below.
           </p>
 
           {error && (
