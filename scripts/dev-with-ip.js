@@ -1,4 +1,5 @@
-const { execSync, spawn } = require('child_process');
+const { spawn } = require('child_process');
+const path = require('path');
 const os = require('os');
 
 function getLocalIP() {
@@ -24,10 +25,21 @@ console.log('\x1b[33m%s\x1b[0m', `  Local:    http://localhost:${port}`);
 console.log('\x1b[33m%s\x1b[0m', `  Network:  http://${ip}:${port}`);
 console.log('\x1b[36m%s\x1b[0m', '═══════════════════════════════════════════════════\n');
 
-// Spawn the Next.js dev server
-const nextDev = spawn('npx', ['next', 'dev', '-H', '0.0.0.0'], {
+// Use the project's installed Next.js (avoid `npx next`, which can fetch a newer major)
+const projectRoot = path.join(__dirname, '..');
+const nextCli = path.join(
+  projectRoot,
+  'node_modules',
+  'next',
+  'dist',
+  'bin',
+  'next'
+);
+
+const nextDev = spawn(process.execPath, [nextCli, 'dev', '-H', '0.0.0.0'], {
   stdio: 'inherit',
-  shell: true
+  cwd: projectRoot,
+  env: { ...process.env, PORT: String(port) },
 });
 
 nextDev.on('error', (error) => {

@@ -7,7 +7,15 @@ import { Header } from './Header'
 import { BottomNavigation } from './BottomNavigation'
 import { useAuth } from '@/lib/AuthProvider'
 import { useLanguage } from '@/lib/LanguageProvider'
-import { getUserLanguage, updateUserLanguage } from '@/lib/users'
+import { getUserLanguage } from '@/lib/users'
+import {
+  DEFAULT_GAFFER_DISPLAY_PREFS,
+  type GafferDisplayPrefs,
+  gafferDisplayPrefsEqual,
+  loadGafferDisplayPrefs,
+  saveGafferDisplayPrefs,
+} from '@/lib/gaffer-display-prefs'
+import { GafferOnLoadToggle } from './GafferOnLoadToggle'
 import { Settings, Check, ArrowLeft } from 'lucide-react'
 import type { Locale } from '@/i18n/config'
 
@@ -23,6 +31,13 @@ export function SettingsClient() {
   const [saveError, setSaveError] = useState<string | null>(null)
   const [saveSuccess, setSaveSuccess] = useState(false)
   const [username, setUsername] = useState<string | undefined>(undefined)
+  const [savedGafferPrefs, setSavedGafferPrefs] = useState<GafferDisplayPrefs>(
+    DEFAULT_GAFFER_DISPLAY_PREFS
+  )
+  const [selectedGafferPrefs, setSelectedGafferPrefs] = useState<GafferDisplayPrefs>(
+    DEFAULT_GAFFER_DISPLAY_PREFS
+  )
+  const [gafferPrefsLoading, setGafferPrefsLoading] = useState(true)
 
   // Initialize selected language from user's preference
   useEffect(() => {
@@ -36,6 +51,23 @@ export function SettingsClient() {
         })
     }
   }, [user, languageLoading, locale])
+
+  useEffect(() => {
+    if (!user) {
+      setGafferPrefsLoading(false)
+      return
+    }
+    setGafferPrefsLoading(true)
+    loadGafferDisplayPrefs(user)
+      .then((prefs) => {
+        setSavedGafferPrefs(prefs)
+        setSelectedGafferPrefs(prefs)
+      })
+      .catch((error) => {
+        console.error('Error fetching Gaffer display prefs:', error)
+      })
+      .finally(() => setGafferPrefsLoading(false))
+  }, [user])
 
   // Fetch username for header
   useEffect(() => {
@@ -53,8 +85,15 @@ export function SettingsClient() {
     setSaveSuccess(false)
   }
 
+  const languageChanged = selectedLanguage !== locale
+  const gafferPrefsChanged = !gafferDisplayPrefsEqual(
+    savedGafferPrefs,
+    selectedGafferPrefs
+  )
+  const hasChanges = languageChanged || gafferPrefsChanged
+
   const handleSave = async () => {
-    if (!user || selectedLanguage === locale) {
+    if (!user || !hasChanges) {
       return
     }
 
@@ -63,14 +102,19 @@ export function SettingsClient() {
     setSaveSuccess(false)
 
     try {
-      await setLocale(selectedLanguage)
+      if (languageChanged) {
+        await setLocale(selectedLanguage)
+      }
+      if (gafferPrefsChanged) {
+        await saveGafferDisplayPrefs(user, selectedGafferPrefs)
+        setSavedGafferPrefs(selectedGafferPrefs)
+      }
       setSaveSuccess(true)
-      // Clear success message after a moment
       setTimeout(() => {
         setSaveSuccess(false)
       }, 2000)
     } catch (error) {
-      console.error('Error saving language preference:', error)
+      console.error('Error saving settings:', error)
       setSaveError(t('error'))
     } finally {
       setIsSaving(false)
@@ -152,11 +196,52 @@ export function SettingsClient() {
             </div>
           </div>
 
+          <div className="bg-ivory/5 border border-ivory/10 rounded-lg px-4 py-4 mt-4">
+            <h2 className="text-ivory font-semibold text-lg mb-2">
+              {t('gafferDisplayTitle')}
+            </h2>
+            <p className="text-ivory/60 text-sm mb-4">
+              {t('gafferDisplayDescription')}
+            </p>
+            {gafferPrefsLoading ? (
+              <p className="text-ivory/50 text-sm">{tCommon('loading')}</p>
+            ) : (
+              <div className="flex flex-col gap-4">
+                <GafferOnLoadToggle
+                  label={t('gafferKnowledgeOnLoad')}
+                  value={selectedGafferPrefs.knowledgeOpenOnLoad}
+                  openLabel={t('openOnLoad')}
+                  closedLabel={t('closedOnLoad')}
+                  disabled={isSaving}
+                  onChange={(openOnLoad) =>
+                    setSelectedGafferPrefs((prev) => ({
+                      ...prev,
+                      knowledgeOpenOnLoad: openOnLoad,
+                    }))
+                  }
+                />
+                <GafferOnLoadToggle
+                  label={t('gafferPickOnLoad')}
+                  value={selectedGafferPrefs.pickOpenOnLoad}
+                  openLabel={t('openOnLoad')}
+                  closedLabel={t('closedOnLoad')}
+                  disabled={isSaving}
+                  onChange={(openOnLoad) =>
+                    setSelectedGafferPrefs((prev) => ({
+                      ...prev,
+                      pickOpenOnLoad: openOnLoad,
+                    }))
+                  }
+                />
+              </div>
+            )}
+          </div>
+
           {/* Save Button */}
           <div className="mt-4">
             <button
               onClick={handleSave}
-              disabled={isSaving || selectedLanguage === locale}
+              disabled={isSaving || !hasChanges}
               className="w-full bg-lime-yellow text-midnight-violet py-3 px-6 rounded-lg font-semibold text-lg hover:bg-opacity-90 transition-colors active:bg-opacity-80 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {isSaving ? (

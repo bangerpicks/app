@@ -65,3 +65,52 @@ test('mapApiFootballStatusToMatchStatus maps not started to TBP', () => {
 test('mapApiFootballStatusToMatchStatus passes through FT', () => {
   assert.equal(mapApiFootballStatusToMatchStatus('FT'), 'FT')
 })
+
+function formatMatchVenue(venue) {
+  if (!venue) return undefined
+  const name = venue.name?.trim()
+  const city = venue.city?.trim()
+  if (name && city) return `${name}, ${city}`
+  return name || city || undefined
+}
+
+test('formatMatchVenue joins name and city', () => {
+  assert.equal(
+    formatMatchVenue({ name: 'National Stadium', city: 'Singapore' }),
+    'National Stadium, Singapore'
+  )
+})
+
+test('formatMatchVenue handles partial venue', () => {
+  assert.equal(formatMatchVenue({ name: 'Wembley', city: '' }), 'Wembley')
+  assert.equal(formatMatchVenue({ name: '', city: 'London' }), 'London')
+})
+
+const CONFIDENCE_WIN_SPLITS = {
+  Strong: { primary: 65, secondary: 22, draw: 13 },
+  Lean: { primary: 55, secondary: 28, draw: 17 },
+  'Toss-up': { primary: 40, secondary: 30, draw: 30 },
+}
+
+function deriveGafferWinProbabilities(pick, confidence) {
+  if (!pick) return undefined
+  const split = CONFIDENCE_WIN_SPLITS[confidence ?? 'Lean']
+  if (pick === 'H') {
+    return { home: split.primary, draw: split.draw, away: split.secondary }
+  }
+  if (pick === 'A') {
+    return { home: split.secondary, draw: split.draw, away: split.primary }
+  }
+  return {
+    home: split.secondary,
+    draw: split.primary,
+    away: split.secondary,
+  }
+}
+
+test('deriveGafferWinProbabilities matches Strong away pick mock', () => {
+  const p = deriveGafferWinProbabilities('A', 'Strong')
+  assert.equal(p.home, 22)
+  assert.equal(p.away, 65)
+  assert.equal(p.draw, 13)
+})

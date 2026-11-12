@@ -14,7 +14,10 @@ import { getGameweekFixtures, AdminGameweekData, GameweekFixtureData } from '@/l
 import { useLiveMatches } from '@/lib/useLiveMatches'
 import { useLanguage } from '@/lib/LanguageProvider'
 import { formatMatchKickoffTime } from '@/lib/locale-format'
-import { mapApiFootballStatusToMatchStatus } from '@/lib/match-card-display'
+import {
+  mapApiFootballStatusToMatchStatus,
+  venueFromApiFootball,
+} from '@/lib/match-card-display'
 import type { Locale } from '@/i18n/config'
 import {
   fetchCurrentGameweek,
@@ -73,6 +76,7 @@ function convertFixtureToMatchCard(
       name: fixtureData.league.name,
       logo: fixtureData.league.logo,
     },
+    venue: venueFromApiFootball(fixture.venue),
     date: fixtureDate,
     time: formatMatchKickoffTime(fixtureDate, locale),
     homeTeam: {

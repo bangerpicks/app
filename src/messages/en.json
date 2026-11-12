@@ -22,7 +22,13 @@
     "spanish": "Spanish",
     "saving": "Saving...",
     "saved": "Saved",
-    "error": "An error occurred. Please try again."
+    "error": "An error occurred. Please try again.",
+    "gafferDisplayTitle": "Gaffer on match cards",
+    "gafferDisplayDescription": "Choose whether each section starts open or closed when you load the dashboard.",
+    "gafferKnowledgeOnLoad": "Gaffer knowledge",
+    "gafferPickOnLoad": "Gaffer's pick",
+    "openOnLoad": "Open",
+    "closedOnLoad": "Closed"
   },
   "profile": {
     "title": "Profile",
@@ -55,6 +61,13 @@
     "away": "AWAY",
     "officialPreviewLabel": "Gaffer preview",
     "officialPreviewAria": "Official house preview pick and confidence",
+    "gafferKnowledgeTitle": "Gaffer knowledge",
+    "gafferKnowledgeAria": "Gaffer knowledge and win probability",
+    "gafferWinProbability": "Gaffer's pick",
+    "gafferHideKnowledge": "Hide",
+    "gafferHidePick": "Hide pick",
+    "gafferShowKnowledge": "Show",
+    "gafferShowPick": "Show pick",
     "officialPickLine": "Pick: {pick}",
     "confidenceStrong": "Strong",
     "confidenceLean": "Lean",

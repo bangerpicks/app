@@ -1,14 +1,15 @@
 'use client'
 
 import { useTranslations } from 'next-intl'
+import { MapPin } from 'lucide-react'
 import { MatchCardData, Prediction } from '@/types/dashboard'
 import { TeamInfo } from './TeamInfo'
 import { MatchStats } from './MatchStats'
 import { PredictionButtons } from './PredictionButtons'
+import { GafferKnowledge } from './GafferKnowledge'
 import { useLanguage } from '@/lib/LanguageProvider'
 import {
-  officialConfidenceTranslationKey,
-  officialPickTranslationKey,
+  formatMatchVenue,
   resolveWhyItMatters,
 } from '@/lib/match-card-display'
 import {
@@ -41,26 +42,30 @@ export function MatchCard({
     locale
   )
 
-  const showOfficialPreview =
-    Boolean(match.officialPick) || Boolean(match.officialConfidence)
+  const venueLabel = formatMatchVenue(match.venue)
+  const showGaffer = Boolean(whyText) || Boolean(match.officialPick)
 
   const handlePredictionSelect = (prediction: Prediction) => {
     if (!readOnly) onPredictionSelect(match.fixtureId, prediction)
   }
 
+  const centerStatusLabel =
+    match.matchStatus === 'LIVE'
+      ? t('matchStatusLive')
+      : formatMatchCardHeaderDate(match.date, locale)
+
   return (
     <div className="w-full">
       {/* Match Info Header */}
-      <div className="bg-ivory h-[35px] rounded-t-[10px] px-2 sm:px-2.5 grid grid-cols-3 items-center gap-1 sm:gap-2">
-        <div className="text-[10px] sm:text-xs font-medium text-midnight-violet text-left truncate min-w-0">
-          {match.league.name}
-        </div>
-        <div className="text-[10px] sm:text-xs font-medium text-midnight-violet text-center truncate min-w-0 px-1">
-          {match.matchStatus === 'LIVE'
-            ? t('matchStatusLive')
-            : formatMatchCardHeaderDate(match.date, locale)}
-        </div>
-        <div className="text-[10px] sm:text-xs font-medium text-midnight-violet text-right truncate min-w-0 flex items-center justify-end gap-1.5">
+      <div className="bg-ivory rounded-t-[10px] px-2 sm:px-2.5 py-1.5 flex flex-col gap-1 min-h-[35px]">
+        <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)_minmax(0,1fr)] items-start gap-1 sm:gap-2">
+          <div className="text-[10px] sm:text-xs font-medium text-midnight-violet text-left truncate min-w-0">
+            {match.league.name}
+          </div>
+          <div className="text-[10px] sm:text-xs font-medium text-midnight-violet text-center truncate min-w-0 px-0.5">
+            {centerStatusLabel}
+          </div>
+          <div className="text-[10px] sm:text-xs font-medium text-midnight-violet text-right truncate min-w-0 flex items-center justify-end gap-1.5">
           {match.matchStatus === 'HT' ? (
             <>
               <span>{t('matchStatusHt')}</span>
@@ -89,14 +94,27 @@ export function MatchCard({
           ) : (
             <span>{formatMatchKickoffTime(match.date, locale)}</span>
           )}
+          </div>
         </div>
+        {venueLabel ? (
+          <div className="flex items-center justify-center gap-1 text-[9px] sm:text-[10px] font-normal text-midnight-violet/90 w-full min-w-0 px-1">
+            <MapPin
+              className="w-2.5 h-2.5 shrink-0 text-midnight-violet"
+              strokeWidth={2.5}
+              aria-hidden
+            />
+            <span className="text-center leading-tight line-clamp-2">{venueLabel}</span>
+          </div>
+        ) : null}
       </div>
 
       <div className="border border-ivory rounded-b-[10px] px-2.5 py-2.5 flex flex-col gap-3">
-        {whyText ? (
-          <p className="text-xs text-ivory/80 text-center leading-snug line-clamp-2">
-            {whyText}
-          </p>
+        {showGaffer ? (
+          <GafferKnowledge
+            whyText={whyText}
+            officialPick={match.officialPick}
+            officialConfidence={match.officialConfidence}
+          />
         ) : null}
         <div className="flex items-center gap-2.5">
           {/* Home Team */}
@@ -113,34 +131,6 @@ export function MatchCard({
           {/* Away Team */}
           <TeamInfo team={match.awayTeam} />
         </div>
-
-        {showOfficialPreview ? (
-          <div
-            className="rounded-lg border border-ivory/25 bg-ivory/5 px-3 py-2 text-center"
-            aria-label={t('officialPreviewAria')}
-          >
-            <p className="text-[10px] uppercase tracking-wide text-ivory/60 font-semibold">
-              {t('officialPreviewLabel')}
-            </p>
-            <p className="text-sm text-ivory mt-1">
-              {match.officialPick ? (
-                <span>
-                  {t('officialPickLine', {
-                    pick: t(officialPickTranslationKey(match.officialPick)),
-                  })}
-                </span>
-              ) : null}
-              {match.officialPick && match.officialConfidence ? (
-                <span className="text-ivory/70"> · </span>
-              ) : null}
-              {match.officialConfidence ? (
-                <span className="text-ivory/90">
-                  {t(officialConfidenceTranslationKey(match.officialConfidence))}
-                </span>
-              ) : null}
-            </p>
-          </div>
-        ) : null}
 
         {/* Prediction Buttons or read-only prediction */}
         {readOnly ? (

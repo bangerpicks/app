@@ -11,6 +11,7 @@ import { GameweekCard } from './GameweekCard'
 import { MatchCard } from './MatchCard'
 import { BottomNavigation } from './BottomNavigation'
 import { GameweekData, MatchCardData, Prediction } from '@/types/dashboard'
+import { GafferDisplayPrefsProvider } from '@/lib/gaffer-display-prefs'
 
 interface DashboardClientProps {
   gameweek: GameweekData
@@ -195,20 +196,22 @@ export function DashboardClient({
         {/* Gameweek Card */}
         <GameweekCard gameweek={gameweek} playerCount={playerCount} hasAnyPicks={hasAnyPicks} />
 
-        <div className="w-full flex flex-col gap-5">
-          {fixturesPending && (
-            <p className="text-ivory/80 text-sm text-center py-6">{t('fixturesLoading')}</p>
-          )}
-          {matches.map((match) => (
-            <MatchCard
-              key={match.fixtureId}
-              match={match}
-              userPrediction={getDisplayPrediction(match.fixtureId)}
-              onPredictionSelect={handlePredictionSelect}
-              disabled={isDisabled || isSaving}
-            />
-          ))}
-        </div>
+        <GafferDisplayPrefsProvider>
+          <div className="w-full flex flex-col gap-5">
+            {fixturesPending && (
+              <p className="text-ivory/80 text-sm text-center py-6">{t('fixturesLoading')}</p>
+            )}
+            {matches.map((match) => (
+              <MatchCard
+                key={match.fixtureId}
+                match={match}
+                userPrediction={getDisplayPrediction(match.fixtureId)}
+                onPredictionSelect={handlePredictionSelect}
+                disabled={isDisabled || isSaving}
+              />
+            ))}
+          </div>
+        </GafferDisplayPrefsProvider>
 
         {/* Submit Button & Feedback */}
         {user && !isDisabled && (

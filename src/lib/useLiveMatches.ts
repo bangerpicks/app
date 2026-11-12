@@ -7,7 +7,10 @@ import { MatchCardData, Prediction } from '@/types/dashboard'
 import { GameweekFixtureData } from '@/lib/admin'
 import { FormResult } from '@/types/dashboard'
 import { formatMatchKickoffTime } from '@/lib/locale-format'
-import { mapApiFootballStatusToMatchStatus } from '@/lib/match-card-display'
+import {
+  mapApiFootballStatusToMatchStatus,
+  venueFromApiFootball,
+} from '@/lib/match-card-display'
 import type { Locale } from '@/i18n/config'
 
 /**
@@ -42,6 +45,7 @@ function convertFixtureToMatchCard(
       name: fixtureData.league.name,
       logo: fixtureData.league.logo,
     },
+    venue: venueFromApiFootball(fixture.venue),
     date: fixtureDate,
     time: formatMatchKickoffTime(fixtureDate, locale),
     homeTeam: {

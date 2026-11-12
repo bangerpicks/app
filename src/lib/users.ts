@@ -30,6 +30,10 @@ export interface UserDocument {
     photo: string
   } | null
   language?: 'en' | 'es-MX'
+  /** When false, Gaffer knowledge copy starts collapsed on match cards */
+  gafferKnowledgeOpenOnLoad?: boolean
+  /** When false, Gaffer's pick block starts collapsed on match cards */
+  gafferPickOpenOnLoad?: boolean
   referralCode?: string
   referralPoints?: number
   // Shop spend counter. Balance = correctPredictions + referralPoints - pointsSpent.

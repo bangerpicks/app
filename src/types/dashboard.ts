@@ -23,6 +23,11 @@ export interface TeamInfo {
   form: FormResult[] // Last 5 matches
 }
 
+export interface MatchVenue {
+  name: string
+  city: string
+}
+
 export interface MatchCardData {
   fixtureId: number
   league: {
@@ -30,6 +35,7 @@ export interface MatchCardData {
     name: string
     logo?: string
   }
+  venue?: MatchVenue
   date: Date
   time: string // Formatted time
   homeTeam: TeamInfo

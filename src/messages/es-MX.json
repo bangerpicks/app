@@ -22,7 +22,13 @@
     "spanish": "Español",
     "saving": "Guardando...",
     "saved": "Guardado",
-    "error": "Ocurrió un error. Por favor, intenta de nuevo."
+    "error": "Ocurrió un error. Por favor, intenta de nuevo.",
+    "gafferDisplayTitle": "Gaffer en las tarjetas",
+    "gafferDisplayDescription": "Elige si cada sección empieza abierta o cerrada al cargar el panel.",
+    "gafferKnowledgeOnLoad": "Conocimiento del Gaffer",
+    "gafferPickOnLoad": "Pronóstico del Gaffer",
+    "openOnLoad": "Abierto",
+    "closedOnLoad": "Cerrado"
   },
   "profile": {
     "title": "Perfil",
@@ -55,6 +61,13 @@
     "away": "VISITA",
     "officialPreviewLabel": "Vista del Gaffer",
     "officialPreviewAria": "Pronóstico oficial de la casa y confianza",
+    "gafferKnowledgeTitle": "Conocimiento del Gaffer",
+    "gafferKnowledgeAria": "Conocimiento del Gaffer y probabilidad de victoria",
+    "gafferWinProbability": "Pronóstico del Gaffer",
+    "gafferHideKnowledge": "Ocultar",
+    "gafferHidePick": "Ocultar pick",
+    "gafferShowKnowledge": "Mostrar",
+    "gafferShowPick": "Mostrar pick",
     "officialPickLine": "Pronóstico: {pick}",
     "confidenceStrong": "Fuerte",
     "confidenceLean": "Favorito ligero",
