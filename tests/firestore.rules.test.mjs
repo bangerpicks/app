@@ -445,8 +445,9 @@ describe('predictions', () => {
     await assertSucceeds(savePick(dbAs(USER), USER, 'H'))
   })
 
-  // Emulator allows large batches that exceed production's 20 security-rule access cap.
-  // Client savePredictions splits into smaller sequential batches; see prediction-save-chunks.
+  // Emulator allows large batches that exceed production's 20 security-rule access cap
+  // (and per-op 10). Client savePredictions chunks (join=1, follow-up=2); rules evaluate
+  // the player path before isAdmin() so saves stay under the cap. Green here ≠ prod caps.
   it('lets a fresh user onboard and save ten picks in one batch (no pre-seeded profile)', async () => {
     const FRESH = 'fresh-phone-user'
     const fixtureIds = Array.from({ length: 10 }, (_, i) => FIXTURE_ID + i)

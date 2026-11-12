@@ -627,22 +627,25 @@ service cloud.firestore {
         );
     }
 
+    // Security rules count up to 10 exists/get/getAfter per operation and 20 per
+    // batch (https://firebase.google.com/docs/firestore/quotas). isAdmin() must not
+    // be evaluated first on the player save path — || short-circuits on the left.
     match /predictions/{fixtureId} {
       allow read: if true;
-      allow create: if isAdmin() || (parentCreateWithCount(fixtureId) && !maintenanceOn());
-      allow update: if isAdmin() || ((parentCountBump(fixtureId) || parentTouch(fixtureId)) && !maintenanceOn());
+      allow create: if (parentCreateWithCount(fixtureId) && !maintenanceOn()) || isAdmin();
+      allow update: if ((parentCountBump(fixtureId) || parentTouch(fixtureId)) && !maintenanceOn()) || isAdmin();
       allow delete: if false;
 
       match /entries/{entryUid} {
         // Rankings list entries while signed in. Signed-out player count fails closed.
         allow read: if isSignedIn();
-        allow create: if isAdmin() || (validPredictionWrite(entryUid, fixtureId) && !maintenanceOn());
-        allow update: if isAdmin() || (
+        allow create: if (validPredictionWrite(entryUid, fixtureId) && !maintenanceOn()) || isAdmin();
+        allow update: if (
           resource != null
           && validPredictionWrite(entryUid, fixtureId)
           && !maintenanceOn()
           && resource.data.get('awarded', false) != true
-        );
+        ) || isAdmin();
         allow delete: if false;
       }
     }
@@ -684,7 +687,7 @@ service cloud.firestore {
       // playerCount is the public unique-predictor total for the signed-out dashboard.
       allow read: if isAdmin() || isPublicGameweekStatus(resource.data.status);
       allow create: if isAdmin();
-      allow update: if isAdmin() || isPredictorJoin(gameweekId);
+      allow update: if isPredictorJoin(gameweekId) || isAdmin();
       allow delete: if isAdmin();
 
       match /fixtures/{fixtureId} {
