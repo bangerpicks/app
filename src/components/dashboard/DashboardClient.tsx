@@ -5,7 +5,7 @@ import { useTranslations } from 'next-intl'
 import type { User } from 'firebase/auth'
 import { useAuth } from '@/lib/AuthProvider'
 import { ensureUserDocument } from '@/lib/users'
-import { savePredictions } from '@/lib/predictions'
+import { savePredictions, PARTIAL_PREDICTIONS_SAVE_ERROR } from '@/lib/predictions'
 import {
   clearPendingPicksSession,
   consumeSaveAfterSignInIntent,
@@ -217,7 +217,11 @@ export function DashboardClient({
       } catch (error: unknown) {
         console.error('Error saving predictions:', error)
         const message = error instanceof Error ? error.message : null
-        setSaveError(message || 'Failed to save predictions. Please try again.')
+        if (message === PARTIAL_PREDICTIONS_SAVE_ERROR) {
+          setSaveError(t('partialPredictionsSave'))
+        } else {
+          setSaveError(message || 'Failed to save predictions. Please try again.')
+        }
         postSignInSaveStarted.current = false
       } finally {
         setIsSaving(false)

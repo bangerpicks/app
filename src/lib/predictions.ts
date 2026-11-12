@@ -16,6 +16,10 @@ import {
 import { db } from './firebase'
 import { Prediction, MatchCardData } from '@/types/dashboard'
 import { withTimeout } from './firestore-utils'
+import { chunkPredictionFixtures } from './prediction-save-chunks.mjs'
+
+/** Stable sentinel; translate in dashboard UI via dashboard.partialPredictionsSave. */
+export const PARTIAL_PREDICTIONS_SAVE_ERROR = 'partial-predictions-save'
 
 /**
  * Prediction entry structure in Firestore
@@ -118,91 +122,124 @@ export async function savePredictions(
       matchDataMap.set(match.fixtureId, match)
     })
 
-    const batch = writeBatch(db)
     const cacheRef = doc(db, 'users', uid, 'gameweek_predictions', gameweekId)
     const cacheSnap = await getDoc(cacheRef)
+    const creatingCache = !cacheSnap.exists()
     const existingPredictions: Record<string, Prediction> = cacheSnap.exists()
       ? (cacheSnap.data() as GameweekPredictionsCache).predictions || {}
       : {}
     const mergedPredictions: Record<string, Prediction> = { ...existingPredictions }
-    let wrote = 0
+
+    const fixtureIdsToWrite: number[] = []
     let firstNewFixtureId: string | null = null
 
-    // Process each prediction
-    for (const [fixtureId, pick] of predictions.entries()) {
+    const orderedFixtureIds = [...predictions.keys()].sort((a, b) => a - b)
+    for (const fixtureId of orderedFixtureIds) {
+      const pick = predictions.get(fixtureId)
       const match = matchDataMap.get(fixtureId)
-      if (!match) {
+      if (!pick || !match) {
         continue
       }
-
-      const parentRef = doc(db, 'predictions', String(fixtureId))
+      fixtureIdsToWrite.push(fixtureId)
       const entryRef = doc(db, 'predictions', String(fixtureId), 'entries', uid)
       const entrySnap = await getDoc(entryRef)
-      // Public per-fixture count. Only a brand-new entry may add 1.
-      if (entrySnap.exists()) {
-        batch.set(parentRef, { exists: true }, { merge: true })
-      } else {
-        if (firstNewFixtureId == null) firstNewFixtureId = String(fixtureId)
-        batch.set(parentRef, { exists: true, playerCount: increment(1) }, { merge: true })
+      if (!entrySnap.exists() && firstNewFixtureId == null) {
+        firstNewFixtureId = String(fixtureId)
       }
-
-      // Build entry data
-      const entryData: Partial<PredictionEntry> = {
-        uid,
-        fixtureId,
-        gameweekId,
-        pick,
-        createdAt: serverTimestamp() as any,
-        awarded: false,
-        points: 0,
-        correct: null,
-        homeTeam: {
-          id: match.homeTeam.id,
-          name: match.homeTeam.name,
-          logo: match.homeTeam.logo,
-        },
-        awayTeam: {
-          id: match.awayTeam.id,
-          name: match.awayTeam.name,
-          logo: match.awayTeam.logo,
-        },
-        league: {
-          id: match.league.id,
-          name: match.league.name,
-          country: '', // MatchCardData doesn't have country, use empty string
-          logo: match.league.logo || '',
-        },
-        fixtureDate: Timestamp.fromDate(match.date),
-        status: match.matchStatus || 'NS',
-        result: match.score
-          ? {
-              homeGoals: match.score.home,
-              awayGoals: match.score.away,
-            }
-          : null,
-      }
-
-      batch.set(entryRef, entryData, { merge: true })
-      mergedPredictions[String(fixtureId)] = pick
-      wrote += 1
     }
 
-    if (wrote === 0) {
+    if (fixtureIdsToWrite.length === 0) {
       return
     }
 
-    const creatingCache = !cacheSnap.exists()
-    batch.set(cacheRef, {
-      predictions: mergedPredictions,
-      updatedAt: serverTimestamp(),
-      // Proves the gameweek +1 is tied to a new entry, not an empty cache.
-      ...(creatingCache && firstNewFixtureId ? { joinedFixtureId: firstNewFixtureId } : {}),
+    // Production caps security-rule document accesses at 20 per atomic writeBatch
+    // (emulator tests may not enforce this). Split into sequential batches.
+    const chunks = chunkPredictionFixtures(fixtureIdsToWrite, {
+      includesGameweekJoinExtras: creatingCache,
+      firstNewFixtureId:
+        firstNewFixtureId != null ? Number(firstNewFixtureId) : null,
     })
-    if (creatingCache && firstNewFixtureId) {
-      batch.update(doc(db, 'gameweeks', gameweekId), { playerCount: increment(1) })
-    }
 
-    await batch.commit()
+    for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
+      const chunk = chunks[chunkIndex]
+      const batch = writeBatch(db)
+      const joinExtrasThisBatch =
+        creatingCache && chunkIndex === 0 && firstNewFixtureId != null
+
+      for (const fixtureId of chunk) {
+        const pick = predictions.get(fixtureId)!
+        const match = matchDataMap.get(fixtureId)!
+        const parentRef = doc(db, 'predictions', String(fixtureId))
+        const entryRef = doc(db, 'predictions', String(fixtureId), 'entries', uid)
+        const entrySnap = await getDoc(entryRef)
+        if (entrySnap.exists()) {
+          batch.set(parentRef, { exists: true }, { merge: true })
+        } else {
+          batch.set(parentRef, { exists: true, playerCount: increment(1) }, { merge: true })
+        }
+
+        const entryData: Partial<PredictionEntry> = {
+          uid,
+          fixtureId,
+          gameweekId,
+          pick,
+          createdAt: serverTimestamp() as any,
+          awarded: false,
+          points: 0,
+          correct: null,
+          homeTeam: {
+            id: match.homeTeam.id,
+            name: match.homeTeam.name,
+            logo: match.homeTeam.logo,
+          },
+          awayTeam: {
+            id: match.awayTeam.id,
+            name: match.awayTeam.name,
+            logo: match.awayTeam.logo,
+          },
+          league: {
+            id: match.league.id,
+            name: match.league.name,
+            country: '',
+            logo: match.league.logo || '',
+          },
+          fixtureDate: Timestamp.fromDate(match.date),
+          status: match.matchStatus || 'NS',
+          result: match.score
+            ? {
+                homeGoals: match.score.home,
+                awayGoals: match.score.away,
+              }
+            : null,
+        }
+
+        batch.set(entryRef, entryData, { merge: true })
+        mergedPredictions[String(fixtureId)] = pick
+      }
+
+      if (joinExtrasThisBatch) {
+        batch.set(cacheRef, {
+          predictions: mergedPredictions,
+          updatedAt: serverTimestamp(),
+          joinedFixtureId: firstNewFixtureId,
+        })
+        batch.update(doc(db, 'gameweeks', gameweekId), { playerCount: increment(1) })
+      } else {
+        batch.set(cacheRef, {
+          predictions: mergedPredictions,
+          updatedAt: serverTimestamp(),
+        })
+      }
+
+      try {
+        await batch.commit()
+      } catch (batchError) {
+        if (chunkIndex > 0) {
+          throw new Error(PARTIAL_PREDICTIONS_SAVE_ERROR)
+        }
+        throw batchError
+      }
+    }
   } catch (error: any) {
     console.error('Error saving predictions:', error)
     

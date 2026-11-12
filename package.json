@@ -16,7 +16,7 @@
     "clean:install": "npm run clean && npm install",
     "fresh": "npm run clean:install && npm run build",
     "test:rules": "firebase emulators:exec --only firestore,storage --project demo-banger-picks \"node --test --test-concurrency=1 tests/firestore.rules.test.mjs tests/storage.rules.test.mjs tests/migrations.test.mjs\"",
-    "test:unit": "node --test tests/gameweek-selection.test.mjs tests/match-card-display.test.mjs tests/market-odds.test.mjs tests/market-odds-firestore.test.mjs tests/firebase-hosting-headers.test.mjs tests/crowd-picks-display.test.mjs",
+    "test:unit": "node --test tests/gameweek-selection.test.mjs tests/match-card-display.test.mjs tests/market-odds.test.mjs tests/market-odds-firestore.test.mjs tests/firebase-hosting-headers.test.mjs tests/crowd-picks-display.test.mjs tests/prediction-save-chunks.test.mjs",
     "build-test-deploy": "npm run type-check && npm run lint && npm run test:unit && npm run build"
   },
   "dependencies": {
