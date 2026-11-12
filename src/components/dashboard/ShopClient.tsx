@@ -158,7 +158,7 @@ export function ShopClient({ items, userPoints, username }: ShopClientProps) {
       <ReferralPopup />
 
       {/* Main Content */}
-      <main className="flex-1 px-4 sm:px-5 pb-20 sm:pb-24 py-4 sm:py-5 overflow-x-hidden">
+      <main className="flex-1 px-4 sm:px-5 pb-bottom-nav py-4 sm:py-5 overflow-x-hidden">
         {/* Title Section */}
         <div className="w-full flex flex-col items-center gap-2 mb-6">
           <ShoppingBag className="w-12 h-12 text-lime-yellow mb-2" />

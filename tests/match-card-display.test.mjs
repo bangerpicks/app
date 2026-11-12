@@ -96,3 +96,42 @@ test('officialPickTranslationKey maps prediction codes', () => {
   assert.equal(officialPickTranslationKey('D'), 'draw')
   assert.equal(officialPickTranslationKey('A'), 'away')
 })
+
+function isDisplayableLeagueRank(position) {
+  return typeof position === 'number' && Number.isFinite(position) && position > 0
+}
+
+function shouldShowLeaguePositionRow(homePosition, awayPosition) {
+  return (
+    isDisplayableLeagueRank(homePosition) || isDisplayableLeagueRank(awayPosition)
+  )
+}
+
+function formatLeagueRankLabel(position, locale) {
+  if (!isDisplayableLeagueRank(position)) return null
+  const n = Math.trunc(position)
+  if (locale === 'es-MX') return `${n}.º`
+  const suffix =
+    n > 3 && n < 21
+      ? 'th'
+      : n % 10 === 1
+        ? 'st'
+        : n % 10 === 2
+          ? 'nd'
+          : n % 10 === 3
+            ? 'rd'
+            : 'th'
+  return `${n}${suffix}`
+}
+
+test('league position row hidden when both ranks missing or zero', () => {
+  assert.equal(shouldShowLeaguePositionRow(0, 0), false)
+  assert.equal(shouldShowLeaguePositionRow(undefined, undefined), false)
+  assert.equal(shouldShowLeaguePositionRow(3, 0), true)
+})
+
+test('formatLeagueRankLabel hides invalid ranks and uses locale', () => {
+  assert.equal(formatLeagueRankLabel(0, 'en'), null)
+  assert.equal(formatLeagueRankLabel(4, 'en'), '4th')
+  assert.equal(formatLeagueRankLabel(4, 'es-MX'), '4.º')
+})

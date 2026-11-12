@@ -59,7 +59,7 @@ export function ProfileClient({ user, userData }: ProfileClientProps) {
       <Header username={displayName} userPhotoUrl={photoURL || undefined} />
 
       {/* Main Content */}
-      <main className="flex flex-1 flex-col px-4 sm:px-5 pb-20 sm:pb-24 py-4 sm:py-5 overflow-x-hidden">
+      <main className="flex flex-1 flex-col px-4 sm:px-5 pb-bottom-nav py-4 sm:py-5 overflow-x-hidden">
         {/* Profile Header Section */}
         <div className="w-full flex flex-col items-center gap-4 mb-6">
           {/* Profile Picture */}

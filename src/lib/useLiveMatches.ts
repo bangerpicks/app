@@ -53,14 +53,14 @@ function convertFixtureToMatchCard(
       id: fixtureData.teams.home.id,
       name: fixtureData.teams.home.name,
       logo: fixtureData.teams.home.logo,
-      position: teamPositions.get(fixtureData.teams.home.id) || 0,
+      position: teamPositions.get(fixtureData.teams.home.id),
       form: teamForms.get(fixtureData.teams.home.id) || [],
     },
     awayTeam: {
       id: fixtureData.teams.away.id,
       name: fixtureData.teams.away.name,
       logo: fixtureData.teams.away.logo,
-      position: teamPositions.get(fixtureData.teams.away.id) || 0,
+      position: teamPositions.get(fixtureData.teams.away.id),
       form: teamForms.get(fixtureData.teams.away.id) || [],
     },
     matchStatus,
@@ -154,11 +154,13 @@ export function useLiveMatches(
 
     initialMatches.forEach((match) => {
       // Only store position if it's not 0 (0 means no position data)
-      if (match.homeTeam.position > 0) {
-        positions.set(match.homeTeam.id, match.homeTeam.position)
+      const homePos = match.homeTeam.position
+      const awayPos = match.awayTeam.position
+      if (homePos != null && homePos > 0) {
+        positions.set(match.homeTeam.id, homePos)
       }
-      if (match.awayTeam.position > 0) {
-        positions.set(match.awayTeam.id, match.awayTeam.position)
+      if (awayPos != null && awayPos > 0) {
+        positions.set(match.awayTeam.id, awayPos)
       }
       // Only store form if it has data
       if (match.homeTeam.form && match.homeTeam.form.length > 0) {
@@ -256,11 +258,13 @@ export function useLiveMatches(
     const predictions = new Map<number, Prediction>()
 
     initialMatchesRef.current.forEach((match) => {
-      if (match.homeTeam.position > 0) {
-        positions.set(match.homeTeam.id, match.homeTeam.position)
+      const homePos = match.homeTeam.position
+      const awayPos = match.awayTeam.position
+      if (homePos != null && homePos > 0) {
+        positions.set(match.homeTeam.id, homePos)
       }
-      if (match.awayTeam.position > 0) {
-        positions.set(match.awayTeam.id, match.awayTeam.position)
+      if (awayPos != null && awayPos > 0) {
+        positions.set(match.awayTeam.id, awayPos)
       }
       if (match.homeTeam.form && match.homeTeam.form.length > 0) {
         forms.set(match.homeTeam.id, match.homeTeam.form)
@@ -298,11 +302,13 @@ export function useLiveMatches(
           const predictions = new Map<number, Prediction>()
 
           initialMatchesRef.current.forEach((match) => {
-            if (match.homeTeam.position > 0) {
-              positions.set(match.homeTeam.id, match.homeTeam.position)
+            const homePos = match.homeTeam.position
+            const awayPos = match.awayTeam.position
+            if (homePos != null && homePos > 0) {
+              positions.set(match.homeTeam.id, homePos)
             }
-            if (match.awayTeam.position > 0) {
-              positions.set(match.awayTeam.id, match.awayTeam.position)
+            if (awayPos != null && awayPos > 0) {
+              positions.set(match.awayTeam.id, awayPos)
             }
             if (match.homeTeam.form && match.homeTeam.form.length > 0) {
               forms.set(match.homeTeam.id, match.homeTeam.form)

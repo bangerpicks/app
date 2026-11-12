@@ -59,7 +59,8 @@ export function DashboardClient({
     () => matches.map((m) => m.fixtureId),
     [matches]
   )
-  const { crowdPercentsByFixture, playerCountByFixture } = useCrowdPickStats(
+  const { crowdPercentsByFixture, crowdStatsByFixture, playerCountByFixture } =
+    useCrowdPickStats(
     fixtureIds,
     Boolean(user),
     crowdStatsRefreshToken
@@ -304,7 +305,7 @@ export function DashboardClient({
     <div ref={containerRef} className="min-h-[100dvh] min-h-screen bg-midnight-violet flex flex-col">
       <Header username={username} />
 
-      <main className="flex-1 px-4 sm:px-5 py-2.5 pb-20 sm:pb-24 flex flex-col items-center gap-5 overflow-x-hidden">
+      <main className="flex-1 px-4 sm:px-5 py-2.5 pb-bottom-nav flex flex-col items-center gap-5 overflow-x-hidden">
         <IntroSection />
 
         <GameweekCard gameweek={gameweek} playerCount={playerCount} hasAnyPicks={hasAnyPicks} />
@@ -321,6 +322,7 @@ export function DashboardClient({
                 userPrediction={getDisplayPrediction(match.fixtureId)}
                 onPredictionSelect={handlePredictionSelect}
                 disabled={isDisabled || isSaving}
+                crowdPickStats={crowdStatsByFixture.get(match.fixtureId)}
                 crowdPickPercents={crowdPercentsByFixture.get(match.fixtureId)}
                 crowdPickCount={playerCountByFixture.get(match.fixtureId) ?? 0}
               />

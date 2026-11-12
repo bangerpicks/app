@@ -84,14 +84,14 @@ function convertFixtureToMatchCard(
       id: fixtureData.teams.home.id,
       name: fixtureData.teams.home.name,
       logo: fixtureData.teams.home.logo,
-      position: teamPositions.get(fixtureData.teams.home.id) || 0,
+      position: teamPositions.get(fixtureData.teams.home.id),
       form: teamForms.get(fixtureData.teams.home.id) || [],
     },
     awayTeam: {
       id: fixtureData.teams.away.id,
       name: fixtureData.teams.away.name,
       logo: fixtureData.teams.away.logo,
-      position: teamPositions.get(fixtureData.teams.away.id) || 0,
+      position: teamPositions.get(fixtureData.teams.away.id),
       form: teamForms.get(fixtureData.teams.away.id) || [],
     },
     matchStatus,
@@ -115,7 +115,7 @@ function DashboardShell({
   return (
     <div className="min-h-[100dvh] min-h-screen bg-midnight-violet flex flex-col">
       <Header username={username} />
-      <main className="flex-1 px-4 sm:px-5 py-8 pb-20 flex flex-col items-center justify-center gap-4 text-center">
+      <main className="flex-1 px-4 sm:px-5 py-8 pb-bottom-nav flex flex-col items-center justify-center gap-4 text-center">
         {children}
       </main>
       <BottomNavigation />

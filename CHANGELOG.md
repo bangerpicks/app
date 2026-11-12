@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.1.6 — 2026-11-12
+
+### Dashboard polish (i18n, match cards, hosting)
+
+- Match cards: fixture **match context** (why-it-matters) separate from a combined **market odds + players' picks** disclosure; hiding odds hides both; no official Gaffer lean on player cards.
+- Players' picks show **pick counts** per outcome (not percentages); market bar still uses implied percentages.
+- Settings: on-load toggles describe match context vs combined odds/players picks (en + es-MX).
+- es-MX fixes: gameweek OPEN, Last 5, league position; hide missing ranks and empty form; no English ordinals in Spanish.
+- Bottom nav scroll padding; why-it-matters clamped to 2 lines.
+- Firebase Hosting: immutable cache for hashed assets; HTML revalidates immediately.
+- App version label 1.1.6.
+
 ## 1.1.5 — 2026-11-11
 
 ### Match cards: Gaffer preview and localized context

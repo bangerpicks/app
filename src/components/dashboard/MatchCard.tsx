@@ -13,6 +13,7 @@ import {
   resolveWhyItMatters,
   type GafferWinProbabilities,
 } from '@/lib/match-card-display'
+import type { CrowdPickStats } from '@/lib/crowd-picks'
 import { hasDisplayableMarketOdds } from '@/lib/market-odds'
 import {
   formatMatchCardHeaderDate,
@@ -26,6 +27,7 @@ interface MatchCardProps {
   disabled?: boolean
   /** When true, show prediction and result only (no buttons) */
   readOnly?: boolean
+  crowdPickStats?: CrowdPickStats
   crowdPickPercents?: GafferWinProbabilities
   crowdPickCount?: number
 }
@@ -36,6 +38,7 @@ export function MatchCard({
   onPredictionSelect,
   disabled = false,
   readOnly = false,
+  crowdPickStats,
   crowdPickPercents,
   crowdPickCount = 0,
 }: MatchCardProps) {
@@ -49,11 +52,10 @@ export function MatchCard({
   )
 
   const venueLabel = formatMatchVenue(match.venue)
-  const showGaffer =
+  const showFixtureInsights =
     Boolean(whyText) ||
-    Boolean(match.officialPick) ||
     hasDisplayableMarketOdds(match.marketOdds) ||
-    (crowdPickPercents != null && crowdPickCount > 0)
+    (crowdPickStats != null && crowdPickCount > 0)
 
   const handlePredictionSelect = (prediction: Prediction) => {
     if (!readOnly) onPredictionSelect(match.fixtureId, prediction)
@@ -136,12 +138,11 @@ export function MatchCard({
           <TeamInfo team={match.awayTeam} />
         </div>
 
-        {showGaffer ? (
+        {showFixtureInsights ? (
           <GafferKnowledge
             whyText={whyText}
-            officialPick={match.officialPick}
-            officialConfidence={match.officialConfidence}
             marketOdds={match.marketOdds}
+            crowdPickStats={crowdPickStats}
             crowdPickPercents={crowdPickPercents}
             crowdPickCount={crowdPickCount}
           />

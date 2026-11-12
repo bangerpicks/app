@@ -17,9 +17,21 @@
   --safe-area-inset-right: env(safe-area-inset-right, 0px);
   /* Header height for sticky table positioning */
   --header-height: 80px;
+  --bottom-nav-height: 100px;
+}
+
+@layer utilities {
+  .pb-bottom-nav {
+    padding-bottom: calc(
+      var(--bottom-nav-height) + var(--safe-area-inset-bottom) + 1.25rem
+    );
+  }
 }
 
 html {
+  scroll-padding-bottom: calc(
+    var(--bottom-nav-height) + var(--safe-area-inset-bottom) + 1rem
+  );
   /* Don't constrain height - let content determine height */
   /* Prevent elastic/bounce scrolling on iOS */
   overscroll-behavior-y: none;

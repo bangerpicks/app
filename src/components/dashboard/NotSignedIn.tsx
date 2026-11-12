@@ -17,7 +17,7 @@ export function NotSignedIn() {
       <Header />
 
       {/* Main Content */}
-      <main className="flex-1 px-4 sm:px-5 pb-20 sm:pb-24 flex flex-col items-center justify-center overflow-x-hidden">
+      <main className="flex-1 px-4 sm:px-5 pb-bottom-nav flex flex-col items-center justify-center overflow-x-hidden">
         <div className="w-full max-w-md flex flex-col items-center gap-6 text-center">
           {/* Icon */}
           <div className="w-20 h-20 rounded-full bg-ivory/10 flex items-center justify-center">

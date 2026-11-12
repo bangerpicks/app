@@ -1,48 +1,48 @@
+'use client'
+
+import { useTranslations } from 'next-intl'
+import { useLanguage } from '@/lib/LanguageProvider'
+import {
+  formatLeagueRankLabel,
+  shouldShowLeaguePositionRow,
+} from '@/lib/match-card-display'
+
 interface MatchStatsProps {
   score?: { home: number; away: number } | null
-  homePosition: number
-  awayPosition: number
+  homePosition?: number
+  awayPosition?: number
   isLive?: boolean
 }
 
-function getOrdinalSuffix(num: number): string {
-  if (num > 3 && num < 21) return 'th'
-  switch (num % 10) {
-    case 1:
-      return 'st'
-    case 2:
-      return 'nd'
-    case 3:
-      return 'rd'
-    default:
-      return 'th'
-  }
-}
+export function MatchStats({
+  score,
+  homePosition,
+  awayPosition,
+  isLive = false,
+}: MatchStatsProps) {
+  const t = useTranslations('dashboard')
+  const { locale } = useLanguage()
 
-function formatLeaguePosition(position: number) {
-  if (position <= 0) {
-    return null
-  }
-  return { value: position, suffix: getOrdinalSuffix(position) }
-}
-
-export function MatchStats({ score, homePosition, awayPosition, isLive = false }: MatchStatsProps) {
-  const homePos = formatLeaguePosition(homePosition)
-  const awayPos = formatLeaguePosition(awayPosition)
+  const homeLabel = formatLeagueRankLabel(homePosition, locale)
+  const awayLabel = formatLeagueRankLabel(awayPosition, locale)
+  const showLeagueRow = shouldShowLeaguePositionRow(homePosition, awayPosition)
 
   return (
     <div className="flex flex-col items-center justify-center gap-4 flex-1">
-      {/* Score with dash separator - increased prominence */}
       <div className="flex items-center gap-3">
         {score ? (
           <>
-            <span className={`text-3xl sm:text-4xl font-bold tracking-[0.24px] text-white ${isLive ? 'animate-pulse' : ''}`}>
+            <span
+              className={`text-3xl sm:text-4xl font-bold tracking-[0.24px] text-white ${isLive ? 'animate-pulse' : ''}`}
+            >
               {score.home}
             </span>
             <span className="text-xl sm:text-2xl font-medium tracking-[0.14px] text-white opacity-70">
               -
             </span>
-            <span className={`text-3xl sm:text-4xl font-bold tracking-[0.24px] text-white ${isLive ? 'animate-pulse' : ''}`}>
+            <span
+              className={`text-3xl sm:text-4xl font-bold tracking-[0.24px] text-white ${isLive ? 'animate-pulse' : ''}`}
+            >
               {score.away}
             </span>
           </>
@@ -57,35 +57,22 @@ export function MatchStats({ score, homePosition, awayPosition, isLive = false }
         )}
       </div>
 
-      {/* League Position - clear and side-by-side */}
-      <div className="flex flex-col items-center gap-1.5">
-        <span className="text-xs font-semibold text-white/70 uppercase tracking-wider text-center">
-          League Position
-        </span>
-        <div className="flex items-baseline gap-4">
-          <span className="text-base font-semibold text-white">
-            {homePos ? (
-              <>
-                {homePos.value}
-                <span className="text-[10px] leading-none relative -top-1">{homePos.suffix}</span>
-              </>
-            ) : (
-              '-'
-            )}
+      {showLeagueRow ? (
+        <div className="flex flex-col items-center gap-1.5">
+          <span className="text-xs font-semibold text-white/70 uppercase tracking-wider text-center">
+            {t('leaguePosition')}
           </span>
-          <span className="text-sm text-white/50">|</span>
-          <span className="text-base font-semibold text-white">
-            {awayPos ? (
-              <>
-                {awayPos.value}
-                <span className="text-[10px] leading-none relative -top-1">{awayPos.suffix}</span>
-              </>
-            ) : (
-              '-'
-            )}
-          </span>
+          <div className="flex items-baseline gap-4">
+            <span className="text-base font-semibold text-white">
+              {homeLabel ?? '—'}
+            </span>
+            <span className="text-sm text-white/50">|</span>
+            <span className="text-base font-semibold text-white">
+              {awayLabel ?? '—'}
+            </span>
+          </div>
         </div>
-      </div>
+      ) : null}
     </div>
   )
 }

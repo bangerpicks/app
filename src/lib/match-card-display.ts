@@ -3,6 +3,7 @@ import {
   Prediction,
   type MatchVenue,
 } from '@/types/dashboard'
+import type { Locale } from '@/i18n/config'
 
 export interface GafferWinProbabilities {
   home: number
@@ -43,6 +44,49 @@ export function officialConfidenceTranslationKey(
   confidence: OfficialConfidence
 ): string {
   return CONFIDENCE_I18N_KEY[confidence]
+}
+
+/** Valid league table rank (positive integer). */
+export function isDisplayableLeagueRank(
+  position: number | null | undefined
+): position is number {
+  return typeof position === 'number' && Number.isFinite(position) && position > 0
+}
+
+function englishOrdinalSuffix(num: number): string {
+  if (num > 3 && num < 21) return 'th'
+  switch (num % 10) {
+    case 1:
+      return 'st'
+    case 2:
+      return 'nd'
+    case 3:
+      return 'rd'
+    default:
+      return 'th'
+  }
+}
+
+/** Player-facing league rank label; Spanish uses superscript º, not English ordinals. */
+export function formatLeagueRankLabel(
+  position: number | null | undefined,
+  locale: Locale
+): string | null {
+  if (!isDisplayableLeagueRank(position)) return null
+  const n = Math.trunc(position)
+  if (locale === 'es-MX') {
+    return `${n}.º`
+  }
+  return `${n}${englishOrdinalSuffix(n)}`
+}
+
+export function shouldShowLeaguePositionRow(
+  homePosition: number | null | undefined,
+  awayPosition: number | null | undefined
+): boolean {
+  return (
+    isDisplayableLeagueRank(homePosition) || isDisplayableLeagueRank(awayPosition)
+  )
 }
 
 export function formatMatchVenue(

@@ -1,4 +1,7 @@
+'use client'
+
 import Image from 'next/image'
+import { useTranslations } from 'next-intl'
 import { TeamInfo as TeamInfoType, FormResult } from '@/types/dashboard'
 
 interface TeamInfoProps {
@@ -11,7 +14,6 @@ function FormIndicator({ result }: { result: FormResult }) {
       case 'W':
         return 'bg-lime-yellow text-midnight-violet'
       case 'D':
-        // Fix contrast: use darker amber background with border for WCAG compliance
         return 'bg-[#e68900] text-midnight-violet border border-amber-glow'
       case 'L':
         return 'bg-cinnabar text-midnight-violet'
@@ -30,6 +32,9 @@ function FormIndicator({ result }: { result: FormResult }) {
 }
 
 export function TeamInfo({ team }: TeamInfoProps) {
+  const t = useTranslations('dashboard')
+  const hasForm = team.form.length > 0
+
   return (
     <div className="flex flex-col gap-2.5 flex-1 items-center min-w-0">
       <div className="flex flex-col gap-2.5 items-center w-full">
@@ -51,17 +56,18 @@ export function TeamInfo({ team }: TeamInfoProps) {
         </h3>
       </div>
 
-      {/* Form Label and Indicators */}
-      <div className="flex flex-col items-center gap-1">
-        <span className="text-[10px] text-white/60 uppercase tracking-wider">
-          Last 5
-        </span>
-        <div className="flex justify-between items-center gap-1 max-w-[120px] w-full mx-auto">
-          {team.form.map((result, index) => (
-            <FormIndicator key={index} result={result} />
-          ))}
+      {hasForm ? (
+        <div className="flex flex-col items-center gap-1">
+          <span className="text-[10px] text-white/60 uppercase tracking-wider">
+            {t('lastFive')}
+          </span>
+          <div className="flex justify-between items-center gap-1 max-w-[120px] w-full mx-auto">
+            {team.form.map((result, index) => (
+              <FormIndicator key={index} result={result} />
+            ))}
+          </div>
         </div>
-      </div>
+      ) : null}
     </div>
   )
 }
