@@ -59,6 +59,7 @@
     "signInToSavePicks": "Inicia sesión para guardar tus picks",
     "guestSaveHint": "Inicia sesión para confirmar tu tarjeta—conservamos tus elecciones.",
     "savedSuccessfully": "¡Predicciones guardadas exitosamente!",
+    "partialPredictionsSave": "Se guardaron algunos picks, pero no se pudieron completar todos. Vuelve a guardar para terminar tu tarjeta.",
     "gameweekClosed": "Esta semana ya no está abierta para predicciones.",
     "home": "LOCAL",
     "draw": "EMPATE",

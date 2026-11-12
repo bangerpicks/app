@@ -18,9 +18,8 @@ import { Prediction, MatchCardData } from '@/types/dashboard'
 import { withTimeout } from './firestore-utils'
 import { chunkPredictionFixtures } from './prediction-save-chunks.mjs'
 
-/** Shown when a later chunk fails after an earlier batch committed (user can save again). */
-export const PARTIAL_PREDICTIONS_SAVE_MESSAGE =
-  'Some picks were saved, but the rest could not be completed. Save again to finish your card.'
+/** Stable sentinel; translate in dashboard UI via dashboard.partialPredictionsSave. */
+export const PARTIAL_PREDICTIONS_SAVE_ERROR = 'partial-predictions-save'
 
 /**
  * Prediction entry structure in Firestore
@@ -236,7 +235,7 @@ export async function savePredictions(
         await batch.commit()
       } catch (batchError) {
         if (chunkIndex > 0) {
-          throw new Error(PARTIAL_PREDICTIONS_SAVE_MESSAGE)
+          throw new Error(PARTIAL_PREDICTIONS_SAVE_ERROR)
         }
         throw batchError
       }

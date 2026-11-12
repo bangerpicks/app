@@ -59,6 +59,7 @@
     "signInToSavePicks": "Sign in to save picks",
     "guestSaveHint": "Sign in to lock in your slate—we'll keep your choices.",
     "savedSuccessfully": "Predictions saved successfully!",
+    "partialPredictionsSave": "Some picks were saved, but the rest could not be completed. Save again to finish your card.",
     "gameweekClosed": "This gameweek is no longer open for predictions.",
     "home": "HOME",
     "draw": "DRAW",

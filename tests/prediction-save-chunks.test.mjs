@@ -9,13 +9,13 @@ import {
 const TEN = Array.from({ length: 10 }, (_, i) => 1000 + i)
 
 describe('chunkPredictionFixtures', () => {
-  it('splits 10 fixtures for first-time join: 3 + 3 + 3 + 1', () => {
+  it('splits 10 fixtures for first-time join: 2 + 3 + 3 + 2', () => {
     const chunks = chunkPredictionFixtures(TEN, { includesGameweekJoinExtras: true })
     assert.deepEqual(chunks, [
-      TEN.slice(0, 3),
-      TEN.slice(3, 6),
-      TEN.slice(6, 9),
-      TEN.slice(9, 10),
+      TEN.slice(0, 2),
+      TEN.slice(2, 5),
+      TEN.slice(5, 8),
+      TEN.slice(8, 10),
     ])
     assert.equal(chunks[0].length, JOIN_BATCH_MAX_FIXTURES)
     assert.ok(chunks.slice(1).every((c) => c.length <= FOLLOW_UP_BATCH_MAX_FIXTURES))
@@ -37,7 +37,7 @@ describe('chunkPredictionFixtures', () => {
       includesGameweekJoinExtras: true,
       firstNewFixtureId: 4,
     })
-    assert.deepEqual(chunks[0], [4, 5, 6])
+    assert.deepEqual(chunks[0], [4, 5])
     assert.equal(chunks.flat().length, 10)
   })
 
