@@ -26,6 +26,7 @@ import {
   buildWeeklyPointsByUid,
   rankPodiumFromWeeklyPoints,
 } from './gameweek-podium'
+import { syncPreMatchOddsForActiveGameweeks } from './prematch-odds-sync'
 
 admin.initializeApp()
 
@@ -235,6 +236,44 @@ export const updateLiveFixtures = functions
         return null
       }
       console.error('[updateLiveFixtures] Error in live fixture update:', error)
+      return null
+    }
+  })
+
+/**
+ * Refresh pre-match 1X2 bookmaker odds for active gameweek fixtures (every 3 hours).
+ * Snapshots freeze at kickoff; no live odds polling.
+ */
+export const refreshPreMatchOdds = functions
+  .runWith(scheduledOpts)
+  .pubsub.schedule('every 3 hours')
+  .onRun(async () => {
+    resetApiFootballRateLimitWarning()
+    const db = admin.firestore()
+    let apiKey: string
+
+    try {
+      apiKey = resolveApiFootballKey()
+    } catch (error: unknown) {
+      console.error(
+        '[refreshPreMatchOdds]',
+        error instanceof Error ? error.message : error
+      )
+      return null
+    }
+
+    try {
+      const stats = await syncPreMatchOddsForActiveGameweeks(db, apiKey)
+      console.log(
+        `[refreshPreMatchOdds] fixturesChecked=${stats.fixturesChecked} apiCalls=${stats.apiCalls} updated=${stats.updated}`
+      )
+      return null
+    } catch (error: unknown) {
+      if (error instanceof ApiFootballRateLimitError) {
+        logApiFootballRateLimitWarning('refreshPreMatchOdds')
+        return null
+      }
+      console.error('[refreshPreMatchOdds] Error:', error)
       return null
     }
   })

@@ -22,6 +22,7 @@ import { APIFootballFixture, getStandings } from './api-football'
 import { withTimeout } from './firestore-utils'
 import { isFlagshipGameweek } from './gameweek-constants'
 import type { GameweekFixtureEditorial } from '@/types/admin'
+import type { MarketOddsSnapshot } from '@/types/dashboard'
 
 /**
  * Generate cache key for fixture search
@@ -182,6 +183,9 @@ export interface GameweekFixtureData {
   whyItMatters_esMX?: string
   officialPick?: 'H' | 'D' | 'A'
   officialConfidence?: 'Strong' | 'Lean' | 'Toss-up'
+  marketOdds?: MarketOddsSnapshot & {
+    fetchedAt?: Timestamp
+  }
 }
 
 function pickFixtureEditorial(data: Record<string, unknown>): GameweekFixtureEditorial {

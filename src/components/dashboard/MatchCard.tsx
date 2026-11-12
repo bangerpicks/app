@@ -13,6 +13,7 @@ import {
   resolveWhyItMatters,
   type GafferWinProbabilities,
 } from '@/lib/match-card-display'
+import { hasDisplayableMarketOdds } from '@/lib/market-odds'
 import {
   formatMatchCardHeaderDate,
   formatMatchKickoffTime,
@@ -51,6 +52,7 @@ export function MatchCard({
   const showGaffer =
     Boolean(whyText) ||
     Boolean(match.officialPick) ||
+    hasDisplayableMarketOdds(match.marketOdds) ||
     (crowdPickPercents != null && crowdPickCount > 0)
 
   const handlePredictionSelect = (prediction: Prediction) => {
@@ -139,6 +141,7 @@ export function MatchCard({
             whyText={whyText}
             officialPick={match.officialPick}
             officialConfidence={match.officialConfidence}
+            marketOdds={match.marketOdds}
             crowdPickPercents={crowdPickPercents}
             crowdPickCount={crowdPickCount}
           />

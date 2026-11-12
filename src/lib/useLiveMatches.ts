@@ -11,6 +11,7 @@ import {
   mapApiFootballStatusToMatchStatus,
   venueFromApiFootball,
 } from '@/lib/match-card-display'
+import { marketOddsFromFirestoreData } from '@/lib/market-odds-firestore'
 import type { Locale } from '@/i18n/config'
 
 /**
@@ -69,6 +70,7 @@ function convertFixtureToMatchCard(
     whyItMatters_esMX: fixtureData.whyItMatters_esMX,
     officialPick: fixtureData.officialPick,
     officialConfidence: fixtureData.officialConfidence,
+    marketOdds: marketOddsFromFirestoreData(fixtureData.marketOdds),
   }
 }
 
