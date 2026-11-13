@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.9 — 2026-11-13
+
+### i18n: last-5 form result letters (es-MX)
+
+- Match cards: translate form pills at display time (en W/D/L; es-MX G/E/P) with localized aria-label and title.
+- App version label 1.1.9.
+
 ## 1.1.8 — 2026-11-12
 
 ### Hosting: revalidate clean URL HTML routes
