@@ -8,7 +8,21 @@ interface TeamInfoProps {
   team: TeamInfoType
 }
 
+const FORM_RESULT_MESSAGE_KEY: Record<FormResult, string> = {
+  W: 'formResultWin',
+  D: 'formResultDraw',
+  L: 'formResultLoss',
+}
+
+const FORM_RESULT_ARIA_KEY: Record<FormResult, string> = {
+  W: 'formResultWinLabel',
+  D: 'formResultDrawLabel',
+  L: 'formResultLossLabel',
+}
+
 function FormIndicator({ result }: { result: FormResult }) {
+  const t = useTranslations('dashboard')
+
   const getColor = () => {
     switch (result) {
       case 'W':
@@ -25,8 +39,12 @@ function FormIndicator({ result }: { result: FormResult }) {
   return (
     <div
       className={`w-[18px] h-[18px] p-[1px] ${getColor()} rounded-sm flex items-center justify-center`}
+      aria-label={t(FORM_RESULT_ARIA_KEY[result])}
+      title={t(FORM_RESULT_ARIA_KEY[result])}
     >
-      <span className="text-sm font-black leading-5">{result}</span>
+      <span className="text-sm font-black leading-5">
+        {t(FORM_RESULT_MESSAGE_KEY[result])}
+      </span>
     </div>
   )
 }
