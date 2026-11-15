@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.10 — 2026-11-15
+
+### Fix: mobile bottom nav jumping to top of viewport
+
+- Pin the dashboard bottom tab bar with `position: fixed` to the visual viewport instead of `position: sticky` + `bottom-0` inside the page flex column.
+- Stop applying the iOS sticky `translateZ(0)` hack to the bottom nav (it created a new containing block and made sticky-bottom unreliable when the Safari address bar resized or when live dashboard updates reflowed the page).
+- App version label 1.1.10.
+
 ## 1.1.9 — 2026-11-13
 
 ### i18n: last-5 form result letters (es-MX)

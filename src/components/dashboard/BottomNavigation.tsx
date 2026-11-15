@@ -11,7 +11,9 @@ export function BottomNavigation() {
 
   return (
     <nav
-      className="sticky bottom-0 z-10 h-[84px] bg-lime-yellow rounded-t-[10px] px-2 sm:px-5 py-2 flex items-center justify-between lg:hidden"
+      data-bottom-nav
+      aria-label="Main"
+      className="fixed bottom-0 left-0 right-0 z-30 h-[84px] bg-lime-yellow rounded-t-[10px] px-2 sm:px-5 py-2 flex items-center justify-between lg:hidden"
       style={{ paddingBottom: 'calc(0.5rem + env(safe-area-inset-bottom, 0px))' }}
     >
       {dashboardNavItems.map((item) => {
