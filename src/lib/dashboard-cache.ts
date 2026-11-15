@@ -4,7 +4,8 @@
 
 import { GameweekData, MatchCardData } from '@/types/dashboard'
 
-const CACHE_KEY = 'banger-picks-dashboard-cache'
+export const DASHBOARD_SESSION_CACHE_TTL_MS = 10 * 60 * 1000
+export const DASHBOARD_SESSION_CACHE_KEY_PREFIX = 'banger-picks-dashboard-cache:v1'
 const CACHE_VERSION = 1
 
 type SerializedGameweekData = Omit<GameweekData, 'deadline' | 'startDate' | 'endDate'> & {
@@ -23,6 +24,12 @@ export interface DashboardSessionCache {
   gameweekId: string
   gameweek: GameweekData
   matches: MatchCardData[]
+  locale: string
+  uid: string | null
+}
+
+export function dashboardSessionCacheKey(uid: string | null, locale: string): string {
+  return `${DASHBOARD_SESSION_CACHE_KEY_PREFIX}:${uid ?? 'anon'}:${locale}`
 }
 
 function serializeGameweek(gw: GameweekData): SerializedGameweekData {
@@ -57,12 +64,20 @@ function deserializeMatch(raw: SerializedMatchCardData): MatchCardData {
   }
 }
 
-export function readDashboardSessionCache(): DashboardSessionCache | null {
+function isCacheEntryFresh(savedAt: number, nowMs: number = Date.now()): boolean {
+  return nowMs - savedAt <= DASHBOARD_SESSION_CACHE_TTL_MS
+}
+
+export function readDashboardSessionCache(
+  uid: string | null,
+  locale: string
+): DashboardSessionCache | null {
   if (typeof sessionStorage === 'undefined') {
     return null
   }
   try {
-    const raw = sessionStorage.getItem(CACHE_KEY)
+    const key = dashboardSessionCacheKey(uid, locale)
+    const raw = sessionStorage.getItem(key)
     if (!raw) return null
     const parsed = JSON.parse(raw) as {
       version: number
@@ -70,21 +85,33 @@ export function readDashboardSessionCache(): DashboardSessionCache | null {
       gameweekId: string
       gameweek: SerializedGameweekData
       matches: SerializedMatchCardData[]
+      locale?: string
+      uid?: string | null
     }
     if (parsed.version !== CACHE_VERSION) return null
+    if (!isCacheEntryFresh(parsed.savedAt)) {
+      sessionStorage.removeItem(key)
+      return null
+    }
     return {
       version: CACHE_VERSION,
       savedAt: parsed.savedAt,
       gameweekId: parsed.gameweekId,
       gameweek: deserializeGameweek(parsed.gameweek),
       matches: parsed.matches.map(deserializeMatch),
+      locale: parsed.locale ?? locale,
+      uid: parsed.uid ?? uid,
     }
   } catch {
     return null
   }
 }
 
-export function writeDashboardSessionCache(payload: Omit<DashboardSessionCache, 'version' | 'savedAt'>): void {
+export function writeDashboardSessionCache(
+  uid: string | null,
+  locale: string,
+  payload: Omit<DashboardSessionCache, 'version' | 'savedAt' | 'locale' | 'uid'>
+): void {
   if (typeof sessionStorage === 'undefined') {
     return
   }
@@ -95,19 +122,39 @@ export function writeDashboardSessionCache(payload: Omit<DashboardSessionCache, 
       gameweekId: payload.gameweekId,
       gameweek: serializeGameweek(payload.gameweek),
       matches: payload.matches.map(serializeMatch),
+      locale,
+      uid,
     }
-    sessionStorage.setItem(CACHE_KEY, JSON.stringify(body))
+    sessionStorage.setItem(dashboardSessionCacheKey(uid, locale), JSON.stringify(body))
   } catch {
     // Quota or private mode — ignore
   }
 }
 
-export function clearDashboardSessionCache(): void {
+export function clearDashboardSessionCache(uid: string | null, locale: string): void {
   if (typeof sessionStorage === 'undefined') {
     return
   }
   try {
-    sessionStorage.removeItem(CACHE_KEY)
+    sessionStorage.removeItem(dashboardSessionCacheKey(uid, locale))
+  } catch {
+    /* ignore */
+  }
+}
+
+export function clearAllDashboardSessionCaches(): void {
+  if (typeof sessionStorage === 'undefined') {
+    return
+  }
+  try {
+    const keysToRemove: string[] = []
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const key = sessionStorage.key(i)
+      if (key?.startsWith(`${DASHBOARD_SESSION_CACHE_KEY_PREFIX}:`)) {
+        keysToRemove.push(key)
+      }
+    }
+    keysToRemove.forEach((key) => sessionStorage.removeItem(key))
   } catch {
     /* ignore */
   }

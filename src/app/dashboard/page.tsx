@@ -24,11 +24,17 @@ import {
   mapAdminGameweekToDashboardStatus,
   resolvePlayerCountFromGameweek,
   getEffectiveDeadline,
+  LoadBudget,
 } from '@/lib/gameweek-selection'
 import {
   readDashboardSessionCache,
   writeDashboardSessionCache,
 } from '@/lib/dashboard-cache'
+import { FirestoreServedFromCacheError } from '@/lib/firestore-server-read'
+import {
+  shouldShowDashboardStaleBanner,
+  staleBannerShowsRetry,
+} from '@/lib/dashboard-load-state'
 
 function convertGameweekData(adminGameweek: AdminGameweekData): GameweekData {
   const lock = getEffectiveDeadline(adminGameweek)
@@ -143,6 +149,9 @@ export default function DashboardPage() {
   const [refreshFailed, setRefreshFailed] = useState(false)
   const [usingSessionCache, setUsingSessionCache] = useState(false)
   const [isRefreshingGameweek, setIsRefreshingGameweek] = useState(false)
+  const [servedFromFirestoreCache, setServedFromFirestoreCache] = useState(false)
+
+  const cacheUid = user?.uid ?? null
 
   const isDevOnboardingPreview =
     process.env.NODE_ENV === 'development' &&
@@ -192,8 +201,10 @@ export default function DashboardPage() {
 
   useEffect(() => {
     const abortController = new AbortController()
-    const sessionCache = readDashboardSessionCache()
+    const sessionCache = readDashboardSessionCache(cacheUid, locale)
     const hadCache = Boolean(sessionCache)
+    const loadBudget = new LoadBudget()
+    const fixtureReadOpts = { serverPreferring: true as const, budget: loadBudget }
 
     if (hadCache && sessionCache) {
       setGameweek(sessionCache.gameweek)
@@ -214,19 +225,24 @@ export default function DashboardPage() {
           setGameweekId(null)
         } else {
           setRefreshFailed(false)
+          setServedFromFirestoreCache(false)
           setIsRefreshingGameweek(true)
         }
 
-        const currentGameweek = await fetchCurrentGameweek()
+        const currentGameweek = await fetchCurrentGameweek(loadBudget)
 
         if (abortController.signal.aborted) return
 
         if (!currentGameweek) {
           setEmptyReason('no-week')
+          setServedFromFirestoreCache(false)
           return
         }
 
-        const fixtures = await getGameweekFixtures(currentGameweek.gameweekId)
+        const fixtures = await getGameweekFixtures(
+          currentGameweek.gameweekId,
+          fixtureReadOpts
+        )
 
         if (abortController.signal.aborted) return
 
@@ -268,9 +284,11 @@ export default function DashboardPage() {
         setInitialMatches(sortedMatches)
         setUsingSessionCache(false)
         setRefreshFailed(false)
+        setServedFromFirestoreCache(false)
         setIsRefreshingGameweek(false)
         setError(null)
-        writeDashboardSessionCache({
+        setEmptyReason(null)
+        writeDashboardSessionCache(cacheUid, locale, {
           gameweekId: currentGameweek.gameweekId,
           gameweek: dashboardGameweek,
           matches: sortedMatches,
@@ -331,14 +349,19 @@ export default function DashboardPage() {
         if (abortController.signal.aborted) return
         console.error('Error fetching active gameweek:', err)
         const message = err instanceof Error ? err.message : 'Failed to load gameweek data'
+        const cacheOnly = err instanceof FirestoreServedFromCacheError
         if (hadCache) {
           setRefreshFailed(true)
+          setServedFromFirestoreCache(cacheOnly)
           setError(message)
+          setEmptyReason(null)
         } else {
           setError(message)
           setGameweek(null)
           setInitialMatches([])
           setGameweekId(null)
+          setEmptyReason(null)
+          setServedFromFirestoreCache(cacheOnly)
         }
         setLoadingPredictions(false)
         if (hadCache) {
@@ -358,13 +381,26 @@ export default function DashboardPage() {
     return () => {
       abortController.abort()
     }
-  }, [user, loadGeneration, locale])
+  }, [user, loadGeneration, locale, cacheUid])
 
   const retryGameweekLoad = () => {
     setError(null)
     setRefreshFailed(false)
+    setServedFromFirestoreCache(false)
+    setEmptyReason(null)
     setLoadGeneration((g) => g + 1)
   }
+
+  const showStaleBanner = shouldShowDashboardStaleBanner({
+    servedFromFirestoreCache,
+    refreshFailed,
+    usingSessionCache,
+    isRefreshingGameweek,
+  })
+  const showStaleRetry = staleBannerShowsRetry({
+    servedFromFirestoreCache,
+    refreshFailed,
+  })
 
   const baseMatches = useMemo(
     () =>
@@ -469,12 +505,12 @@ export default function DashboardPage() {
 
   return (
     <>
-      {(refreshFailed || (usingSessionCache && isRefreshingGameweek)) && (
+      {showStaleBanner && (
         <div className="fixed top-0 left-0 right-0 z-50 px-4 py-2 bg-midnight-violet/95 border-b border-ivory/15 text-center text-sm">
           <p className="text-ivory/80">
-            {refreshFailed ? t('staleDataNotice') : t('refreshingGameweek')}
+            {showStaleRetry ? t('staleDataNotice') : t('refreshingGameweek')}
           </p>
-          {refreshFailed && (
+          {showStaleRetry && (
             <button
               type="button"
               onClick={retryGameweekLoad}

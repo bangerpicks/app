@@ -4,6 +4,7 @@ import {
   getFirestore,
   initializeFirestore,
   persistentLocalCache,
+  persistentMultipleTabManager,
 } from 'firebase/firestore'
 import { getFunctions } from 'firebase/functions'
 
@@ -46,7 +47,9 @@ setPersistence(auth, browserLocalPersistence).catch((error) => {
 let dbInstance
 try {
   dbInstance = initializeFirestore(app, {
-    localCache: persistentLocalCache(),
+    localCache: persistentLocalCache({
+      tabManager: persistentMultipleTabManager(),
+    }),
     experimentalAutoDetectLongPolling: true,
   })
 } catch (error) {

@@ -25,6 +25,17 @@ import {
   FIRESTORE_READ_TIMEOUT_MS,
   FIRESTORE_FIXTURES_READ_TIMEOUT_MS,
 } from './firestore-utils'
+import {
+  getQuerySnapshotServerPreferring,
+  type LoadBudget,
+} from './firestore-server-read'
+
+export type { LoadBudget } from './firestore-server-read'
+
+export type DashboardFirestoreReadOptions = {
+  serverPreferring?: boolean
+  budget?: LoadBudget
+}
 import { isFlagshipGameweek } from './gameweek-constants'
 import type { GameweekFixtureEditorial } from '@/types/admin'
 import type { MarketOddsSnapshot } from '@/types/dashboard'
@@ -478,14 +489,17 @@ export async function deleteGameweek(gameweekId: string): Promise<void> {
  * @param filters - Optional filters
  * @returns Array of gameweeks
  */
-export async function getAllGameweeks(filters?: {
-  status?: 'draft' | 'active' | 'completed' | 'archived'
-  sortBy?: 'date' | 'name'
-  sortOrder?: 'asc' | 'desc'
-  // Admin lists pass true. Everyone else must exclude drafts: an unfiltered
-  // query fails rules once any draft exists.
-  includeDrafts?: boolean
-}): Promise<AdminGameweekData[]> {
+export async function getAllGameweeks(
+  filters?: {
+    status?: 'draft' | 'active' | 'completed' | 'archived'
+    sortBy?: 'date' | 'name'
+    sortOrder?: 'asc' | 'desc'
+    // Admin lists pass true. Everyone else must exclude drafts: an unfiltered
+    // query fails rules once any draft exists.
+    includeDrafts?: boolean
+  },
+  readOptions?: DashboardFirestoreReadOptions
+): Promise<AdminGameweekData[]> {
   try {
     const constraints: QueryConstraint[] = []
     
@@ -505,13 +519,19 @@ export async function getAllGameweeks(filters?: {
     }
     
     const q = query(collection(db, 'gameweeks'), ...constraints)
-    const snapshot = await readWithTimeoutAndRetry(
-      () => getDocs(q),
-      {
-        timeoutMs: FIRESTORE_READ_TIMEOUT_MS,
-        timeoutMessage: 'Failed to load gameweeks - request timed out',
-      }
-    )
+    const timeoutMessage = 'Failed to load gameweeks - request timed out'
+    const snapshot =
+      readOptions?.serverPreferring && readOptions.budget
+        ? (
+            await getQuerySnapshotServerPreferring(q, {
+              budget: readOptions.budget,
+              timeoutMessage,
+            })
+          ).snapshot
+        : await readWithTimeoutAndRetry(() => getDocs(q), {
+            timeoutMs: FIRESTORE_READ_TIMEOUT_MS,
+            timeoutMessage,
+          })
     
     return snapshot.docs.map((doc) => ({
       ...doc.data(),
@@ -784,17 +804,24 @@ export async function saveGameweekFixtures(
  * @returns Array of fixture data
  */
 export async function getGameweekFixtures(
-  gameweekId: string
+  gameweekId: string,
+  readOptions?: DashboardFirestoreReadOptions
 ): Promise<GameweekFixtureData[]> {
   try {
     const fixturesRef = collection(db, 'gameweeks', gameweekId, 'fixtures')
-    const snapshot = await readWithTimeoutAndRetry(
-      () => getDocs(fixturesRef),
-      {
-        timeoutMs: FIRESTORE_FIXTURES_READ_TIMEOUT_MS,
-        timeoutMessage: 'Failed to load gameweek fixtures - request timed out',
-      }
-    )
+    const timeoutMessage = 'Failed to load gameweek fixtures - request timed out'
+    const snapshot =
+      readOptions?.serverPreferring && readOptions.budget
+        ? (
+            await getQuerySnapshotServerPreferring(fixturesRef, {
+              budget: readOptions.budget,
+              timeoutMessage,
+            })
+          ).snapshot
+        : await readWithTimeoutAndRetry(() => getDocs(fixturesRef), {
+            timeoutMs: FIRESTORE_FIXTURES_READ_TIMEOUT_MS,
+            timeoutMessage,
+          })
     
     return snapshot.docs.map((doc) => doc.data() as GameweekFixtureData)
   } catch (error) {
