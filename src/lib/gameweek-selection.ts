@@ -78,18 +78,26 @@ export function pickCurrentFlagshipGameweek(
   return fallback ?? null
 }
 
-const serverReadOpts = (budget: LoadBudget) =>
-  ({ serverPreferring: true, budget }) as const
+const serverReadOpts = (
+  budget: LoadBudget,
+  servedFromCacheRef?: { current: boolean }
+) =>
+  ({
+    serverPreferring: true,
+    budget,
+    servedFromCacheRef,
+  }) as const
 
 /**
  * Resolve the same "current" gameweek for dashboard and rankings.
  * Server-first reads with a shared time budget (dashboard path).
  */
 export async function fetchCurrentGameweek(
-  budget?: LoadBudget
+  budget?: LoadBudget,
+  servedFromCacheRef?: { current: boolean }
 ): Promise<AdminGameweekData | null> {
   const loadBudget = budget ?? new LoadBudget()
-  const readOpts = serverReadOpts(loadBudget)
+  const readOpts = serverReadOpts(loadBudget, servedFromCacheRef)
 
   try {
     const activeGameweeks = await getAllGameweeks(

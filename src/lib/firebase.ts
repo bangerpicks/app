@@ -53,6 +53,10 @@ try {
     experimentalAutoDetectLongPolling: true,
   })
 } catch (error) {
+  console.warn(
+    'initializeFirestore failed; falling back to getFirestore without persistentLocalCache / multi-tab manager:',
+    error
+  )
   dbInstance = getFirestore(app)
 }
 export const db = dbInstance

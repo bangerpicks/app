@@ -7,7 +7,7 @@
 - Firestore reads for gameweek lists and fixture subcollections use longer per-attempt timeouts with exponential backoff (automatic retry) instead of a single 10s race.
 - `fetchCurrentGameweek` stops firing three parallel full gameweek list queries on every dashboard visit; it resolves active → completed → fallback sequentially.
 - Firestore client: persistent local cache (multi-tab manager) and `experimentalAutoDetectLongPolling` for iOS Safari / slow mobile links.
-- Dashboard gameweek/fixture reads are **server-first** (`getDocsFromServer`); cache-only / offline empty results surface **Try again** instead of “No gameweek right now”.
+- Dashboard gameweek/fixture reads are **server-first** (`getDocsFromServer`); empty cache fallback is an error; non-empty cache fallback returns data with stale banner; only confirmed server-empty means “no week”.
 - Shared **32s** load budget caps total dashboard fetch time; session cache keyed by uid + locale with 10-minute TTL; cleared on sign-out.
 - Stale banner driven by Firestore `fromCache` / refresh-failure signals.
 - App version label 1.1.11.

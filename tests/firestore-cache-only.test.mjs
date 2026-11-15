@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-// Keep in sync with src/lib/firestore-server-read.ts
+// Keep in sync with src/lib/firestore-server-read.ts cache fallback rules
 
 class FirestoreServedFromCacheError extends Error {
   constructor(message) {
@@ -10,39 +10,36 @@ class FirestoreServedFromCacheError extends Error {
   }
 }
 
-function rejectIfCacheOnlySnapshot(snapshot, timeoutMessage) {
-  if (snapshot.metadata.fromCache) {
+function rejectEmptyCacheFallback(snapshot, timeoutMessage) {
+  if (snapshot.empty) {
     throw new FirestoreServedFromCacheError(timeoutMessage)
   }
 }
 
-test('fromCache empty gameweek list is a load failure not no-week', () => {
+test('empty cache fallback is always an error', () => {
   assert.throws(
     () =>
-      rejectIfCacheOnlySnapshot(
-        { metadata: { fromCache: true }, empty: true },
+      rejectEmptyCacheFallback(
+        { empty: true, metadata: { fromCache: false } },
         'Failed to load gameweeks - request timed out'
       ),
-  (err) => err instanceof FirestoreServedFromCacheError
+    FirestoreServedFromCacheError
   )
-})
-
-test('fromCache non-empty snapshot is rejected for dashboard reads', () => {
   assert.throws(
     () =>
-      rejectIfCacheOnlySnapshot(
-        { metadata: { fromCache: true }, empty: false },
-        'Failed to load gameweek fixtures - request timed out'
+      rejectEmptyCacheFallback(
+        { empty: true, metadata: { fromCache: true } },
+        'Failed to load gameweeks - request timed out'
       ),
     FirestoreServedFromCacheError
   )
 })
 
-test('server-empty (not from cache) does not throw', () => {
+test('non-empty cache fallback is allowed (stale)', () => {
   assert.doesNotThrow(() =>
-    rejectIfCacheOnlySnapshot(
-      { metadata: { fromCache: false }, empty: true },
-      'Failed to load gameweeks - request timed out'
+    rejectEmptyCacheFallback(
+      { empty: false, metadata: { fromCache: true } },
+      'Failed to load gameweek fixtures - request timed out'
     )
   )
 })

@@ -27,6 +27,7 @@ import {
 } from './firestore-utils'
 import {
   getQuerySnapshotServerPreferring,
+  markServedFromCacheRef,
   type LoadBudget,
 } from './firestore-server-read'
 
@@ -35,6 +36,8 @@ export type { LoadBudget } from './firestore-server-read'
 export type DashboardFirestoreReadOptions = {
   serverPreferring?: boolean
   budget?: LoadBudget
+  /** Set to true when any server-preferring read uses non-empty cache fallback */
+  servedFromCacheRef?: { current: boolean }
 }
 import { isFlagshipGameweek } from './gameweek-constants'
 import type { GameweekFixtureEditorial } from '@/types/admin'
@@ -520,18 +523,20 @@ export async function getAllGameweeks(
     
     const q = query(collection(db, 'gameweeks'), ...constraints)
     const timeoutMessage = 'Failed to load gameweeks - request timed out'
-    const snapshot =
-      readOptions?.serverPreferring && readOptions.budget
-        ? (
-            await getQuerySnapshotServerPreferring(q, {
-              budget: readOptions.budget,
-              timeoutMessage,
-            })
-          ).snapshot
-        : await readWithTimeoutAndRetry(() => getDocs(q), {
-            timeoutMs: FIRESTORE_READ_TIMEOUT_MS,
-            timeoutMessage,
-          })
+    let snapshot
+    if (readOptions?.serverPreferring && readOptions.budget) {
+      const result = await getQuerySnapshotServerPreferring(q, {
+        budget: readOptions.budget,
+        timeoutMessage,
+      })
+      markServedFromCacheRef(readOptions.servedFromCacheRef, result)
+      snapshot = result.data
+    } else {
+      snapshot = await readWithTimeoutAndRetry(() => getDocs(q), {
+        timeoutMs: FIRESTORE_READ_TIMEOUT_MS,
+        timeoutMessage,
+      })
+    }
     
     return snapshot.docs.map((doc) => ({
       ...doc.data(),
@@ -810,18 +815,20 @@ export async function getGameweekFixtures(
   try {
     const fixturesRef = collection(db, 'gameweeks', gameweekId, 'fixtures')
     const timeoutMessage = 'Failed to load gameweek fixtures - request timed out'
-    const snapshot =
-      readOptions?.serverPreferring && readOptions.budget
-        ? (
-            await getQuerySnapshotServerPreferring(fixturesRef, {
-              budget: readOptions.budget,
-              timeoutMessage,
-            })
-          ).snapshot
-        : await readWithTimeoutAndRetry(() => getDocs(fixturesRef), {
-            timeoutMs: FIRESTORE_FIXTURES_READ_TIMEOUT_MS,
-            timeoutMessage,
-          })
+    let snapshot
+    if (readOptions?.serverPreferring && readOptions.budget) {
+      const result = await getQuerySnapshotServerPreferring(fixturesRef, {
+        budget: readOptions.budget,
+        timeoutMessage,
+      })
+      markServedFromCacheRef(readOptions.servedFromCacheRef, result)
+      snapshot = result.data
+    } else {
+      snapshot = await readWithTimeoutAndRetry(() => getDocs(fixturesRef), {
+        timeoutMs: FIRESTORE_FIXTURES_READ_TIMEOUT_MS,
+        timeoutMessage,
+      })
+    }
     
     return snapshot.docs.map((doc) => doc.data() as GameweekFixtureData)
   } catch (error) {

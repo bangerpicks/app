@@ -204,7 +204,12 @@ export default function DashboardPage() {
     const sessionCache = readDashboardSessionCache(cacheUid, locale)
     const hadCache = Boolean(sessionCache)
     const loadBudget = new LoadBudget()
-    const fixtureReadOpts = { serverPreferring: true as const, budget: loadBudget }
+    const servedFromCacheRef = { current: false }
+    const fixtureReadOpts = {
+      serverPreferring: true as const,
+      budget: loadBudget,
+      servedFromCacheRef,
+    }
 
     if (hadCache && sessionCache) {
       setGameweek(sessionCache.gameweek)
@@ -229,13 +234,15 @@ export default function DashboardPage() {
           setIsRefreshingGameweek(true)
         }
 
-        const currentGameweek = await fetchCurrentGameweek(loadBudget)
+        servedFromCacheRef.current = false
+        const currentGameweek = await fetchCurrentGameweek(loadBudget, servedFromCacheRef)
 
         if (abortController.signal.aborted) return
 
         if (!currentGameweek) {
           setEmptyReason('no-week')
           setServedFromFirestoreCache(false)
+          setRefreshFailed(false)
           return
         }
 
@@ -282,9 +289,10 @@ export default function DashboardPage() {
         setGameweekId(currentGameweek.gameweekId)
         setGameweek(dashboardGameweek)
         setInitialMatches(sortedMatches)
+        const staleFirestoreLoad = servedFromCacheRef.current
         setUsingSessionCache(false)
-        setRefreshFailed(false)
-        setServedFromFirestoreCache(false)
+        setRefreshFailed(staleFirestoreLoad)
+        setServedFromFirestoreCache(staleFirestoreLoad)
         setIsRefreshingGameweek(false)
         setError(null)
         setEmptyReason(null)
@@ -323,7 +331,7 @@ export default function DashboardPage() {
           setLoadingPredictions(true)
           try {
             const fixtureIds = sortedMatches.map((match) => match.fixtureId)
-            const predictions = await getUserPredictionsForGameweek(
+            const predictionRead = await getUserPredictionsForGameweek(
               user.uid,
               currentGameweek.gameweekId,
               fixtureIds
@@ -331,10 +339,16 @@ export default function DashboardPage() {
 
             if (abortController.signal.aborted) return
 
+            if (predictionRead.servedFromCache) {
+              servedFromCacheRef.current = true
+              setServedFromFirestoreCache(true)
+              setRefreshFailed(true)
+            }
+
             setInitialMatches((prevMatches) =>
               prevMatches.map((match) => ({
                 ...match,
-                userPrediction: predictions.get(match.fixtureId) || null,
+                userPrediction: predictionRead.predictions.get(match.fixtureId) || null,
               }))
             )
           } catch {
