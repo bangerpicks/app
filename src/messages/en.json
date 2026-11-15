@@ -110,6 +110,9 @@
     "gameweekHowItWorksStep3": "Correct picks earn points and move you up the rankings.",
     "loading": "Loading gameweek…",
     "loadError": "We could not load this gameweek.",
+    "loadErrorRetry": "Try again",
+    "staleDataNotice": "Showing the last loaded Banger Week. We could not refresh just now.",
+    "refreshingGameweek": "Updating this Banger Week…",
     "noActiveGameweekTitle": "No gameweek right now",
     "noActiveGameweekBody": "When the next Banger Week is published, fixtures and picks will show up here.",
     "fixturesLoading": "Fixtures for this gameweek are not available yet."

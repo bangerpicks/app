@@ -19,7 +19,12 @@ import {
 } from 'firebase/firestore'
 import { db } from './firebase'
 import { APIFootballFixture, getStandings } from './api-football'
-import { withTimeout } from './firestore-utils'
+import {
+  withTimeout,
+  readWithTimeoutAndRetry,
+  FIRESTORE_READ_TIMEOUT_MS,
+  FIRESTORE_FIXTURES_READ_TIMEOUT_MS,
+} from './firestore-utils'
 import { isFlagshipGameweek } from './gameweek-constants'
 import type { GameweekFixtureEditorial } from '@/types/admin'
 import type { MarketOddsSnapshot } from '@/types/dashboard'
@@ -500,10 +505,12 @@ export async function getAllGameweeks(filters?: {
     }
     
     const q = query(collection(db, 'gameweeks'), ...constraints)
-    const snapshot = await withTimeout(
-      getDocs(q),
-      10000,
-      'Failed to load gameweeks - request timed out'
+    const snapshot = await readWithTimeoutAndRetry(
+      () => getDocs(q),
+      {
+        timeoutMs: FIRESTORE_READ_TIMEOUT_MS,
+        timeoutMessage: 'Failed to load gameweeks - request timed out',
+      }
     )
     
     return snapshot.docs.map((doc) => ({
@@ -781,10 +788,12 @@ export async function getGameweekFixtures(
 ): Promise<GameweekFixtureData[]> {
   try {
     const fixturesRef = collection(db, 'gameweeks', gameweekId, 'fixtures')
-    const snapshot = await withTimeout(
-      getDocs(fixturesRef),
-      10000,
-      'Failed to load gameweek fixtures - request timed out'
+    const snapshot = await readWithTimeoutAndRetry(
+      () => getDocs(fixturesRef),
+      {
+        timeoutMs: FIRESTORE_FIXTURES_READ_TIMEOUT_MS,
+        timeoutMessage: 'Failed to load gameweek fixtures - request timed out',
+      }
     )
     
     return snapshot.docs.map((doc) => doc.data() as GameweekFixtureData)

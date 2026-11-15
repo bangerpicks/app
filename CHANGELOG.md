@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.1.11 — 2026-11-15
+
+### Fix: dashboard gameweek load timeouts on mobile
+
+- Firestore reads for gameweek lists and fixture subcollections use longer per-attempt timeouts with exponential backoff (automatic retry) instead of a single 10s race.
+- `fetchCurrentGameweek` stops firing three parallel full gameweek list queries on every dashboard visit; it resolves active → completed → fallback sequentially.
+- Firestore client: persistent local cache and `experimentalAutoDetectLongPolling` for iOS Safari / slow mobile links.
+- Dashboard: session cache shows the last successful Banger Week while refresh runs; stale banner + **Try again** on failure (en + es-MX).
+- App version label 1.1.11.
+
 ## 1.1.10 — 2026-11-15
 
 ### Fix: mobile bottom nav jumping to top of viewport

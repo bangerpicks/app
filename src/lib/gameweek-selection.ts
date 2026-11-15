@@ -75,15 +75,31 @@ export function pickCurrentFlagshipGameweek(
 
 /**
  * Resolve the same "current" gameweek for dashboard and rankings.
+ * Uses sequential queries when possible to avoid three heavy list reads on cold mobile loads.
  */
 export async function fetchCurrentGameweek(): Promise<AdminGameweekData | null> {
   try {
-    const [activeGameweeks, completedGameweeks, allGameweeks] = await Promise.all([
-      getAllGameweeks({ status: 'active', sortBy: 'date', sortOrder: 'desc' }),
-      getAllGameweeks({ status: 'completed', sortBy: 'date', sortOrder: 'desc' }),
-      getAllGameweeks({ sortBy: 'date', sortOrder: 'desc' }),
-    ])
+    const activeGameweeks = await getAllGameweeks({
+      status: 'active',
+      sortBy: 'date',
+      sortOrder: 'desc',
+    })
+    const activeFlagship = pickCurrentFlagshipGameweek(activeGameweeks, [], [])
+    if (activeFlagship) {
+      return activeFlagship
+    }
 
+    const completedGameweeks = await getAllGameweeks({
+      status: 'completed',
+      sortBy: 'date',
+      sortOrder: 'desc',
+    })
+    const completedFlagship = pickCurrentFlagshipGameweek([], completedGameweeks, [])
+    if (completedFlagship) {
+      return completedFlagship
+    }
+
+    const allGameweeks = await getAllGameweeks({ sortBy: 'date', sortOrder: 'desc' })
     return pickCurrentFlagshipGameweek(activeGameweeks, completedGameweeks, allGameweeks)
   } catch (error) {
     console.error('Error fetching current gameweek:', error)

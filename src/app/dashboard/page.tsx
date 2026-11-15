@@ -25,6 +25,10 @@ import {
   resolvePlayerCountFromGameweek,
   getEffectiveDeadline,
 } from '@/lib/gameweek-selection'
+import {
+  readDashboardSessionCache,
+  writeDashboardSessionCache,
+} from '@/lib/dashboard-cache'
 
 function convertGameweekData(adminGameweek: AdminGameweekData): GameweekData {
   const lock = getEffectiveDeadline(adminGameweek)
@@ -135,6 +139,10 @@ export default function DashboardPage() {
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [devPreviewDismissed, setDevPreviewDismissed] = useState(false)
   const [emptyReason, setEmptyReason] = useState<'none' | 'no-week' | 'no-fixtures' | null>(null)
+  const [loadGeneration, setLoadGeneration] = useState(0)
+  const [refreshFailed, setRefreshFailed] = useState(false)
+  const [usingSessionCache, setUsingSessionCache] = useState(false)
+  const [isRefreshingGameweek, setIsRefreshingGameweek] = useState(false)
 
   const isDevOnboardingPreview =
     process.env.NODE_ENV === 'development' &&
@@ -184,15 +192,30 @@ export default function DashboardPage() {
 
   useEffect(() => {
     const abortController = new AbortController()
+    const sessionCache = readDashboardSessionCache()
+    const hadCache = Boolean(sessionCache)
+
+    if (hadCache && sessionCache) {
+      setGameweek(sessionCache.gameweek)
+      setInitialMatches(sessionCache.matches)
+      setGameweekId(sessionCache.gameweekId)
+      setUsingSessionCache(true)
+      setLoadingGameweek(false)
+    }
 
     async function fetchActiveGameweek() {
       try {
-        setLoadingGameweek(true)
-        setError(null)
-        setEmptyReason(null)
-        setGameweek(null)
-        setInitialMatches([])
-        setGameweekId(null)
+        if (!hadCache) {
+          setLoadingGameweek(true)
+          setError(null)
+          setEmptyReason(null)
+          setGameweek(null)
+          setInitialMatches([])
+          setGameweekId(null)
+        } else {
+          setRefreshFailed(false)
+          setIsRefreshingGameweek(true)
+        }
 
         const currentGameweek = await fetchCurrentGameweek()
 
@@ -239,9 +262,19 @@ export default function DashboardPage() {
 
         if (abortController.signal.aborted) return
 
+        const dashboardGameweek = convertGameweekData(currentGameweek)
         setGameweekId(currentGameweek.gameweekId)
-        setGameweek(convertGameweekData(currentGameweek))
+        setGameweek(dashboardGameweek)
         setInitialMatches(sortedMatches)
+        setUsingSessionCache(false)
+        setRefreshFailed(false)
+        setIsRefreshingGameweek(false)
+        setError(null)
+        writeDashboardSessionCache({
+          gameweekId: currentGameweek.gameweekId,
+          gameweek: dashboardGameweek,
+          matches: sortedMatches,
+        })
 
         const storedCount = resolvePlayerCountFromGameweek(currentGameweek)
         if (
@@ -298,11 +331,19 @@ export default function DashboardPage() {
         if (abortController.signal.aborted) return
         console.error('Error fetching active gameweek:', err)
         const message = err instanceof Error ? err.message : 'Failed to load gameweek data'
-        setError(message)
-        setGameweek(null)
-        setInitialMatches([])
-        setGameweekId(null)
+        if (hadCache) {
+          setRefreshFailed(true)
+          setError(message)
+        } else {
+          setError(message)
+          setGameweek(null)
+          setInitialMatches([])
+          setGameweekId(null)
+        }
         setLoadingPredictions(false)
+        if (hadCache) {
+          setIsRefreshingGameweek(false)
+        }
       } finally {
         // Always leave the loading gate when this attempt finishes (success, error, or empty).
         // Aborted runs skip this so a newer effect owns the flag.
@@ -317,7 +358,13 @@ export default function DashboardPage() {
     return () => {
       abortController.abort()
     }
-  }, [user])
+  }, [user, loadGeneration, locale])
+
+  const retryGameweekLoad = () => {
+    setError(null)
+    setRefreshFailed(false)
+    setLoadGeneration((g) => g + 1)
+  }
 
   const baseMatches = useMemo(
     () =>
@@ -363,12 +410,19 @@ export default function DashboardPage() {
     )
   }
 
-  if (error) {
+  if (error && !gameweek) {
     return (
       <>
         <DashboardShell username={username}>
           <p className="text-cinnabar">{t('loadError')}</p>
           <p className="text-ivory/70 text-sm">{error}</p>
+          <button
+            type="button"
+            onClick={retryGameweekLoad}
+            className="mt-2 bg-lime-yellow text-midnight-violet py-3 px-6 rounded-lg font-semibold hover:bg-opacity-90 transition-colors active:bg-opacity-80"
+          >
+            {t('loadErrorRetry')}
+          </button>
         </DashboardShell>
         {onboardingLayer}
       </>
@@ -415,6 +469,22 @@ export default function DashboardPage() {
 
   return (
     <>
+      {(refreshFailed || (usingSessionCache && isRefreshingGameweek)) && (
+        <div className="fixed top-0 left-0 right-0 z-50 px-4 py-2 bg-midnight-violet/95 border-b border-ivory/15 text-center text-sm">
+          <p className="text-ivory/80">
+            {refreshFailed ? t('staleDataNotice') : t('refreshingGameweek')}
+          </p>
+          {refreshFailed && (
+            <button
+              type="button"
+              onClick={retryGameweekLoad}
+              className="mt-1 text-lime-yellow font-semibold underline underline-offset-2"
+            >
+              {t('loadErrorRetry')}
+            </button>
+          )}
+        </div>
+      )}
       <DashboardClient
         gameweek={gameweek}
         playerCount={gameweek.playerCount}
