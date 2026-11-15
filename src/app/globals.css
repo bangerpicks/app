@@ -79,9 +79,8 @@ body {
   }
 }
 
-/* Fix sticky positioning for iOS */
+/* Fix sticky positioning for iOS (exclude viewport-fixed bottom tab bar — see nav[data-bottom-nav]) */
 header[class*="sticky"],
-nav[class*="sticky"],
 thead[class*="sticky"] {
   /* Force hardware acceleration for smooth scrolling */
   transform: translateZ(0);
@@ -89,6 +88,15 @@ thead[class*="sticky"] {
   /* Prevent hiding during fast scroll */
   will-change: transform;
   /* Ensure proper stacking */
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+/* Bottom tab bar: fixed to visual viewport (sticky bottom + parent transforms break on iOS Safari). */
+nav[data-bottom-nav] {
+  position: fixed;
+  transform: translate3d(0, 0, 0);
+  -webkit-transform: translate3d(0, 0, 0);
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
 }
