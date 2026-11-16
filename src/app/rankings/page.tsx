@@ -24,13 +24,15 @@ import {
   seasonDisplayName,
   SeasonRankingEntry,
 } from '@/lib/seasons'
-import { useLocale } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 
 const PAST_GAMEWEEKS_LIMIT = 10
 
 export default function RankingsPage() {
   const { user, loading: authLoading } = useAuth()
   const locale = useLocale() as 'en' | 'es-MX'
+  const t = useTranslations('rankings')
+  const tCommon = useTranslations('common')
   const [username, setUsername] = useState<string | undefined>(undefined)
   const [allTimeRankings, setAllTimeRankings] = useState<RankingEntry[]>([])
   const [weeklyRankings, setWeeklyRankings] = useState<RankingEntry[] | undefined>(undefined)
@@ -299,7 +301,7 @@ export default function RankingsPage() {
   if (authLoading || rankingsLoading || initialWeeklyLoading) {
     return (
       <div className="min-h-[100dvh] min-h-screen bg-midnight-violet flex items-center justify-center">
-        <div className="text-ivory">Loading...</div>
+        <div className="text-ivory">{tCommon('loading')}</div>
       </div>
     )
   }
@@ -316,8 +318,8 @@ export default function RankingsPage() {
     return (
       <div className="min-h-[100dvh] min-h-screen bg-midnight-violet flex items-center justify-center">
         <div className="text-ivory text-center">
-          <p className="text-lg mb-2">Error loading rankings</p>
-          <p className="text-sm text-ivory/70">{rankingsError}</p>
+          <p className="text-lg mb-2">{t('errorLoading')}</p>
+          <p className="text-sm text-ivory/70">{t('failedToLoad')}</p>
         </div>
       </div>
     )

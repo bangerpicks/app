@@ -46,7 +46,7 @@ export function ProfileClient({ user, userData }: ProfileClientProps) {
     router.push('/admin/')
   }
 
-  const displayName = userData.displayName || user.displayName || 'Player'
+  const displayName = userData.displayName || user.displayName || t('defaultDisplayName')
   // Prefer favorite player photo (from shop redemption) over auth photoURL
   const photoURL = userData.favoritePlayer?.photo || userData.photoURL || user.photoURL
   const points = userData.points || 0
