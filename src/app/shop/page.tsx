@@ -6,47 +6,39 @@ import { ShopClient } from '@/components/dashboard/ShopClient'
 import { ShopComingSoon } from '@/components/dashboard/ShopComingSoon'
 import { NotSignedIn } from '@/components/dashboard/NotSignedIn'
 import { ShopItem } from '@/types/shop'
-import { getUserData } from '@/lib/users'
+import { useUserProfile } from '@/lib/UserProfileProvider'
 import { getAllShopItems } from '@/lib/shop'
 import { computeShopPointsBalance } from '@/lib/redemptions'
 
 export default function ShopPage() {
   const { user, loading: authLoading } = useAuth()
+  const { profileDisplayName, hasValidProfileName, ownProfile, profileStatus } = useUserProfile()
   const [username, setUsername] = useState<string | undefined>(undefined)
   const [userPoints, setUserPoints] = useState<number>(0)
   const [shopItems, setShopItems] = useState<ShopItem[]>([])
   const [shopLoading, setShopLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    const abortController = new AbortController()
-    
-    if (user) {
-      // Shop points = correct predictions + referral points (minus already redeemed)
-      getUserData(user)
-        .then(({ displayName, referralPoints, correctPredictions, pointsSpent }) => {
-          if (abortController.signal.aborted) return
-          setUsername(displayName)
-          setUserPoints(computeShopPointsBalance(correctPredictions, referralPoints, pointsSpent))
-          setError(null)
-        })
-        .catch((error) => {
-          if (abortController.signal.aborted) return
-          console.error('Error fetching user data:', error)
-          setError('Failed to load user data. Please try refreshing.')
-          setUsername(user.displayName || undefined)
-          setUserPoints(0)
-        })
+    if (hasValidProfileName && profileDisplayName) {
+      setUsername(profileDisplayName)
     } else {
       setUsername(undefined)
+    }
+  }, [hasValidProfileName, profileDisplayName])
+
+  useEffect(() => {
+    if (profileStatus === 'loaded' && ownProfile) {
+      setUserPoints(
+        computeShopPointsBalance(
+          ownProfile.correctPredictions,
+          ownProfile.referralPoints,
+          ownProfile.pointsSpent
+        )
+      )
+    } else if (!user) {
       setUserPoints(0)
-      setError(null)
     }
-    
-    return () => {
-      abortController.abort()
-    }
-  }, [user])
+  }, [profileStatus, ownProfile, user])
 
   useEffect(() => {
     getAllShopItems({ status: 'active' })
@@ -58,7 +50,6 @@ export default function ShopPage() {
       .finally(() => setShopLoading(false))
   }, [])
 
-  // Show loading state (or nothing) while checking authentication
   if (authLoading) {
     return (
       <div className="min-h-[100dvh] min-h-screen bg-midnight-violet flex items-center justify-center">
@@ -67,37 +58,16 @@ export default function ShopPage() {
     )
   }
 
-  // Show not signed in page if user is not authenticated
   if (!user) {
     return <NotSignedIn />
   }
 
-  // Show error state if data failed to load
-  if (error) {
-    return (
-      <div className="min-h-[100dvh] min-h-screen bg-midnight-violet flex items-center justify-center">
-        <div className="text-center text-ivory p-8">
-          <p className="text-lg mb-4">{error}</p>
-          <button
-            onClick={() => window.location.reload()}
-            className="px-4 py-2 bg-lime-yellow text-midnight-violet rounded font-bold"
-          >
-            Refresh Page
-          </button>
-        </div>
-      </div>
-    )
-  }
-
-  // Check if coming soon mode is enabled via environment variable
   const isComingSoon = process.env.NEXT_PUBLIC_SHOP_COMING_SOON === 'true'
 
-  // Render coming soon page if enabled
   if (isComingSoon) {
     return <ShopComingSoon username={username} />
   }
 
-  // Show loading while fetching shop items
   if (shopLoading) {
     return (
       <div className="min-h-[100dvh] min-h-screen bg-midnight-violet flex items-center justify-center">

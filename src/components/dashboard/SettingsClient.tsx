@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { AppShell } from './AppShell'
 import { useAuth } from '@/lib/AuthProvider'
+import { useUserProfile } from '@/lib/UserProfileProvider'
 import { useLanguage } from '@/lib/LanguageProvider'
 import { getUserLanguage } from '@/lib/users'
 import {
@@ -21,6 +22,7 @@ import type { Locale } from '@/i18n/config'
 
 export function SettingsClient() {
   const { user } = useAuth()
+  const { profileDisplayName, hasValidProfileName } = useUserProfile()
   const { locale, setLocale, loading: languageLoading } = useLanguage()
   const router = useRouter()
   const t = useTranslations('settings')
@@ -72,15 +74,13 @@ export function SettingsClient() {
       .finally(() => setGafferPrefsLoading(false))
   }, [user])
 
-  // Fetch username for header
   useEffect(() => {
-    if (user) {
-      // Get username from user displayName for header
-      setUsername(user.displayName || undefined)
+    if (hasValidProfileName && profileDisplayName) {
+      setUsername(profileDisplayName)
     } else {
       setUsername(undefined)
     }
-  }, [user])
+  }, [hasValidProfileName, profileDisplayName])
 
   const handleLanguageChange = (language: Locale) => {
     setSelectedLanguage(language)

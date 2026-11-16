@@ -4,7 +4,8 @@ import { useState, useEffect } from 'react'
 import { useAuth } from '@/lib/AuthProvider'
 import { RankingsClient } from '@/components/dashboard/RankingsClient'
 import { NotSignedIn } from '@/components/dashboard/NotSignedIn'
-import { getUserDisplayName, getAllTimeRankings } from '@/lib/users'
+import { getAllTimeRankings } from '@/lib/users'
+import { useUserProfile } from '@/lib/UserProfileProvider'
 import {
   RankingEntry,
   GameweekRankingData,
@@ -31,6 +32,7 @@ const PAST_GAMEWEEKS_LIMIT = 10
 
 export default function RankingsPage() {
   const { user, loading: authLoading } = useAuth()
+  const { profileDisplayName, hasValidProfileName } = useUserProfile()
   const locale = useLocale() as 'en' | 'es-MX'
   const t = useTranslations('rankings')
   const tCommon = useTranslations('common')
@@ -53,28 +55,12 @@ export default function RankingsPage() {
   const [seasonLoading, setSeasonLoading] = useState(true)
 
   useEffect(() => {
-    const abortController = new AbortController()
-    
-    if (user) {
-      // Fetch display name from Firestore
-      getUserDisplayName(user)
-        .then((displayName) => {
-          if (abortController.signal.aborted) return
-          setUsername(displayName)
-        })
-        .catch((error) => {
-          if (abortController.signal.aborted) return
-          console.error('Error fetching display name:', error)
-          setUsername(user.displayName || undefined)
-        })
+    if (hasValidProfileName && profileDisplayName) {
+      setUsername(profileDisplayName)
     } else {
       setUsername(undefined)
     }
-    
-    return () => {
-      abortController.abort()
-    }
-  }, [user])
+  }, [hasValidProfileName, profileDisplayName])
 
   useEffect(() => {
     const abortController = new AbortController()

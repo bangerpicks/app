@@ -1,5 +1,6 @@
 import type { User } from 'firebase/auth'
 import { ensureUserDocument } from './users'
+import { displayNameForUserCreate } from './user-create-display-name.mjs'
 import { trackReferralSignup } from './referrals'
 
 export interface CompleteSignInResult {
@@ -12,7 +13,7 @@ export async function completeSignInAfterAuth(
   options?: { referralCode?: string | null }
 ): Promise<CompleteSignInResult> {
   const referralCode = options?.referralCode ?? null
-  const displayName = user.displayName || 'Player'
+  const displayName = displayNameForUserCreate(user.displayName)
   const { isNewUser } = await ensureUserDocument(user, displayName, referralCode || undefined)
 
   let referralMessage: string | null = null
