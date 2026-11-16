@@ -12,6 +12,11 @@ import {
   PastGameweekOption,
 } from '@/types/dashboard'
 import { SeasonRankingEntry } from '@/lib/seasons'
+import {
+  hasWeeklyStandingsRows,
+  pickPluralKey,
+  shouldShowWeeklyStandingsEmpty,
+} from '@/lib/i18n-plural.mjs'
 import { Trophy, Medal, Award } from 'lucide-react'
 
 interface RankingsClientProps {
@@ -136,7 +141,14 @@ function RankingRow({
         </div>
         {showSeasonDetail && seasonEntry.totalCorrect !== undefined && (
           <div className="text-xs text-ivory/70 mt-1">
-            {t('seasonCorrectPicks', { count: seasonEntry.totalCorrect })}
+            {t(
+              pickPluralKey(
+                seasonEntry.totalCorrect,
+                'seasonCorrectPicksOne',
+                'seasonCorrectPicksMany'
+              ),
+              { count: seasonEntry.totalCorrect }
+            )}
           </div>
         )}
         {scoreLabelKey === 'score' && entry.totalPredictions !== undefined && (
@@ -308,17 +320,30 @@ export function RankingsClient({
                     {gameweekData.gameweek.name}
                   </h2>
                   <p className="text-midnight-violet/80 text-sm font-semibold">
-                    {gameweekData.gameweek.playerCount} {t('players')}
+                    {t(
+                      pickPluralKey(
+                        gameweekData.gameweek.playerCount,
+                        'playerCountOne',
+                        'playerCountMany'
+                      ),
+                      { count: gameweekData.gameweek.playerCount }
+                    )}
                   </p>
                 </div>
               </div>
               <div className="w-full -mt-px">
-                {weeklyRankings ? (
+                {hasWeeklyStandingsRows(weeklyRankings) ? (
                   <RankingsTable
-                    rankings={weeklyRankings}
+                    rankings={weeklyRankings!}
                     gameweekData={gameweekData}
                     latestCompletedGameweekId={latestCompletedGameweekId}
                   />
+                ) : shouldShowWeeklyStandingsEmpty(weeklyRankings, weeklyLoading) ? (
+                  <div className="w-full rounded-b-lg border-2 border-t-0 border-ivory/20 bg-midnight-violet px-4 py-10 flex items-center justify-center">
+                    <p className="text-ivory/70 text-sm text-center max-w-sm">
+                      {t('weeklyStandingsEmpty')}
+                    </p>
+                  </div>
                 ) : null}
               </div>
             </>

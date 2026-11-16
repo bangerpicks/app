@@ -1,9 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useTranslations } from 'next-intl'
 import { useAuth } from '@/lib/AuthProvider'
 import { getUserReferralCode } from '@/lib/users'
-import { Share2, X, Minimize2, Maximize2 } from 'lucide-react'
+import { Share2, Minimize2, Maximize2 } from 'lucide-react'
 
 interface ReferralPopupProps {
   className?: string
@@ -11,6 +12,7 @@ interface ReferralPopupProps {
 
 export function ReferralPopup({ className }: ReferralPopupProps) {
   const { user } = useAuth()
+  const t = useTranslations('referral')
   const [isMinimized, setIsMinimized] = useState(false)
   const [referralCode, setReferralCode] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
@@ -45,26 +47,20 @@ export function ReferralPopup({ className }: ReferralPopupProps) {
     const link = getReferralLink()
     if (!link) return
 
-    const shareText = 'Join me on Banger Picks! ⚽️ Predict matches & earn points!'
-
-    // Check if Web Share API is available (mobile devices)
     if (navigator.share) {
       try {
         await navigator.share({
-          title: 'Join Banger Picks!',
-          text: shareText,
+          title: t('shareTitle'),
+          text: t('shareText'),
           url: link,
         })
-      } catch (error: any) {
-        // User cancelled or error occurred
-        if (error.name !== 'AbortError') {
+      } catch (error: unknown) {
+        if (error instanceof Error && error.name !== 'AbortError') {
           console.error('Error sharing:', error)
-          // Fallback to copy
           copyToClipboard(link)
         }
       }
     } else {
-      // Fallback to copy-to-clipboard for desktop
       copyToClipboard(link)
     }
   }
@@ -94,12 +90,12 @@ export function ReferralPopup({ className }: ReferralPopupProps) {
         {isMinimized ? (
           <div className="px-4 py-2 flex items-center justify-between h-12">
             <p className="text-midnight-violet font-semibold text-sm truncate flex-1">
-              Invite friends and earn 5 points for each signup!
+              {t('bannerMinimized')}
             </p>
             <button
               onClick={() => setIsMinimized(false)}
               className="ml-2 p-1 text-midnight-violet hover:bg-midnight-violet/10 rounded transition-colors"
-              aria-label="Expand referral popup"
+              aria-label={t('expandAria')}
             >
               <Maximize2 className="w-4 h-4" />
             </button>
@@ -109,11 +105,12 @@ export function ReferralPopup({ className }: ReferralPopupProps) {
             <div className="flex items-start justify-between gap-3 max-w-6xl mx-auto">
               <div className="flex-1 min-w-0">
                 <p className="text-midnight-violet font-semibold text-sm sm:text-base mb-1">
-                  Invite your friends and earn 5 points for each signup!
+                  {t('banner')}
                 </p>
                 {referralCode && (
                   <p className="text-midnight-violet/80 text-xs sm:text-sm truncate">
-                    Your referral code: <span className="font-mono font-bold">{referralCode}</span>
+                    {t('yourCodeLabel')}{' '}
+                    <span className="font-mono font-bold">{referralCode}</span>
                   </p>
                 )}
               </div>
@@ -121,17 +118,17 @@ export function ReferralPopup({ className }: ReferralPopupProps) {
                 <button
                   onClick={handleShare}
                   className="bg-midnight-violet text-lime-yellow px-4 py-2 rounded-lg font-semibold text-sm hover:bg-midnight-violet/90 transition-colors flex items-center gap-2"
-                  aria-label="Share referral link"
+                  aria-label={t('shareAria')}
                 >
                   <Share2 className="w-4 h-4" />
                   <span className="hidden sm:inline">
-                    {copied ? 'Copied!' : 'Share'}
+                    {copied ? t('copied') : t('share')}
                   </span>
                 </button>
                 <button
                   onClick={() => setIsMinimized(true)}
                   className="p-2 text-midnight-violet hover:bg-midnight-violet/10 rounded transition-colors"
-                  aria-label="Minimize referral popup"
+                  aria-label={t('minimizeAria')}
                 >
                   <Minimize2 className="w-4 h-4" />
                 </button>
