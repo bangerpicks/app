@@ -3,7 +3,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useTranslations } from 'next-intl'
 import { useAuth } from '@/lib/AuthProvider'
-import { hasSeenOnboardingIntro } from '@/lib/users'
 import { useUserProfile } from '@/lib/UserProfileProvider'
 import { getUserPredictionsForGameweek, readGameweekPlayerCount } from '@/lib/predictions'
 import {
@@ -138,7 +137,7 @@ function DashboardShell({
 
 export default function DashboardPage() {
   const { user, loading: authLoading } = useAuth()
-  const { profileDisplayName, hasValidProfileName } = useUserProfile()
+  const { profileDisplayName, hasValidProfileName, shouldShowWelcomeIntro } = useUserProfile()
   const { locale } = useLanguage()
   const t = useTranslations('dashboard')
   const [username, setUsername] = useState<string | undefined>(undefined)
@@ -167,29 +166,16 @@ export default function DashboardPage() {
     process.env.NEXT_PUBLIC_DEV_ONBOARDING_NAME_STEP === 'true'
 
   useEffect(() => {
-    const abortController = new AbortController()
-
-    if (user) {
-      hasSeenOnboardingIntro(user)
-        .then((hasSeen) => {
-          if (abortController.signal.aborted) return
-          if (!hasSeen) {
-            setShowOnboarding(true)
-          }
-        })
-        .catch(() => {
-          if (abortController.signal.aborted) return
-          setShowOnboarding(true)
-        })
-    } else {
-      setUsername(undefined)
+    if (!user) {
       setShowOnboarding(false)
-    }
-
-    return () => {
-      abortController.abort()
+      return
     }
   }, [user])
+
+  useEffect(() => {
+    if (!user) return
+    setShowOnboarding(shouldShowWelcomeIntro)
+  }, [user, shouldShowWelcomeIntro])
 
   useEffect(() => {
     if (hasValidProfileName && profileDisplayName) {

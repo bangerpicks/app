@@ -10,7 +10,8 @@ import { auth } from '@/lib/firebase'
 import { markOnboardingIntroSeen } from '@/lib/users'
 import { trackReferralSignup } from '@/lib/referrals'
 import { DisplayNameCapturePanel } from './DisplayNameCapturePanel'
-import { dispatchProfileDisplayNameSaved } from '@/lib/user-profile-events'
+import { dispatchProfileDisplayNameSaved, dispatchProfileOnboardingSeen } from '@/lib/user-profile-events'
+import { writeLocalOnboardingSeen } from '@/lib/profile-device-flags'
 
 interface OnboardingIntroProps {
   isOpen: boolean
@@ -108,6 +109,8 @@ export function OnboardingIntro({ isOpen, onClose, requiresDisplayName = false, 
       const user = auth.currentUser
       if (user && !previewOnly) {
         await markOnboardingIntroSeen(user)
+        writeLocalOnboardingSeen(typeof window !== 'undefined' ? window.localStorage : null, user.uid)
+        dispatchProfileOnboardingSeen()
       }
       onClose()
       // Navigate to dashboard only if we're not already there

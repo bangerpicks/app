@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react'
@@ -16,16 +17,69 @@ import { db } from './firebase'
 import { isMissingProfileDisplayName } from './display-name'
 import { readWithTimeoutAndRetry } from './firestore-utils'
 import { UsernameRequiredGate } from '@/components/dashboard/UsernameRequiredGate'
-import { PROFILE_DISPLAY_NAME_SAVED_EVENT } from './user-profile-events'
+import {
+  PROFILE_DISPLAY_NAME_SAVED_EVENT,
+  PROFILE_ONBOARDING_SEEN_EVENT,
+} from './user-profile-events'
+import {
+  readLocalOnboardingSeen,
+  readLocalValidDisplayName,
+  writeLocalOnboardingSeen,
+  writeLocalValidDisplayName,
+} from './profile-device-flags'
+import {
+  shouldShowUsernameNameGate,
+  shouldShowWelcomeIntro as computeShouldShowWelcomeIntro,
+} from './profile-gate-policy.mjs'
+import { snapshotFromUserDocData } from './own-profile-snapshot.mjs'
+
+export type ProfileLoadStatus = 'loading' | 'loaded' | 'error'
+
+export type OwnUserProfile = {
+  displayName: string
+  hasSeenOnboardingIntro: boolean
+  photoURL: string | null
+  points: number
+  totalPredictions: number
+  correctPredictions: number
+  accuracy: number
+  favoriteTeam: UserDocumentFavorite | null
+  favoritePlayer: UserDocumentFavoritePlayer | null
+  referralPoints: number
+  pointsSpent: number
+  weekWins1st: number
+  weekWins2nd: number
+  weekWins3rd: number
+  seasonTitles: number
+  seasonPodiums: number
+}
+
+type UserDocumentFavorite = {
+  id: number
+  name: string
+  logo: string
+} | null
+
+type UserDocumentFavoritePlayer = {
+  id: number
+  name: string
+  photo: string
+} | null
 
 interface UserProfileContextValue {
+  profileStatus: ProfileLoadStatus
+  ownProfile: OwnUserProfile | null
   profileDisplayName: string | null
   profileLoading: boolean
   hasValidProfileName: boolean
-  refreshProfile: () => Promise<void>
+  hasSeenOnboardingIntro: boolean | undefined
+  shouldShowWelcomeIntro: boolean
+  refreshProfile: (options?: { background?: boolean }) => Promise<void>
 }
 
 const UserProfileContext = createContext<UserProfileContextValue | undefined>(undefined)
+
+const PROFILE_ERROR_RETRY_MS = 20_000
 
 function shouldShowUsernameGate(pathname: string | null): boolean {
   if (!pathname) return true
@@ -34,36 +88,90 @@ function shouldShowUsernameGate(pathname: string | null): boolean {
   return true
 }
 
+function toOwnProfile(raw: Record<string, unknown> | null): OwnUserProfile | null {
+  if (!raw) return null
+  return raw as unknown as OwnUserProfile
+}
+
 export function UserProfileProvider({ children }: { children: ReactNode }) {
   const { user, loading: authLoading } = useAuth()
   const pathname = usePathname()
-  const [profileDisplayName, setProfileDisplayName] = useState<string | null>(null)
-  const [profileLoading, setProfileLoading] = useState(false)
+  const [profileStatus, setProfileStatus] = useState<ProfileLoadStatus>('loading')
+  const [ownProfile, setOwnProfile] = useState<OwnUserProfile | null>(null)
+  const [localOnboardingSeen, setLocalOnboardingSeen] = useState(false)
+  const [localValidDisplayName, setLocalValidDisplayName] = useState(false)
+  const uidRef = useRef<string | null>(null)
 
-  const refreshProfile = useCallback(async () => {
+  useEffect(() => {
     if (!user?.uid) {
-      setProfileDisplayName(null)
+      uidRef.current = null
+      setProfileStatus('loading')
+      setOwnProfile(null)
+      setLocalOnboardingSeen(false)
+      setLocalValidDisplayName(false)
       return
     }
-    setProfileLoading(true)
-    try {
-      const userRef = doc(db, 'users', user.uid)
-      const snap = await readWithTimeoutAndRetry(() => getDoc(userRef), {
-        timeoutMessage: 'Failed to load user profile',
-      })
-      if (snap.exists()) {
-        const data = snap.data()
-        setProfileDisplayName(typeof data.displayName === 'string' ? data.displayName : '')
-      } else {
-        setProfileDisplayName('')
-      }
-    } catch (error) {
-      console.error('Error loading user profile for display name:', error)
-      setProfileDisplayName('')
-    } finally {
-      setProfileLoading(false)
-    }
+    uidRef.current = user.uid
+    const storage = typeof window !== 'undefined' ? window.localStorage : null
+    setLocalOnboardingSeen(readLocalOnboardingSeen(storage, user.uid))
+    setLocalValidDisplayName(readLocalValidDisplayName(storage, user.uid))
+    setProfileStatus('loading')
+    setOwnProfile(null)
   }, [user?.uid])
+
+  const syncLocalFlagsFromProfile = useCallback(
+    (uid: string, profile: OwnUserProfile) => {
+      const storage = typeof window !== 'undefined' ? window.localStorage : null
+      if (profile.hasSeenOnboardingIntro) {
+        writeLocalOnboardingSeen(storage, uid)
+        setLocalOnboardingSeen(true)
+      }
+      if (!isMissingProfileDisplayName(profile.displayName)) {
+        writeLocalValidDisplayName(storage, uid)
+        setLocalValidDisplayName(true)
+      }
+    },
+    []
+  )
+
+  const refreshProfile = useCallback(
+    async (options?: { background?: boolean }) => {
+      const uid = user?.uid
+      if (!uid) {
+        setProfileStatus('loading')
+        setOwnProfile(null)
+        return
+      }
+      if (!options?.background) {
+        setProfileStatus((prev) => (prev === 'loaded' ? 'loaded' : 'loading'))
+      }
+      try {
+        const userRef = doc(db, 'users', uid)
+        const snap = await readWithTimeoutAndRetry(() => getDoc(userRef), {
+          timeoutMessage: 'Failed to load user profile',
+        })
+        const snapshot = snap.exists()
+          ? toOwnProfile(snapshotFromUserDocData(snap.data()) as Record<string, unknown>)
+          : toOwnProfile(
+              snapshotFromUserDocData({
+                displayName: '',
+                hasSeenOnboardingIntro: false,
+              }) as Record<string, unknown>
+            )
+        if (!snapshot) {
+          setProfileStatus('error')
+          return
+        }
+        setOwnProfile(snapshot)
+        setProfileStatus('loaded')
+        syncLocalFlagsFromProfile(uid, snapshot)
+      } catch (error) {
+        console.error('Error loading user profile:', error)
+        setProfileStatus('error')
+      }
+    },
+    [user?.uid, syncLocalFlagsFromProfile]
+  )
 
   useEffect(() => {
     if (authLoading) return
@@ -71,40 +179,88 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
   }, [authLoading, refreshProfile])
 
   useEffect(() => {
-    if (typeof window === 'undefined') return
-    const onSaved = () => {
-      void refreshProfile()
+    if (profileStatus !== 'error' || !user?.uid) return
+    const id = window.setInterval(() => {
+      void refreshProfile({ background: true })
+    }, PROFILE_ERROR_RETRY_MS)
+    return () => window.clearInterval(id)
+  }, [profileStatus, user?.uid, refreshProfile])
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !user?.uid) return
+    const storage = window.localStorage
+    const uid = user.uid
+
+    const onNameSaved = () => {
+      writeLocalValidDisplayName(storage, uid)
+      setLocalValidDisplayName(true)
+      void refreshProfile({ background: true })
     }
-    window.addEventListener(PROFILE_DISPLAY_NAME_SAVED_EVENT, onSaved)
-    return () => window.removeEventListener(PROFILE_DISPLAY_NAME_SAVED_EVENT, onSaved)
-  }, [refreshProfile])
+    const onOnboardingSeen = () => {
+      writeLocalOnboardingSeen(storage, uid)
+      setLocalOnboardingSeen(true)
+      void refreshProfile({ background: true })
+    }
+
+    window.addEventListener(PROFILE_DISPLAY_NAME_SAVED_EVENT, onNameSaved)
+    window.addEventListener(PROFILE_ONBOARDING_SEEN_EVENT, onOnboardingSeen)
+    return () => {
+      window.removeEventListener(PROFILE_DISPLAY_NAME_SAVED_EVENT, onNameSaved)
+      window.removeEventListener(PROFILE_ONBOARDING_SEEN_EVENT, onOnboardingSeen)
+    }
+  }, [user?.uid, refreshProfile])
+
+  const displayName = ownProfile?.displayName ?? null
+  const hasSeenOnboardingIntro = ownProfile?.hasSeenOnboardingIntro
 
   const hasValidProfileName = Boolean(
-    user && !profileLoading && profileDisplayName != null && !isMissingProfileDisplayName(profileDisplayName)
+    localValidDisplayName ||
+      (profileStatus === 'loaded' && displayName != null && !isMissingProfileDisplayName(displayName))
   )
 
-  const showGate =
+  const shouldShowWelcomeIntro = computeShouldShowWelcomeIntro({
+    status: profileStatus,
+    hasSeenOnboardingIntro,
+    localOnboardingSeen,
+  })
+
+  const showNameGate =
     Boolean(user) &&
     !authLoading &&
-    !profileLoading &&
-    profileDisplayName != null &&
-    isMissingProfileDisplayName(profileDisplayName) &&
+    shouldShowUsernameNameGate({
+      status: profileStatus,
+      displayName,
+      localValidDisplayName,
+    }) &&
     shouldShowUsernameGate(pathname)
 
   const value = useMemo(
     () => ({
-      profileDisplayName,
-      profileLoading: authLoading || profileLoading,
+      profileStatus,
+      ownProfile,
+      profileDisplayName: hasValidProfileName && displayName ? displayName.trim() : null,
+      profileLoading: authLoading || profileStatus === 'loading',
       hasValidProfileName,
+      hasSeenOnboardingIntro,
+      shouldShowWelcomeIntro,
       refreshProfile,
     }),
-    [profileDisplayName, authLoading, profileLoading, hasValidProfileName, refreshProfile]
+    [
+      profileStatus,
+      ownProfile,
+      displayName,
+      authLoading,
+      hasValidProfileName,
+      hasSeenOnboardingIntro,
+      shouldShowWelcomeIntro,
+      refreshProfile,
+    ]
   )
 
   return (
     <UserProfileContext.Provider value={value}>
       {children}
-      {showGate && user ? <UsernameRequiredGate user={user} /> : null}
+      {showNameGate && user ? <UsernameRequiredGate user={user} /> : null}
     </UserProfileContext.Provider>
   )
 }

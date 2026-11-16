@@ -6,6 +6,7 @@ import { ArrowRight } from 'lucide-react'
 import { auth } from '@/lib/firebase'
 import { isDisplayNameAvailable } from '@/lib/users'
 import { saveUserDisplayName } from '@/lib/save-user-display-name'
+import { writeLocalValidDisplayName } from '@/lib/profile-device-flags'
 import { isReservedDisplayName, suggestedDisplayNameFromAuth } from '@/lib/display-name'
 import { getRandomSuggestions } from '@/data/displayNameSuggestions'
 
@@ -123,6 +124,10 @@ export function DisplayNameCapturePanel({
         return
       }
 
+      writeLocalValidDisplayName(
+        typeof window !== 'undefined' ? window.localStorage : null,
+        user.uid
+      )
       onSuccess(trimmedDisplayName)
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : t('failedToUpdate')

@@ -58,7 +58,9 @@
     "trophyWeekWins2nd": "2nd-place weeks",
     "trophyWeekWins3rd": "3rd-place weeks",
     "trophySeasonTitles": "Season titles",
-    "trophySeasonPodiums": "Season podiums"
+    "trophySeasonPodiums": "Season podiums",
+    "loadFailedBackground": "We could not load your profile. We will keep trying in the background.",
+    "retryNow": "Retry now"
   },
   "navigation": {
     "dashboard": "Dashboard",
