@@ -6,9 +6,14 @@ import { Timestamp } from 'firebase/firestore'
 import { getAllGameweeks, AdminGameweekData } from './admin'
 import { GameweekStatus as DashboardGameweekStatus } from '@/types/dashboard'
 import { isFlagshipGameweek } from './gameweek-constants'
+import {
+  DASHBOARD_LOAD_BUDGET_MS,
+  LoadBudget,
+} from './firestore-server-read'
 
 export { isFlagshipGameweek, DEFAULT_LOCK_MINUTES_BEFORE_KICKOFF } from './gameweek-constants'
 export type { GameweekType } from '@/types/admin'
+export { LoadBudget, DASHBOARD_LOAD_BUDGET_MS }
 
 export function getEffectiveDeadline(gw: AdminGameweekData): Timestamp | undefined {
   return gw.lockAt ?? gw.deadline
@@ -73,17 +78,58 @@ export function pickCurrentFlagshipGameweek(
   return fallback ?? null
 }
 
+const serverReadOpts = (
+  budget: LoadBudget,
+  servedFromCacheRef?: { current: boolean }
+) =>
+  ({
+    serverPreferring: true,
+    budget,
+    servedFromCacheRef,
+  }) as const
+
 /**
  * Resolve the same "current" gameweek for dashboard and rankings.
+ * Server-first reads with a shared time budget (dashboard path).
  */
-export async function fetchCurrentGameweek(): Promise<AdminGameweekData | null> {
-  try {
-    const [activeGameweeks, completedGameweeks, allGameweeks] = await Promise.all([
-      getAllGameweeks({ status: 'active', sortBy: 'date', sortOrder: 'desc' }),
-      getAllGameweeks({ status: 'completed', sortBy: 'date', sortOrder: 'desc' }),
-      getAllGameweeks({ sortBy: 'date', sortOrder: 'desc' }),
-    ])
+export async function fetchCurrentGameweek(
+  budget?: LoadBudget,
+  servedFromCacheRef?: { current: boolean }
+): Promise<AdminGameweekData | null> {
+  const loadBudget = budget ?? new LoadBudget()
+  const readOpts = serverReadOpts(loadBudget, servedFromCacheRef)
 
+  try {
+    const activeGameweeks = await getAllGameweeks(
+      {
+        status: 'active',
+        sortBy: 'date',
+        sortOrder: 'desc',
+      },
+      readOpts
+    )
+    const activeFlagship = pickCurrentFlagshipGameweek(activeGameweeks, [], [])
+    if (activeFlagship) {
+      return activeFlagship
+    }
+
+    const completedGameweeks = await getAllGameweeks(
+      {
+        status: 'completed',
+        sortBy: 'date',
+        sortOrder: 'desc',
+      },
+      readOpts
+    )
+    const completedFlagship = pickCurrentFlagshipGameweek([], completedGameweeks, [])
+    if (completedFlagship) {
+      return completedFlagship
+    }
+
+    const allGameweeks = await getAllGameweeks(
+      { sortBy: 'date', sortOrder: 'desc' },
+      readOpts
+    )
     return pickCurrentFlagshipGameweek(activeGameweeks, completedGameweeks, allGameweeks)
   } catch (error) {
     console.error('Error fetching current gameweek:', error)

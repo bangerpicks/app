@@ -110,6 +110,9 @@
     "gameweekHowItWorksStep3": "Los picks correctos suman puntos y suben tu puesto.",
     "loading": "Cargando jornada…",
     "loadError": "No pudimos cargar esta jornada.",
+    "loadErrorRetry": "Intentar de nuevo",
+    "staleDataNotice": "Mostramos la última Banger Week cargada. No pudimos actualizar en este momento.",
+    "refreshingGameweek": "Actualizando esta Banger Week…",
     "noActiveGameweekTitle": "No hay jornada activa",
     "noActiveGameweekBody": "Cuando publiquen la próxima Banger Week, aquí verás los partidos y tus pronósticos.",
     "fixturesLoading": "Los partidos de esta jornada aún no están disponibles."

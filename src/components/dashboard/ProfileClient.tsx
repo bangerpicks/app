@@ -10,6 +10,7 @@ import { auth } from '@/lib/firebase'
 import { AppShell } from './AppShell'
 import { UserDocument } from '@/lib/users'
 import { useIsAdmin } from '@/lib/useIsAdmin'
+import { clearAllDashboardSessionCaches } from '@/lib/dashboard-cache'
 import { User as UserIcon, Trophy, Target, Coins, LogOut, Settings, Shield } from 'lucide-react'
 
 interface ProfileClientProps {
@@ -28,6 +29,7 @@ export function ProfileClient({ user, userData }: ProfileClientProps) {
   const handleSignOut = async () => {
     setIsSigningOut(true)
     try {
+      clearAllDashboardSessionCaches()
       await signOut(auth)
       // Redirect will happen automatically via auth state change
     } catch (error) {

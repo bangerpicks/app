@@ -1,6 +1,11 @@
 import { initializeApp, getApps, FirebaseApp } from 'firebase/app'
 import { getAuth, setPersistence, browserLocalPersistence } from 'firebase/auth'
-import { getFirestore } from 'firebase/firestore'
+import {
+  getFirestore,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+} from 'firebase/firestore'
 import { getFunctions } from 'firebase/functions'
 
 const firebaseConfig = {
@@ -38,8 +43,23 @@ setPersistence(auth, browserLocalPersistence).catch((error) => {
   console.error('Error setting auth persistence:', error)
 })
 
-// Initialize Firestore
-export const db = getFirestore(app)
+// Initialize Firestore (offline cache + iOS Safari long-polling autodetect)
+let dbInstance
+try {
+  dbInstance = initializeFirestore(app, {
+    localCache: persistentLocalCache({
+      tabManager: persistentMultipleTabManager(),
+    }),
+    experimentalAutoDetectLongPolling: true,
+  })
+} catch (error) {
+  console.warn(
+    'initializeFirestore failed; falling back to getFirestore without persistentLocalCache / multi-tab manager:',
+    error
+  )
+  dbInstance = getFirestore(app)
+}
+export const db = dbInstance
 
 // Initialize Functions (for callable functions like trackReferralSignup)
 export const functions = getFunctions(app, 'us-central1')

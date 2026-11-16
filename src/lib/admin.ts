@@ -19,7 +19,26 @@ import {
 } from 'firebase/firestore'
 import { db } from './firebase'
 import { APIFootballFixture, getStandings } from './api-football'
-import { withTimeout } from './firestore-utils'
+import {
+  withTimeout,
+  readWithTimeoutAndRetry,
+  FIRESTORE_READ_TIMEOUT_MS,
+  FIRESTORE_FIXTURES_READ_TIMEOUT_MS,
+} from './firestore-utils'
+import {
+  getQuerySnapshotServerPreferring,
+  markServedFromCacheRef,
+  type LoadBudget,
+} from './firestore-server-read'
+
+export type { LoadBudget } from './firestore-server-read'
+
+export type DashboardFirestoreReadOptions = {
+  serverPreferring?: boolean
+  budget?: LoadBudget
+  /** Set to true when any server-preferring read uses non-empty cache fallback */
+  servedFromCacheRef?: { current: boolean }
+}
 import { isFlagshipGameweek } from './gameweek-constants'
 import type { GameweekFixtureEditorial } from '@/types/admin'
 import type { MarketOddsSnapshot } from '@/types/dashboard'
@@ -473,14 +492,17 @@ export async function deleteGameweek(gameweekId: string): Promise<void> {
  * @param filters - Optional filters
  * @returns Array of gameweeks
  */
-export async function getAllGameweeks(filters?: {
-  status?: 'draft' | 'active' | 'completed' | 'archived'
-  sortBy?: 'date' | 'name'
-  sortOrder?: 'asc' | 'desc'
-  // Admin lists pass true. Everyone else must exclude drafts: an unfiltered
-  // query fails rules once any draft exists.
-  includeDrafts?: boolean
-}): Promise<AdminGameweekData[]> {
+export async function getAllGameweeks(
+  filters?: {
+    status?: 'draft' | 'active' | 'completed' | 'archived'
+    sortBy?: 'date' | 'name'
+    sortOrder?: 'asc' | 'desc'
+    // Admin lists pass true. Everyone else must exclude drafts: an unfiltered
+    // query fails rules once any draft exists.
+    includeDrafts?: boolean
+  },
+  readOptions?: DashboardFirestoreReadOptions
+): Promise<AdminGameweekData[]> {
   try {
     const constraints: QueryConstraint[] = []
     
@@ -500,11 +522,21 @@ export async function getAllGameweeks(filters?: {
     }
     
     const q = query(collection(db, 'gameweeks'), ...constraints)
-    const snapshot = await withTimeout(
-      getDocs(q),
-      10000,
-      'Failed to load gameweeks - request timed out'
-    )
+    const timeoutMessage = 'Failed to load gameweeks - request timed out'
+    let snapshot
+    if (readOptions?.serverPreferring && readOptions.budget) {
+      const result = await getQuerySnapshotServerPreferring(q, {
+        budget: readOptions.budget,
+        timeoutMessage,
+      })
+      markServedFromCacheRef(readOptions.servedFromCacheRef, result)
+      snapshot = result.data
+    } else {
+      snapshot = await readWithTimeoutAndRetry(() => getDocs(q), {
+        timeoutMs: FIRESTORE_READ_TIMEOUT_MS,
+        timeoutMessage,
+      })
+    }
     
     return snapshot.docs.map((doc) => ({
       ...doc.data(),
@@ -777,15 +809,26 @@ export async function saveGameweekFixtures(
  * @returns Array of fixture data
  */
 export async function getGameweekFixtures(
-  gameweekId: string
+  gameweekId: string,
+  readOptions?: DashboardFirestoreReadOptions
 ): Promise<GameweekFixtureData[]> {
   try {
     const fixturesRef = collection(db, 'gameweeks', gameweekId, 'fixtures')
-    const snapshot = await withTimeout(
-      getDocs(fixturesRef),
-      10000,
-      'Failed to load gameweek fixtures - request timed out'
-    )
+    const timeoutMessage = 'Failed to load gameweek fixtures - request timed out'
+    let snapshot
+    if (readOptions?.serverPreferring && readOptions.budget) {
+      const result = await getQuerySnapshotServerPreferring(fixturesRef, {
+        budget: readOptions.budget,
+        timeoutMessage,
+      })
+      markServedFromCacheRef(readOptions.servedFromCacheRef, result)
+      snapshot = result.data
+    } else {
+      snapshot = await readWithTimeoutAndRetry(() => getDocs(fixturesRef), {
+        timeoutMs: FIRESTORE_FIXTURES_READ_TIMEOUT_MS,
+        timeoutMessage,
+      })
+    }
     
     return snapshot.docs.map((doc) => doc.data() as GameweekFixtureData)
   } catch (error) {

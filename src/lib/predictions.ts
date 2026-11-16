@@ -16,6 +16,7 @@ import {
 import { db } from './firebase'
 import { Prediction, MatchCardData } from '@/types/dashboard'
 import { withTimeout } from './firestore-utils'
+import { getDocServerPreferring } from './firestore-server-read'
 import { chunkPredictionFixtures } from './prediction-save-chunks.mjs'
 
 /** Stable sentinel; translate in dashboard UI via dashboard.partialPredictionsSave. */
@@ -299,22 +300,27 @@ export async function getUserPrediction(
  * @param fixtureIds - Array of fixture IDs
  * @returns Promise<Map<number, Prediction>> - Map of fixtureId -> prediction
  */
+export type GameweekPredictionsReadResult = {
+  predictions: Map<number, Prediction>
+  servedFromCache: boolean
+}
+
 export async function getUserPredictionsForGameweek(
   uid: string,
   gameweekId: string,
   fixtureIds: number[]
-): Promise<Map<number, Prediction>> {
+): Promise<GameweekPredictionsReadResult> {
   try {
     if (!uid || !gameweekId || fixtureIds.length === 0) {
-      return new Map()
+      return { predictions: new Map(), servedFromCache: false }
     }
 
     const cacheRef = doc(db, 'users', uid, 'gameweek_predictions', gameweekId)
-    const cacheDoc = await withTimeout(
-      getDoc(cacheRef),
-      5000,
-      'Failed to load predictions - request timed out'
-    )
+    const cacheRead = await getDocServerPreferring(cacheRef, {
+      timeoutMs: 5000,
+      timeoutMessage: 'Failed to load predictions - request timed out',
+    })
+    const cacheDoc = cacheRead.data
 
     if (cacheDoc.exists()) {
       const data = cacheDoc.data() as GameweekPredictionsCache
@@ -324,13 +330,14 @@ export async function getUserPredictionsForGameweek(
         const pick = predictions[String(fixtureId)]
         if (pick) result.set(fixtureId, pick)
       })
-      return result
+      return { predictions: result, servedFromCache: cacheRead.servedFromCache }
     }
   } catch (error) {
     console.warn('Gameweek predictions cache miss, falling back to per-fixture reads:', error)
   }
 
-  return getUserPredictions(uid, fixtureIds)
+  const predictions = await getUserPredictions(uid, fixtureIds)
+  return { predictions, servedFromCache: false }
 }
 
 /**
