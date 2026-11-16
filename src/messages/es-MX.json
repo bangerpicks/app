@@ -150,7 +150,7 @@
     "seasonCorrectPicksMany": "{count} aciertos en la temporada",
     "playerCountOne": "1 jugador",
     "playerCountMany": "{count} jugadores",
-    "weeklyStandingsEmpty": "La tabla aparece cuando se califique el primer partido.",
+    "weeklyStandingsEmpty": "Nadie ha guardado sus picks en esta semana todavía.",
     "loadingSeason": "Cargando tabla de temporada…",
     "noSeasonStandings": "La tabla de temporada aparecerá cuando haya puntos en la temporada.",
     "you": "(Tú)",
@@ -168,8 +168,9 @@
     "errorLoading": "Error al cargar clasificaciones",
     "failedToLoad": "Error al cargar clasificaciones. Por favor, intenta de nuevo más tarde.",
     "failedToLoadWeekly": "Error al cargar clasificaciones semanales. Por favor, intenta de nuevo más tarde.",
-    "selectWeek": "Seleccionar semana",
-    "loadingWeek": "Cargando semana..."
+    "loadingWeek": "Cargando semana...",
+    "previousWeek": "Semana anterior",
+    "nextWeek": "Semana siguiente"
   },
   "shop": {
     "title": "Tienda",

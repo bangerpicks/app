@@ -25,6 +25,7 @@ import {
   SeasonRankingEntry,
 } from '@/lib/seasons'
 import { useLocale, useTranslations } from 'next-intl'
+import { mergeWeeklyRankingsWithStandings } from '@/lib/weekly-rankings-merge.mjs'
 
 const PAST_GAMEWEEKS_LIMIT = 10
 
@@ -169,7 +170,10 @@ export default function RankingsPage() {
           getPrecomputedWeeklyRankings(currentGameweek.gameweekId, user?.uid || null),
           getWeeklyRankings(currentGameweek.gameweekId, user?.uid || null),
         ])
-        const rankings = precomputed ?? rankingsLive
+        const rankings = mergeWeeklyRankingsWithStandings(
+          precomputed,
+          rankingsLive
+        ) as unknown as RankingEntry[]
 
         if (abortController.signal.aborted) return
 
@@ -262,7 +266,10 @@ export default function RankingsPage() {
           getPrecomputedWeeklyRankings(selectedGameweekId, user?.uid || null),
           getWeeklyRankings(selectedGameweekId, user?.uid || null),
         ])
-        const rankings = precomputed ?? rankingsLive
+        const rankings = mergeWeeklyRankingsWithStandings(
+          precomputed,
+          rankingsLive
+        ) as unknown as RankingEntry[]
         if (abortController.signal.aborted) return
         setGameweekData(transformedData)
         setWeeklyRankings(rankings)

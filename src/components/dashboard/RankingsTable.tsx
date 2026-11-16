@@ -10,37 +10,6 @@ interface RankingsTableProps {
   latestCompletedGameweekId?: string | null
 }
 
-function MultiplierBadge({
-  multiplier,
-  variant,
-  animationDelayMs,
-}: {
-  multiplier: string
-  variant: 'gold' | 'silver' | 'bronze'
-  animationDelayMs: number
-}) {
-  const variantClass =
-    variant === 'gold'
-      ? 'multiplier-badge-gold'
-      : variant === 'silver'
-        ? 'multiplier-badge-silver'
-        : 'multiplier-badge-bronze'
-  const colorClass =
-    variant === 'gold'
-      ? 'bg-amber-glow/90 text-midnight-violet'
-      : variant === 'silver'
-        ? 'bg-ivory/90 text-midnight-violet'
-        : 'bg-amber-700/90 text-ivory'
-  return (
-    <span
-      className={`inline-flex items-center justify-center min-w-[2.25rem] px-1.5 py-0.5 rounded text-xs font-bold ${variantClass} ${colorClass}`}
-      style={{ animationDelay: `${animationDelayMs}ms`, animationFillMode: 'both' }}
-    >
-      ×{multiplier}
-    </span>
-  )
-}
-
 export function RankingsTable({
   rankings,
   gameweekData,
@@ -80,7 +49,7 @@ export function RankingsTable({
               </th>
 
               {/* User Column */}
-              <th className="sticky left-12 z-[25] bg-midnight-violet px-2 py-2 text-left min-w-[90px] max-w-[100px]">
+              <th className="sticky left-12 z-[25] bg-midnight-violet px-2 py-2 text-left min-w-[112px] sm:min-w-[140px] max-w-[min(42vw,9rem)] sm:max-w-none">
                 <span className="text-ivory/70 text-xs font-semibold uppercase tracking-wider">
                   {t('user')}
                 </span>
@@ -161,9 +130,6 @@ export function RankingsTable({
                     : entry.lastWeekPlace === 3
                       ? 'lastWeek3rd'
                       : null
-              const multiplierStagger =
-                entry.rank === 1 ? 0 : entry.rank === 2 ? 100 : entry.rank === 3 ? 200 : 0
-
               return (
               <tr
                 key={entry.userId}
@@ -177,7 +143,7 @@ export function RankingsTable({
                 </td>
 
                 {/* User */}
-                <td className="sticky left-12 z-10 bg-midnight-violet px-2 py-2 min-w-[90px] max-w-[100px]">
+                <td className="sticky left-12 z-10 bg-midnight-violet px-2 py-2 min-w-[112px] sm:min-w-[140px] max-w-[min(42vw,9rem)] sm:max-w-none">
                   <div className="flex items-center gap-2">
                     <div className="w-7 h-7 rounded-full bg-ivory/10 flex-shrink-0 overflow-hidden flex items-center justify-center">
                       {entry.photoURL ? (
@@ -197,9 +163,10 @@ export function RankingsTable({
                     </div>
                     <div className="flex flex-col gap-0.5 min-w-0">
                       <span
-                        className={`font-semibold text-sm truncate block ${
+                        className={`font-semibold text-sm block leading-tight sm:truncate ${
                           entry.isCurrentUser ? 'text-lime-yellow' : 'text-ivory'
                         }`}
+                        title={entry.displayName}
                       >
                         {entry.displayName}
                       </span>
@@ -271,20 +238,9 @@ export function RankingsTable({
 
                 {/* Points */}
                 <td className="sticky right-0 z-10 bg-midnight-violet px-2 py-2 text-right w-14">
-                  <div className="flex flex-col items-end gap-1">
-                    <span className="text-lime-yellow font-bold text-sm">
-                      {entry.weeklyPoints ?? entry.points}
-                    </span>
-                    {entry.rank === 1 && (
-                      <MultiplierBadge multiplier="1.5" variant="gold" animationDelayMs={multiplierStagger} />
-                    )}
-                    {entry.rank === 2 && (
-                      <MultiplierBadge multiplier="1.3" variant="silver" animationDelayMs={multiplierStagger} />
-                    )}
-                    {entry.rank === 3 && (
-                      <MultiplierBadge multiplier="1.2" variant="bronze" animationDelayMs={multiplierStagger} />
-                    )}
-                  </div>
+                  <span className="text-lime-yellow font-bold text-sm">
+                    {entry.weeklyPoints ?? entry.points}
+                  </span>
                 </td>
               </tr>
             )})}
