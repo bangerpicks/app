@@ -131,6 +131,13 @@ describe('rankings load state machine', () => {
     globalThis.__BANGER_RANKINGS_SIMULATE_HANG__ = prev
   })
 
+  it('undefined NODE_ENV is treated as production (fail closed)', () => {
+    globalThis.__BANGER_RANKINGS_SIMULATE_HANG__ = 'fixtures'
+    assert.equal(isRankingsQaHangEnabled({ env: {}, qaQuery: true }), false)
+    assert.equal(rankingsSimulateHungRead('fixtures', { env: {}, qaQuery: true }), false)
+    delete globalThis.__BANGER_RANKINGS_SIMULATE_HANG__
+  })
+
   it('rankingsHungReadGate rejects when budget expires during simulated hang', async () => {
     const prev = globalThis.__BANGER_RANKINGS_SIMULATE_HANG__
     globalThis.__BANGER_RANKINGS_SIMULATE_HANG__ = 'seasonStandings'

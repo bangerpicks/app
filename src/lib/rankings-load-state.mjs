@@ -110,9 +110,14 @@ export function shouldRefetchRankingsOnResume({
  * @param {{ env?: Record<string, string | undefined>, qaQuery?: boolean }} [options]
  */
 export function isRankingsQaHangEnabled(options = {}) {
-  const env = options.env ?? (typeof process !== 'undefined' ? process.env : {})
-  const nodeEnv = env.NODE_ENV ?? 'development'
-  const qaHangBuildFlag = env.NEXT_PUBLIC_RANKINGS_QA_HANG === 'true'
+  // Next.js only inlines direct `process.env.X` access — do not read via a variable env bag.
+  const qaHangBuildFlag = options.env
+    ? options.env.NEXT_PUBLIC_RANKINGS_QA_HANG === 'true'
+    : process.env.NEXT_PUBLIC_RANKINGS_QA_HANG === 'true'
+
+  const rawNodeEnv = options.env ? options.env.NODE_ENV : process.env.NODE_ENV
+  const nodeEnv = rawNodeEnv ?? 'production'
+
   if (qaHangBuildFlag) return true
   if (nodeEnv === 'production') return false
   if (options.qaQuery === true) return true
