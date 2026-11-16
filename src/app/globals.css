@@ -129,6 +129,13 @@ td[class*="sticky"] {
   -webkit-backface-visibility: hidden;
 }
 
+/* Rankings table horizontal scroller — explicit pan-x so iOS does not axis-lock to page scroll */
+.rankings-table-scroller {
+  overscroll-behavior-x: contain;
+  touch-action: pan-x pan-y;
+  -webkit-overflow-scrolling: touch;
+}
+
 /* Improve scroll performance on iOS */
 main {
   /* Don't create nested scroll containers */

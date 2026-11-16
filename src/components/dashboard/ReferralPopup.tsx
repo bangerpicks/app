@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { usePathname } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { useAuth } from '@/lib/AuthProvider'
 import { getUserReferralCode } from '@/lib/users'
@@ -12,7 +13,9 @@ interface ReferralPopupProps {
 
 export function ReferralPopup({ className }: ReferralPopupProps) {
   const { user } = useAuth()
+  const pathname = usePathname()
   const t = useTranslations('referral')
+  const isRankingsPage = /\/rankings\/?$/.test(pathname ?? '')
   const [isMinimized, setIsMinimized] = useState(false)
   const [referralCode, setReferralCode] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
@@ -79,12 +82,20 @@ export function ReferralPopup({ className }: ReferralPopupProps) {
     return null
   }
 
+  const stickyBanner = !isRankingsPage
+
   return (
     <div
-      className={`sticky z-50 transition-all duration-300 ${
+      className={`${stickyBanner ? 'sticky z-50' : 'relative z-10'} transition-all duration-300 ${
         isMinimized ? 'h-12 overflow-hidden' : ''
       } ${className || ''}`}
-      style={{ top: 'calc(5rem + env(safe-area-inset-top, 0px))' }}
+      style={
+        stickyBanner
+          ? {
+              top: 'calc(var(--header-height) + env(safe-area-inset-top, 0px))',
+            }
+          : undefined
+      }
     >
       <div className="bg-lime-yellow border-b-2 border-midnight-violet shadow-lg">
         {isMinimized ? (

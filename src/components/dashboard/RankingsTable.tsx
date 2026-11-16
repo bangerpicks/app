@@ -36,7 +36,11 @@ export function RankingsTable({
   }
 
   return (
-    <div className="w-full overflow-x-auto">
+    <div
+      id="rankings-table-scroller"
+      data-testid="rankings-table-scroller"
+      className="rankings-table-scroller w-full overflow-x-auto"
+    >
       <table className="w-full border-collapse min-w-full border-separate border-spacing-0">
         {/* Header */}
         <thead className="bg-midnight-violet">
@@ -49,7 +53,7 @@ export function RankingsTable({
               </th>
 
               {/* User Column */}
-              <th className="sticky left-12 z-[25] bg-midnight-violet px-2 py-2 text-left min-w-[112px] sm:min-w-[140px] max-w-[min(42vw,9rem)] sm:max-w-none">
+              <th className="sticky left-12 z-[25] bg-midnight-violet px-2 py-2 text-left w-[96px] min-w-[96px] max-w-[96px] sm:w-auto sm:min-w-[140px] sm:max-w-none">
                 <span className="text-ivory/70 text-xs font-semibold uppercase tracking-wider">
                   {t('user')}
                 </span>
@@ -107,7 +111,7 @@ export function RankingsTable({
               ))}
 
               {/* Points Column */}
-              <th className="sticky right-0 z-[25] px-2 py-2 text-right bg-midnight-violet w-14">
+              <th className="sticky right-0 z-[25] px-2 py-2 text-right bg-midnight-violet w-11 sm:w-14">
                 <span className="text-ivory/70 text-xs font-semibold uppercase tracking-wider">
                   {t('points')}
                 </span>
@@ -133,7 +137,7 @@ export function RankingsTable({
               return (
               <tr
                 key={entry.userId}
-                className="border-b border-ivory/10 hover:bg-ivory/5"
+                className="border-b border-ivory/10 [@media(hover:hover)]:hover:bg-ivory/5"
               >
                 {/* Rank */}
                 <td className="sticky left-0 z-10 bg-midnight-violet px-2 py-2 w-12">
@@ -143,9 +147,9 @@ export function RankingsTable({
                 </td>
 
                 {/* User */}
-                <td className="sticky left-12 z-10 bg-midnight-violet px-2 py-2 min-w-[112px] sm:min-w-[140px] max-w-[min(42vw,9rem)] sm:max-w-none">
-                  <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-full bg-ivory/10 flex-shrink-0 overflow-hidden flex items-center justify-center">
+                <td className="sticky left-12 z-10 bg-midnight-violet px-2 py-2 w-[96px] min-w-[96px] max-w-[96px] sm:w-auto sm:min-w-[140px] sm:max-w-none">
+                  <div className="flex items-center gap-1.5 sm:gap-2">
+                    <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-ivory/10 flex-shrink-0 overflow-hidden flex items-center justify-center">
                       {entry.photoURL ? (
                         <Image
                           src={entry.photoURL}
@@ -156,14 +160,14 @@ export function RankingsTable({
                           unoptimized
                         />
                       ) : (
-                        <span className="text-ivory/50 text-xs font-bold">
+                        <span className="text-ivory/50 text-[10px] sm:text-xs font-bold">
                           {(entry.displayName || '?').charAt(0).toUpperCase()}
                         </span>
                       )}
                     </div>
-                    <div className="flex flex-col gap-0.5 min-w-0">
+                    <div className="flex flex-col gap-0.5 min-w-0 flex-1">
                       <span
-                        className={`font-semibold text-sm block leading-tight sm:truncate ${
+                        className={`font-semibold text-xs sm:text-sm block leading-tight line-clamp-2 break-all sm:line-clamp-none sm:truncate ${
                           entry.isCurrentUser ? 'text-lime-yellow' : 'text-ivory'
                         }`}
                         title={entry.displayName}
@@ -171,9 +175,14 @@ export function RankingsTable({
                         {entry.displayName}
                       </span>
                       {showLastWeekBadge && lastWeekBadgeKey && (
-                        <span className="text-xs font-medium text-amber-glow/90">
-                          {t(lastWeekBadgeKey)}
-                        </span>
+                        <>
+                          <span className="text-[10px] sm:hidden font-medium text-amber-glow/90 leading-tight">
+                            {t(`${lastWeekBadgeKey}Short`)}
+                          </span>
+                          <span className="hidden sm:inline text-xs font-medium text-amber-glow/90">
+                            {t(lastWeekBadgeKey)}
+                          </span>
+                        </>
                       )}
                     </div>
                   </div>
@@ -237,7 +246,7 @@ export function RankingsTable({
                 })}
 
                 {/* Points */}
-                <td className="sticky right-0 z-10 bg-midnight-violet px-2 py-2 text-right w-14">
+                <td className="sticky right-0 z-10 bg-midnight-violet px-2 py-2 text-right w-11 sm:w-14">
                   <span className="text-lime-yellow font-bold text-sm">
                     {entry.weeklyPoints ?? entry.points}
                   </span>
