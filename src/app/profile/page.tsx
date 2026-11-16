@@ -58,6 +58,11 @@ export default function ProfilePage() {
               accuracy: data.accuracy || 0,
               favoriteTeam: data.favoriteTeam || null,
               favoritePlayer: data.favoritePlayer || null,
+              weekWins1st: data.weekWins1st || 0,
+              weekWins2nd: data.weekWins2nd || 0,
+              weekWins3rd: data.weekWins3rd || 0,
+              seasonTitles: data.seasonTitles || 0,
+              seasonPodiums: data.seasonPodiums || 0,
             })
           } else {
             // Use mock data if document doesn't exist yet

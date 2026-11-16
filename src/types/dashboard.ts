@@ -79,7 +79,7 @@ export interface MatchCardData {
   marketOdds?: MarketOddsSnapshot
 }
 
-export type RankingView = 'all-time' | 'this-week' | 'past-weeks'
+export type RankingView = 'this-week' | 'season' | 'hall-of-fame'
 
 export interface MatchPrediction {
   fixtureId: number

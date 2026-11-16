@@ -53,6 +53,13 @@ export function ProfileClient({ user, userData }: ProfileClientProps) {
   const totalPredictions = userData.totalPredictions || 0
   const correctPredictions = userData.correctPredictions || 0
   const accuracy = userData.accuracy || (totalPredictions > 0 ? Math.round((correctPredictions / totalPredictions) * 100) : 0)
+  const weekWins1st = userData.weekWins1st || 0
+  const weekWins2nd = userData.weekWins2nd || 0
+  const weekWins3rd = userData.weekWins3rd || 0
+  const seasonTitles = userData.seasonTitles || 0
+  const seasonPodiums = userData.seasonPodiums || 0
+  const hasTrophies =
+    weekWins1st + weekWins2nd + weekWins3rd + seasonTitles + seasonPodiums > 0
 
   return (
     <AppShell
@@ -125,6 +132,40 @@ export function ProfileClient({ user, userData }: ProfileClientProps) {
               {correctPredictions}
             </span>
           </div>
+        </div>
+
+        {/* Trophy case */}
+        <div className="w-full max-w-2xl mx-auto mb-6 bg-ivory/5 border border-ivory/20 rounded-lg px-4 py-4">
+          <h3 className="text-ivory font-bold text-base mb-3 flex items-center gap-2">
+            <Trophy className="w-5 h-5 text-lime-yellow" />
+            {t('trophyCaseTitle')}
+          </h3>
+          {hasTrophies ? (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              <div className="bg-midnight-violet/60 border border-ivory/10 rounded-lg px-3 py-2 text-center">
+                <span className="text-lime-yellow font-bold text-xl">{weekWins1st}</span>
+                <p className="text-ivory/70 text-xs mt-1">{t('trophyWeekWins1st')}</p>
+              </div>
+              <div className="bg-midnight-violet/60 border border-ivory/10 rounded-lg px-3 py-2 text-center">
+                <span className="text-lime-yellow font-bold text-xl">{weekWins2nd}</span>
+                <p className="text-ivory/70 text-xs mt-1">{t('trophyWeekWins2nd')}</p>
+              </div>
+              <div className="bg-midnight-violet/60 border border-ivory/10 rounded-lg px-3 py-2 text-center">
+                <span className="text-lime-yellow font-bold text-xl">{weekWins3rd}</span>
+                <p className="text-ivory/70 text-xs mt-1">{t('trophyWeekWins3rd')}</p>
+              </div>
+              <div className="bg-midnight-violet/60 border border-ivory/10 rounded-lg px-3 py-2 text-center">
+                <span className="text-lime-yellow font-bold text-xl">{seasonTitles}</span>
+                <p className="text-ivory/70 text-xs mt-1">{t('trophySeasonTitles')}</p>
+              </div>
+              <div className="bg-midnight-violet/60 border border-ivory/10 rounded-lg px-3 py-2 text-center">
+                <span className="text-lime-yellow font-bold text-xl">{seasonPodiums}</span>
+                <p className="text-ivory/70 text-xs mt-1">{t('trophySeasonPodiums')}</p>
+              </div>
+            </div>
+          ) : (
+            <p className="text-ivory/60 text-sm text-center py-2">{t('trophyCaseEmpty')}</p>
+          )}
         </div>
 
         {/* Favorite Player Section */}
