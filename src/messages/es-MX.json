@@ -171,6 +171,9 @@
     "errorLoading": "Error al cargar clasificaciones",
     "failedToLoad": "Error al cargar clasificaciones. Por favor, intenta de nuevo más tarde.",
     "failedToLoadWeekly": "Error al cargar clasificaciones semanales. Por favor, intenta de nuevo más tarde.",
+    "loadFailed": "No pudimos cargar la clasificación. Revisa tu conexión e inténtalo de nuevo.",
+    "tryAgain": "Intentar de nuevo",
+    "staleDataNotice": "Mostramos la última clasificación cargada. No pudimos actualizar en este momento.",
     "loadingWeek": "Cargando semana...",
     "previousWeek": "Semana anterior",
     "nextWeek": "Semana siguiente"

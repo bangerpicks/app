@@ -265,3 +265,76 @@ export function markServedFromCacheRef(
     ref.current = true
   }
 }
+
+function toDocReadResult(
+  snapshot: DocumentSnapshot,
+  source: PreferringReadSource
+): ServerPreferringReadResult<DocumentSnapshot> {
+  return {
+    data: snapshot,
+    source,
+    servedFromCache: source === 'cache-fallback',
+  }
+}
+
+/**
+ * Prefer a server single-doc read with timeout + retries within a shared load budget.
+ * A missing document on the server is a successful empty read, not an error.
+ */
+export async function getDocSnapshotServerPreferring(
+  docRef: DocumentReference,
+  options: {
+    budget: LoadBudget
+    timeoutMessage: string
+    maxRetries?: number
+  }
+): Promise<ServerPreferringReadResult<DocumentSnapshot>> {
+  const maxRetries = options.maxRetries ?? FIRESTORE_SERVER_READ_MAX_RETRIES
+  let lastError: Error | undefined
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    options.budget.assertRemaining()
+    const timeoutMs = Math.max(
+      750,
+      Math.min(FIRESTORE_SERVER_READ_ATTEMPT_MS, options.budget.remaining())
+    )
+
+    try {
+      const snapshot = await readDocFromServer(docRef, timeoutMs, options.timeoutMessage)
+      return toDocReadResult(snapshot, 'server')
+    } catch (error: unknown) {
+      lastError = error instanceof Error ? error : new Error(String(error))
+
+      if (
+        error instanceof FirestoreServedFromCacheError ||
+        isNonRetryableFirestoreError(error)
+      ) {
+        throw error
+      }
+
+      try {
+        const cacheProbeMs = Math.max(500, Math.min(2_000, options.budget.remaining()))
+        const snapshot = await readDocFromCacheFallback(docRef, cacheProbeMs, options.timeoutMessage)
+        return toDocReadResult(snapshot, 'cache-fallback')
+      } catch (fallbackError: unknown) {
+        if (fallbackError instanceof FirestoreServedFromCacheError) {
+          throw fallbackError
+        }
+        lastError =
+          fallbackError instanceof Error ? fallbackError : new Error(String(fallbackError))
+      }
+
+      if (attempt < maxRetries && options.budget.remaining() > 0) {
+        const delay = Math.min(
+          FIRESTORE_READ_RETRY_BASE_MS * Math.pow(2, attempt),
+          options.budget.remaining()
+        )
+        if (delay > 0) {
+          await new Promise((resolve) => setTimeout(resolve, delay))
+        }
+      }
+    }
+  }
+
+  throw lastError ?? new Error(options.timeoutMessage)
+}

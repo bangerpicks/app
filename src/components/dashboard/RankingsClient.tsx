@@ -17,6 +17,11 @@ import {
   hasWeeklyRankingsTableRows,
   shouldShowWeeklyStandingsEmpty,
 } from '@/lib/weekly-rankings-merge.mjs'
+import {
+  shouldShowNoActiveWeekCopy,
+  shouldShowWeeklyRankingsError,
+  shouldShowWeeklyStandingsEmptyCopy,
+} from '@/lib/rankings-load-state.mjs'
 import { weekNavigationState } from '@/lib/rankings-week-nav.mjs'
 import { Trophy, Medal, Award, ChevronLeft, ChevronRight } from 'lucide-react'
 
@@ -34,6 +39,10 @@ interface RankingsClientProps {
   onSelectGameweek?: (gameweekId: string | null) => void
   weeklyLoading?: boolean
   seasonLoading?: boolean
+  weeklyBoardStatus?: 'idle' | 'loading' | 'ready' | 'no-week' | 'error'
+  weeklySliceStatus?: 'idle' | 'loading' | 'loaded' | 'empty' | 'error'
+  seasonBoardStatus?: 'idle' | 'loading' | 'ready' | 'empty' | 'error'
+  onRetry?: () => void
 }
 
 function ScoreMathDisplay({ entry }: { entry: RankingEntry }) {
@@ -183,6 +192,10 @@ export function RankingsClient({
   onSelectGameweek,
   weeklyLoading = false,
   seasonLoading = false,
+  weeklyBoardStatus = 'idle',
+  weeklySliceStatus = 'idle',
+  seasonBoardStatus = 'idle',
+  onRetry,
 }: RankingsClientProps) {
   const t = useTranslations('rankings')
   const [activeView, setActiveView] = useState<RankingView>('this-week')
@@ -219,6 +232,22 @@ export function RankingsClient({
   )
 
   const hallOfFameList = allTimeRankings
+  const playerCount = gameweekData?.gameweek.playerCount ?? 0
+  const showWeeklyError = shouldShowWeeklyRankingsError(
+    playerCount,
+    weeklySliceStatus,
+    weeklyBoardStatus
+  )
+  const showWeeklyEmptyCopy = shouldShowWeeklyStandingsEmptyCopy(
+    weeklyBoardStatus,
+    weeklySliceStatus,
+    playerCount
+  )
+  const showNoActiveWeek = shouldShowNoActiveWeekCopy(weeklyBoardStatus, weeklyLoading)
+  const legacyEmptyOk = shouldShowWeeklyStandingsEmpty(weeklyRankings, weeklyLoading, {
+    boardStatus: weeklyBoardStatus,
+    sliceStatus: weeklySliceStatus,
+  })
 
   useEffect(() => {
     const noop = () => {}
@@ -366,7 +395,20 @@ export function RankingsClient({
                     gameweekData={gameweekData}
                     latestCompletedGameweekId={latestCompletedGameweekId}
                   />
-                ) : shouldShowWeeklyStandingsEmpty(weeklyRankings, weeklyLoading) ? (
+                ) : showWeeklyError ? (
+                  <div className="w-full rounded-b-lg border-2 border-t-0 border-ivory/20 bg-midnight-violet px-4 py-10 flex flex-col items-center justify-center gap-3">
+                    <p className="text-ivory/80 text-sm text-center max-w-sm">{t('loadFailed')}</p>
+                    {onRetry && (
+                      <button
+                        type="button"
+                        onClick={onRetry}
+                        className="bg-lime-yellow text-midnight-violet py-2 px-5 rounded-lg font-semibold text-sm"
+                      >
+                        {t('tryAgain')}
+                      </button>
+                    )}
+                  </div>
+                ) : showWeeklyEmptyCopy || legacyEmptyOk ? (
                   <div className="w-full rounded-b-lg border-2 border-t-0 border-ivory/20 bg-midnight-violet px-4 py-10 flex items-center justify-center">
                     <p className="text-ivory/70 text-sm text-center max-w-sm">
                       {t('weeklyStandingsEmpty')}
@@ -381,7 +423,21 @@ export function RankingsClient({
               <p className="text-ivory/70">{t('loadingWeek')}</p>
             </div>
           )}
-          {!weeklyLoading && !gameweekData && !weeklyRankings && (
+          {!weeklyLoading && weeklyBoardStatus === 'error' && !gameweekData && (
+            <div className="text-center py-12 flex flex-col items-center gap-3">
+              <p className="text-ivory/80 text-sm max-w-sm">{t('loadFailed')}</p>
+              {onRetry && (
+                <button
+                  type="button"
+                  onClick={onRetry}
+                  className="bg-lime-yellow text-midnight-violet py-2 px-5 rounded-lg font-semibold text-sm"
+                >
+                  {t('tryAgain')}
+                </button>
+              )}
+            </div>
+          )}
+          {showNoActiveWeek && (
             <div className="text-center py-12">
               <p className="text-ivory/70 text-lg">{t('noRankings')}</p>
             </div>
@@ -391,8 +447,21 @@ export function RankingsClient({
 
       {isSeasonView && (
         <div className="w-full flex flex-col gap-3 max-w-2xl lg:max-w-4xl">
-          {seasonLoading ? (
+          {seasonLoading || seasonBoardStatus === 'loading' ? (
             <div className="text-center py-12 text-ivory/70">{t('loadingSeason')}</div>
+          ) : seasonBoardStatus === 'error' ? (
+            <div className="text-center py-12 flex flex-col items-center gap-3">
+              <p className="text-ivory/80 text-sm max-w-sm">{t('loadFailed')}</p>
+              {onRetry && (
+                <button
+                  type="button"
+                  onClick={onRetry}
+                  className="bg-lime-yellow text-midnight-violet py-2 px-5 rounded-lg font-semibold text-sm"
+                >
+                  {t('tryAgain')}
+                </button>
+              )}
+            </div>
           ) : seasonRankings.length === 0 ? (
             <div className="text-center py-12">
               <p className="text-ivory/70 text-lg">{t('noSeasonStandings')}</p>

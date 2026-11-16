@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useAuth } from '@/lib/AuthProvider'
 import { RankingsClient } from '@/components/dashboard/RankingsClient'
 import { NotSignedIn } from '@/components/dashboard/NotSignedIn'
@@ -11,23 +11,42 @@ import {
   PastGameweekOption,
 } from '@/types/dashboard'
 import {
-  getCurrentGameweek,
-  getWeeklyRankings,
   transformGameweekData,
   getGameweekFixtureDetails,
+  getWeeklyRankings,
+  RankingsFirestoreReadOptions,
 } from '@/lib/rankings'
 import { getAllGameweeks, getGameweekById } from '@/lib/admin'
+import { SeasonRankingEntry } from '@/lib/seasons'
 import {
-  getActiveSeason,
-  getPrecomputedWeeklyRankings,
-  getSeasonRankings,
+  fetchActiveSeasonForRankings,
+  fetchPrecomputedWeeklyRankingsForRankings,
+  fetchSeasonRankingsForRankings,
   seasonDisplayName,
-  SeasonRankingEntry,
-} from '@/lib/seasons'
+} from '@/lib/seasons-rankings-read'
 import { useLocale, useTranslations } from 'next-intl'
 import { mergeWeeklyRankingsWithStandings } from '@/lib/weekly-rankings-merge.mjs'
+import { fetchCurrentGameweek, LoadBudget } from '@/lib/gameweek-selection'
+import {
+  readRankingsSessionCache,
+  writeRankingsSessionCache,
+  clearRankingsSessionCache,
+  deserializeRankingsSessionGameweek,
+  serializeRankingsSessionGameweek,
+} from '@/lib/rankings-cache'
+import {
+  resolveWeeklyRankingsSliceStatus,
+  resolveSeasonBoardStatus,
+  shouldRefetchRankingsOnResume,
+  shouldWriteRankingsSessionCache,
+} from '@/lib/rankings-load-state.mjs'
+import { staleBannerShowsRetry, shouldShowDashboardStaleBanner } from '@/lib/dashboard-load-state'
 
 const PAST_GAMEWEEKS_LIMIT = 10
+
+type WeeklyBoardStatus = 'idle' | 'loading' | 'ready' | 'no-week' | 'error'
+type WeeklySliceStatus = 'idle' | 'loading' | 'loaded' | 'empty' | 'error'
+type SeasonBoardStatus = 'idle' | 'loading' | 'ready' | 'empty' | 'error'
 
 export default function RankingsPage() {
   const { user, loading: authLoading } = useAuth()
@@ -47,16 +66,29 @@ export default function RankingsPage() {
   const [rankingsLoading, setRankingsLoading] = useState(true)
   const [weeklyLoading, setWeeklyLoading] = useState(true)
   const [rankingsError, setRankingsError] = useState<string | null>(null)
-  const [weeklyError, setWeeklyError] = useState<string | null>(null)
   const [seasonRankings, setSeasonRankings] = useState<SeasonRankingEntry[]>([])
   const [seasonTitle, setSeasonTitle] = useState<string | undefined>()
   const [seasonLoading, setSeasonLoading] = useState(true)
+  const [weeklyBoardStatus, setWeeklyBoardStatus] = useState<WeeklyBoardStatus>('idle')
+  const [weeklySliceStatus, setWeeklySliceStatus] = useState<WeeklySliceStatus>('idle')
+  const [seasonBoardStatus, setSeasonBoardStatus] = useState<SeasonBoardStatus>('idle')
+  const [servedFromFirestoreCache, setServedFromFirestoreCache] = useState(false)
+  const [usingSessionCache, setUsingSessionCache] = useState(false)
+  const [isRefreshingRankings, setIsRefreshingRankings] = useState(false)
+  const [reloadKey, setReloadKey] = useState(0)
+  const lastLoadMetaRef = useRef({ at: 0, failed: false, servedFromCache: false })
+
+  const cacheUid = user?.uid ?? null
+
+  const bumpReload = useCallback(() => {
+    clearRankingsSessionCache(cacheUid, locale)
+    setReloadKey((k) => k + 1)
+  }, [cacheUid, locale])
 
   useEffect(() => {
     const abortController = new AbortController()
-    
+
     if (user) {
-      // Fetch display name from Firestore
       getUserDisplayName(user)
         .then((displayName) => {
           if (abortController.signal.aborted) return
@@ -70,65 +102,209 @@ export default function RankingsPage() {
     } else {
       setUsername(undefined)
     }
-    
-    return () => {
-      abortController.abort()
-    }
+
+    return () => abortController.abort()
   }, [user])
 
   useEffect(() => {
     const abortController = new AbortController()
-    
-    // Fetch all rankings data when user is available
-    // Parallelize all-time rankings with weekly rankings for better performance
-    const fetchAllRankings = async () => {
-      setRankingsLoading(true)
-      setWeeklyLoading(true)
-      setRankingsError(null)
-      setWeeklyError(null)
-      
-      let allTimeRankingsResult: RankingEntry[] = []
-      
+    const sessionCache = readRankingsSessionCache(cacheUid, locale)
+    const hadCache = Boolean(sessionCache)
+
+    if (hadCache && sessionCache) {
+      const cachedGw = deserializeRankingsSessionGameweek(sessionCache.gameweekData)
+      if (cachedGw) {
+        setGameweekData(cachedGw)
+        setCurrentGameweekData(cachedGw)
+      }
+      setWeeklyRankings(sessionCache.weeklyRankings)
+      setCurrentWeeklyRankings(sessionCache.weeklyRankings)
+      setCurrentGameweekId(sessionCache.currentGameweekId)
+      setSelectedGameweekId(sessionCache.currentGameweekId)
+      setSeasonRankings(sessionCache.seasonRankings ?? [])
+      setSeasonTitle(sessionCache.seasonTitle)
+      setUsingSessionCache(true)
+      setWeeklyLoading(false)
+      setSeasonLoading(false)
+      setWeeklyBoardStatus('ready')
+      setWeeklySliceStatus(
+        sessionCache.weeklyRankings?.length ? 'loaded' : 'empty'
+      )
+      setSeasonBoardStatus(
+        sessionCache.seasonRankings?.length ? 'ready' : 'empty'
+      )
+    }
+
+    const loadSeason = async (
+      readOpts: RankingsFirestoreReadOptions
+    ): Promise<{ failed: boolean; title?: string; standings: SeasonRankingEntry[] }> => {
+      if (!hadCache) {
+        setSeasonLoading(true)
+        setSeasonBoardStatus('loading')
+      } else {
+        setIsRefreshingRankings(true)
+      }
       try {
-        // Fetch all-time rankings, current gameweek, and latest completed gameweek (for "last week" badge)
-        const [rankingsResult, currentGameweek, completedGameweeks] = await Promise.all([
-          getAllTimeRankings(user, 100).catch((error) => {
-            console.error('Error fetching all-time rankings:', error)
-            if (!abortController.signal.aborted) {
-              setRankingsError('Failed to load rankings. Please try again later.')
-            }
-            return []
-          }),
-          getCurrentGameweek().catch((error) => {
-            console.error('Error fetching current gameweek:', error)
-            return null
-          }),
-          getAllGameweeks({ sortBy: 'date', sortOrder: 'desc' }).catch((err) => {
-            console.error('Error fetching gameweeks for past weeks:', err)
-            return []
-          }),
+        const activeSeason = await fetchActiveSeasonForRankings(readOpts)
+        if (abortController.signal.aborted) {
+          return { failed: false, standings: [] }
+        }
+        if (!activeSeason) {
+          setSeasonTitle(undefined)
+          setSeasonRankings([])
+          setSeasonBoardStatus(
+            resolveSeasonBoardStatus({
+              loadFailed: false,
+              standingsCount: 0,
+              hasActiveSeason: false,
+            })
+          )
+          return { failed: false, standings: [] }
+        }
+        const title = seasonDisplayName(activeSeason, locale)
+        setSeasonTitle(title)
+        const standings = await fetchSeasonRankingsForRankings(
+          activeSeason.seasonId,
+          user?.uid ?? null,
+          readOpts
+        )
+        if (abortController.signal.aborted) {
+          return { failed: false, standings: [] }
+        }
+        setSeasonRankings(standings)
+        setSeasonBoardStatus(
+          resolveSeasonBoardStatus({
+            loadFailed: false,
+            standingsCount: standings.length,
+            hasActiveSeason: true,
+          })
+        )
+        return { failed: false, title, standings }
+      } catch (error) {
+        if (abortController.signal.aborted) {
+          return { failed: true, standings: [] }
+        }
+        console.error('Error loading season rankings:', error)
+        setSeasonRankings([])
+        setSeasonBoardStatus('error')
+        return { failed: true, standings: [] }
+      } finally {
+        if (!abortController.signal.aborted) {
+          setSeasonLoading(false)
+        }
+      }
+    }
+
+    const loadWeeklyForGameweek = async (
+      gameweekId: string,
+      adminGameweek: Awaited<ReturnType<typeof getGameweekById>>,
+      readOpts: RankingsFirestoreReadOptions
+    ) => {
+      if (!adminGameweek) {
+        throw new Error('Gameweek missing')
+      }
+      const fixtures = await getGameweekFixtureDetails(gameweekId, readOpts)
+      if (abortController.signal.aborted) return null
+      const transformedData = await transformGameweekData(adminGameweek, fixtures)
+      if (fixtures.length === 0) {
+        return {
+          boardStatus: 'ready' as WeeklyBoardStatus,
+          sliceStatus: 'empty' as WeeklySliceStatus,
+          transformed: transformedData,
+          rankings: [] as RankingEntry[],
+          gameweekId: adminGameweek.gameweekId,
+        }
+      }
+      try {
+        const precomputed = await fetchPrecomputedWeeklyRankingsForRankings(
+          gameweekId,
+          user?.uid ?? null,
+          readOpts
+        )
+        const rankingsLive = await getWeeklyRankings(gameweekId, user?.uid ?? null, {
+          gameweek: adminGameweek,
+          fixtures,
+          readOptions: readOpts,
+          precomputedStandings: precomputed,
+        })
+        const rankings = mergeWeeklyRankingsWithStandings(
+          precomputed,
+          rankingsLive
+        ) as unknown as RankingEntry[]
+        const sliceStatus = resolveWeeklyRankingsSliceStatus({
+          succeeded: true,
+          rowCount: rankings.length,
+        })
+        return {
+          boardStatus: 'ready' as WeeklyBoardStatus,
+          sliceStatus,
+          transformed: transformedData,
+          rankings,
+          gameweekId: adminGameweek.gameweekId,
+        }
+      } catch (rankingsError) {
+        console.error('Error loading weekly standings rows:', rankingsError)
+        return {
+          boardStatus: 'ready' as WeeklyBoardStatus,
+          sliceStatus: 'error' as WeeklySliceStatus,
+          transformed: transformedData,
+          rankings: undefined,
+          gameweekId: adminGameweek.gameweekId,
+        }
+      }
+    }
+
+    const fetchAllRankings = async () => {
+      const loadBudget = new LoadBudget()
+      const servedFromCacheRef = { current: false }
+      const readOpts: RankingsFirestoreReadOptions = {
+        budget: loadBudget,
+        servedFromCacheRef,
+      }
+
+      if (!hadCache) {
+        setRankingsLoading(true)
+        setWeeklyLoading(true)
+        setRankingsError(null)
+        setWeeklyBoardStatus('loading')
+        setWeeklySliceStatus('loading')
+        setServedFromFirestoreCache(false)
+      } else {
+        setIsRefreshingRankings(true)
+        setServedFromFirestoreCache(false)
+        servedFromCacheRef.current = false
+      }
+
+      let allTimeOk = false
+      let weeklyPayload: Awaited<ReturnType<typeof loadWeeklyForGameweek>> | null = null
+      let weeklyFailed = false
+      let seasonFailed = false
+
+      const seasonPromise = loadSeason(readOpts)
+
+      try {
+        const [rankingsResult, currentGameweek, completedGameweeksList] = await Promise.all([
+          getAllTimeRankings(user, 100),
+          fetchCurrentGameweek(loadBudget, servedFromCacheRef),
+          getAllGameweeks({ sortBy: 'date', sortOrder: 'desc' }),
         ])
 
         if (abortController.signal.aborted) return
 
-        allTimeRankingsResult = rankingsResult
-        const completedOnly = completedGameweeks.filter(
+        allTimeOk = true
+        const completedOnly = completedGameweeksList.filter(
           (gw) => gw.status === 'completed' || gw.status === 'archived'
         )
         const latestCompleted = completedOnly.length > 0 ? completedOnly[0].gameweekId : null
         setLatestCompletedGameweekId(latestCompleted)
 
-        // Past gameweeks list: published statuses only. Drafts are admin-only.
-        const pastOptions: PastGameweekOption[] = completedGameweeks
+        const pastOptions: PastGameweekOption[] = completedGameweeksList
           .slice(0, PAST_GAMEWEEKS_LIMIT)
           .map((gw) => ({ gameweekId: gw.gameweekId, name: gw.name }))
         setCompletedGameweeks(pastOptions)
-
-        // Set all-time rankings immediately
-        setAllTimeRankings(allTimeRankingsResult)
+        setAllTimeRankings(rankingsResult)
         setRankingsLoading(false)
 
-        // Handle weekly rankings if gameweek is available
         if (!currentGameweek) {
           setCurrentGameweekId(null)
           setCurrentGameweekData(undefined)
@@ -136,83 +312,90 @@ export default function RankingsPage() {
           setWeeklyRankings(undefined)
           setGameweekData(undefined)
           setSelectedGameweekId(null)
-          const activeSeasonOnly = await getActiveSeason()
-          if (!abortController.signal.aborted && activeSeasonOnly) {
-            setSeasonTitle(seasonDisplayName(activeSeasonOnly, locale))
-            const standings = await getSeasonRankings(activeSeasonOnly.seasonId, user?.uid || null)
-            if (!abortController.signal.aborted) {
-              setSeasonRankings(standings)
+          setWeeklyBoardStatus('no-week')
+          setWeeklySliceStatus('empty')
+          weeklyPayload = null
+        } else {
+          weeklyPayload = await loadWeeklyForGameweek(
+            currentGameweek.gameweekId,
+            currentGameweek,
+            readOpts
+          )
+          if (abortController.signal.aborted) return
+          if (weeklyPayload) {
+            weeklyFailed =
+              weeklyPayload.sliceStatus === 'error' || weeklyPayload.boardStatus === 'error'
+            setCurrentGameweekId(weeklyPayload.gameweekId)
+            setSelectedGameweekId(weeklyPayload.gameweekId)
+            setWeeklyBoardStatus(weeklyPayload.boardStatus)
+            setWeeklySliceStatus(weeklyPayload.sliceStatus)
+            if (weeklyPayload.transformed) {
+              setCurrentGameweekData(weeklyPayload.transformed)
+              setGameweekData(weeklyPayload.transformed)
             }
-          }
-          setSeasonLoading(false)
-          return
-        }
-
-        // Get fixture details
-        const fixtures = await getGameweekFixtureDetails(currentGameweek.gameweekId)
-        
-        if (abortController.signal.aborted) return
-        
-        if (fixtures.length === 0) {
-          // No fixtures found, disable weekly view
-          setCurrentGameweekId(null)
-          setCurrentGameweekData(undefined)
-          setCurrentWeeklyRankings(undefined)
-          setWeeklyRankings(undefined)
-          setGameweekData(undefined)
-          setSelectedGameweekId(null)
-          return
-        }
-
-        // Parallelize transformGameweekData and getWeeklyRankings since they're independent
-        const [transformedData, precomputed, rankingsLive] = await Promise.all([
-          transformGameweekData(currentGameweek, fixtures),
-          getPrecomputedWeeklyRankings(currentGameweek.gameweekId, user?.uid || null),
-          getWeeklyRankings(currentGameweek.gameweekId, user?.uid || null),
-        ])
-        const rankings = mergeWeeklyRankingsWithStandings(
-          precomputed,
-          rankingsLive
-        ) as unknown as RankingEntry[]
-
-        if (abortController.signal.aborted) return
-
-        setCurrentGameweekId(currentGameweek.gameweekId)
-        setCurrentGameweekData(transformedData)
-        setCurrentWeeklyRankings(rankings)
-        setGameweekData(transformedData)
-        setWeeklyRankings(rankings)
-        setSelectedGameweekId(currentGameweek.gameweekId)
-
-        const activeSeason = await getActiveSeason()
-        if (!abortController.signal.aborted && activeSeason) {
-          setSeasonTitle(seasonDisplayName(activeSeason, locale))
-          const standings = await getSeasonRankings(activeSeason.seasonId, user?.uid || null)
-          if (!abortController.signal.aborted) {
-            setSeasonRankings(standings)
+            setCurrentWeeklyRankings(weeklyPayload.rankings)
+            setWeeklyRankings(weeklyPayload.rankings)
           }
         }
-        setSeasonLoading(false)
       } catch (error) {
         if (abortController.signal.aborted) return
         console.error('Error fetching rankings:', error)
-        // Only set error if we don't have all-time rankings loaded
-        if (allTimeRankingsResult.length === 0) {
+        if (!allTimeOk) {
           setRankingsError('Failed to load rankings. Please try again later.')
         }
-        setWeeklyError('Failed to load weekly rankings. Please try again later.')
-        setCurrentGameweekId(null)
-        setCurrentGameweekData(undefined)
-        setCurrentWeeklyRankings(undefined)
-        setWeeklyRankings(undefined)
-        setGameweekData(undefined)
-        setSelectedGameweekId(null)
+        weeklyFailed = true
+        setWeeklyBoardStatus('error')
+        setWeeklySliceStatus('error')
       } finally {
         if (!abortController.signal.aborted) {
           setRankingsLoading(false)
           setWeeklyLoading(false)
         }
       }
+
+      const seasonResult = await seasonPromise
+      if (abortController.signal.aborted) return
+
+      seasonFailed = seasonResult.failed
+      const stale = servedFromCacheRef.current
+      setServedFromFirestoreCache(stale)
+      lastLoadMetaRef.current.at = Date.now()
+      lastLoadMetaRef.current.servedFromCache = stale
+      lastLoadMetaRef.current.failed = weeklyFailed || seasonFailed
+
+      const sliceStatus =
+        weeklyFailed || !weeklyPayload || !('sliceStatus' in weeklyPayload)
+          ? 'error'
+          : weeklyPayload.sliceStatus
+      const servedFromServer = !servedFromCacheRef.current
+      const canCacheWeekly =
+        !weeklyFailed &&
+        weeklyPayload &&
+        'transformed' in weeklyPayload &&
+        weeklyPayload.transformed &&
+        shouldWriteRankingsSessionCache(true, {
+          status: sliceStatus,
+          servedFromServer,
+        })
+
+      if (canCacheWeekly && weeklyPayload && 'transformed' in weeklyPayload) {
+        writeRankingsSessionCache({
+          version: 1,
+          savedAt: Date.now(),
+          locale,
+          uid: cacheUid,
+          currentGameweekId: weeklyPayload.gameweekId ?? null,
+          gameweekData: serializeRankingsSessionGameweek(weeklyPayload.transformed),
+          weeklyRankings: weeklyPayload.rankings,
+          seasonTitle: seasonResult.title,
+          seasonRankings: seasonResult.standings,
+        })
+      } else if (weeklyFailed || seasonFailed) {
+        clearRankingsSessionCache(cacheUid, locale)
+      }
+
+      setUsingSessionCache(false)
+      setIsRefreshingRankings(false)
     }
 
     if (user) {
@@ -229,53 +412,103 @@ export default function RankingsPage() {
       setLatestCompletedGameweekId(null)
       setRankingsLoading(false)
       setWeeklyLoading(false)
+      setSeasonLoading(false)
+      setWeeklyBoardStatus('idle')
+      setWeeklySliceStatus('idle')
+      setSeasonBoardStatus('idle')
     }
-    
-    return () => {
-      abortController.abort()
-    }
-  }, [user, locale])
 
-  // Lazy-load past week when user selects a different gameweek
+    return () => abortController.abort()
+  }, [user, locale, reloadKey, cacheUid])
+
+  useEffect(() => {
+    const onResume = () => {
+      if (document.visibilityState && document.visibilityState !== 'visible') return
+      const meta = lastLoadMetaRef.current
+      if (
+        shouldRefetchRankingsOnResume({
+          lastFailed: meta.failed,
+          lastLoadAtMs: meta.at,
+        })
+      ) {
+        bumpReload()
+      }
+    }
+    document.addEventListener('visibilitychange', onResume)
+    window.addEventListener('pageshow', onResume)
+    return () => {
+      document.removeEventListener('visibilitychange', onResume)
+      window.removeEventListener('pageshow', onResume)
+    }
+  }, [bumpReload])
+
   useEffect(() => {
     if (!user || !selectedGameweekId || selectedGameweekId === currentGameweekId) {
-      setWeeklyLoading(false)
+      if (selectedGameweekId === currentGameweekId) {
+        setWeeklyLoading(false)
+      }
       return
     }
     const abortController = new AbortController()
     setWeeklyLoading(true)
-    setWeeklyError(null)
+    setWeeklySliceStatus('loading')
+
     const loadPastWeek = async () => {
+      const loadBudget = new LoadBudget()
+      const servedFromCacheRef = { current: false }
+      const readOpts: RankingsFirestoreReadOptions = {
+        budget: loadBudget,
+        servedFromCacheRef,
+      }
       try {
         const gameweek = await getGameweekById(selectedGameweekId)
         if (abortController.signal.aborted) return
         if (!gameweek) {
-          setWeeklyLoading(false)
+          setWeeklyBoardStatus('error')
+          setWeeklySliceStatus('error')
           return
         }
-        const fixtures = await getGameweekFixtureDetails(selectedGameweekId)
+        const result = await (async () => {
+          const fixtures = await getGameweekFixtureDetails(selectedGameweekId, readOpts)
+          if (fixtures.length === 0) {
+            return { transformed: undefined, rankings: undefined as RankingEntry[] | undefined }
+          }
+          const transformedData = await transformGameweekData(gameweek, fixtures)
+          const precomputed = await fetchPrecomputedWeeklyRankingsForRankings(
+            selectedGameweekId,
+            user.uid,
+            readOpts
+          )
+          const rankingsLive = await getWeeklyRankings(selectedGameweekId, user.uid, {
+            gameweek,
+            fixtures,
+            readOptions: readOpts,
+            precomputedStandings: precomputed,
+          })
+          const rankings = mergeWeeklyRankingsWithStandings(
+            precomputed,
+            rankingsLive
+          ) as unknown as RankingEntry[]
+          return { transformed: transformedData, rankings }
+        })()
         if (abortController.signal.aborted) return
-        if (fixtures.length === 0) {
-          setWeeklyRankings(undefined)
-          setGameweekData(undefined)
-          setWeeklyLoading(false)
-          return
+        setGameweekData(result.transformed)
+        setWeeklyRankings(result.rankings)
+        setWeeklyBoardStatus(result.transformed ? 'ready' : 'no-week')
+        setWeeklySliceStatus(
+          resolveWeeklyRankingsSliceStatus({
+            succeeded: true,
+            rowCount: result.rankings?.length ?? 0,
+          })
+        )
+        if (servedFromCacheRef.current) {
+          setServedFromFirestoreCache(true)
         }
-        const [transformedData, precomputed, rankingsLive] = await Promise.all([
-          transformGameweekData(gameweek, fixtures),
-          getPrecomputedWeeklyRankings(selectedGameweekId, user?.uid || null),
-          getWeeklyRankings(selectedGameweekId, user?.uid || null),
-        ])
-        const rankings = mergeWeeklyRankingsWithStandings(
-          precomputed,
-          rankingsLive
-        ) as unknown as RankingEntry[]
-        if (abortController.signal.aborted) return
-        setGameweekData(transformedData)
-        setWeeklyRankings(rankings)
       } catch (error) {
         if (!abortController.signal.aborted) {
-          setWeeklyError('Failed to load weekly rankings. Please try again later.')
+          console.error('Error loading past week:', error)
+          setWeeklyBoardStatus('error')
+          setWeeklySliceStatus('error')
           setWeeklyRankings(undefined)
           setGameweekData(undefined)
         }
@@ -287,7 +520,6 @@ export default function RankingsPage() {
     return () => abortController.abort()
   }, [user, selectedGameweekId, currentGameweekId])
 
-  // When selection is current week, show current week data
   useEffect(() => {
     if (selectedGameweekId === currentGameweekId && currentGameweekData && currentWeeklyRankings) {
       setGameweekData(currentGameweekData)
@@ -303,8 +535,7 @@ export default function RankingsPage() {
     }
   }
 
-  // Show full-page loading only for auth or initial rankings/weekly load (not when loading a past week)
-  const initialWeeklyLoading = weeklyLoading && !currentGameweekData
+  const initialWeeklyLoading = weeklyLoading && weeklyBoardStatus === 'loading'
   if (authLoading || rankingsLoading || initialWeeklyLoading) {
     return (
       <div className="min-h-[100dvh] min-h-screen bg-midnight-violet flex items-center justify-center">
@@ -313,26 +544,55 @@ export default function RankingsPage() {
     )
   }
 
-  // Show not signed in page if user is not authenticated
   if (!user) {
     return <NotSignedIn />
   }
 
-  // Show error state if rankings failed to load
-  // Note: This uses hardcoded text but could be translated if needed
-  // Since rankingsError might contain dynamic error messages from the API
   if (rankingsError) {
     return (
-      <div className="min-h-[100dvh] min-h-screen bg-midnight-violet flex items-center justify-center">
-        <div className="text-ivory text-center">
+      <div className="min-h-[100dvh] min-h-screen bg-midnight-violet flex items-center justify-center px-4">
+        <div className="text-ivory text-center max-w-md">
           <p className="text-lg mb-2">{t('errorLoading')}</p>
-          <p className="text-sm text-ivory/70">{t('failedToLoad')}</p>
+          <p className="text-sm text-ivory/70 mb-4">{t('loadFailed')}</p>
+          <button
+            type="button"
+            onClick={bumpReload}
+            className="bg-lime-yellow text-midnight-violet py-3 px-6 rounded-lg font-semibold hover:bg-opacity-90 transition-colors"
+          >
+            {t('tryAgain')}
+          </button>
         </div>
       </div>
     )
   }
 
+  const showStaleBanner = shouldShowDashboardStaleBanner({
+    servedFromFirestoreCache,
+    refreshFailed: lastLoadMetaRef.current.failed,
+    usingSessionCache,
+    isRefreshingGameweek: isRefreshingRankings,
+  })
+  const showStaleRetry = staleBannerShowsRetry({
+    servedFromFirestoreCache,
+    refreshFailed: lastLoadMetaRef.current.failed,
+  })
+
   return (
+  <>
+    {showStaleBanner && (
+      <div className="fixed top-0 left-0 right-0 z-50 px-4 py-2 bg-midnight-violet/95 border-b border-ivory/15 text-center text-sm">
+        <p className="text-ivory/80">{t('staleDataNotice')}</p>
+        {showStaleRetry && (
+          <button
+            type="button"
+            onClick={bumpReload}
+            className="mt-1 text-lime-yellow font-semibold underline underline-offset-2"
+          >
+            {t('tryAgain')}
+          </button>
+        )}
+      </div>
+    )}
     <RankingsClient
       allTimeRankings={allTimeRankings}
       weeklyRankings={weeklyRankings}
@@ -340,6 +600,7 @@ export default function RankingsPage() {
       seasonRankings={seasonRankings}
       seasonTitle={seasonTitle}
       seasonLoading={seasonLoading}
+      seasonBoardStatus={seasonBoardStatus}
       username={username}
       latestCompletedGameweekId={latestCompletedGameweekId}
       completedGameweeks={completedGameweeks}
@@ -347,6 +608,10 @@ export default function RankingsPage() {
       selectedGameweekId={selectedGameweekId}
       onSelectGameweek={handleSelectGameweek}
       weeklyLoading={weeklyLoading}
+      weeklyBoardStatus={weeklyBoardStatus}
+      weeklySliceStatus={weeklySliceStatus}
+      onRetry={bumpReload}
     />
+  </>
   )
 }

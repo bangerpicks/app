@@ -171,6 +171,9 @@
     "errorLoading": "Error loading rankings",
     "failedToLoad": "Failed to load rankings. Please try again later.",
     "failedToLoadWeekly": "Failed to load weekly rankings. Please try again later.",
+    "loadFailed": "Couldn't load rankings. Check your connection and try again.",
+    "tryAgain": "Try again",
+    "staleDataNotice": "Showing the last loaded rankings. We could not refresh just now.",
     "loadingWeek": "Loading week...",
     "previousWeek": "Previous week",
     "nextWeek": "Next week"
