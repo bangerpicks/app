@@ -8,6 +8,7 @@ import { UserProfileProvider } from '@/lib/UserProfileProvider'
 import { LanguageProvider } from '@/lib/LanguageProvider'
 import { IntlProvider } from '@/lib/IntlProvider'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
+import { ProfileGates } from '@/components/dashboard/ProfileGates'
 
 export const metadata: Metadata = {
   title: 'Banger Picks - Football Predictions',
@@ -52,6 +53,7 @@ export default function RootLayout({
               <DynamicLang />
               <IntlProvider>
                 <ViewportTracker />
+                <ProfileGates />
                 {children}
               </IntlProvider>
             </LanguageProvider>

@@ -16,7 +16,6 @@ import { useAuth } from './AuthProvider'
 import { db } from './firebase'
 import { isMissingProfileDisplayName } from './display-name'
 import { readWithTimeoutAndRetry } from './firestore-utils'
-import { UsernameRequiredGate } from '@/components/dashboard/UsernameRequiredGate'
 import {
   PROFILE_DISPLAY_NAME_SAVED_EVENT,
   PROFILE_ONBOARDING_SEEN_EVENT,
@@ -74,6 +73,7 @@ interface UserProfileContextValue {
   hasValidProfileName: boolean
   hasSeenOnboardingIntro: boolean | undefined
   shouldShowWelcomeIntro: boolean
+  showUsernameNameGate: boolean
   refreshProfile: (options?: { background?: boolean }) => Promise<void>
 }
 
@@ -243,6 +243,7 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
       hasValidProfileName,
       hasSeenOnboardingIntro,
       shouldShowWelcomeIntro,
+      showUsernameNameGate: showNameGate,
       refreshProfile,
     }),
     [
@@ -253,16 +254,12 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
       hasValidProfileName,
       hasSeenOnboardingIntro,
       shouldShowWelcomeIntro,
+      showNameGate,
       refreshProfile,
     ]
   )
 
-  return (
-    <UserProfileContext.Provider value={value}>
-      {children}
-      {showNameGate && user ? <UsernameRequiredGate user={user} /> : null}
-    </UserProfileContext.Provider>
-  )
+  return <UserProfileContext.Provider value={value}>{children}</UserProfileContext.Provider>
 }
 
 export function useUserProfile(): UserProfileContextValue {

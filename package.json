@@ -16,8 +16,9 @@
     "clean:install": "npm run clean && npm install",
     "fresh": "npm run clean:install && npm run build",
     "test:rules": "firebase emulators:exec --only firestore,storage --project demo-banger-picks \"node --test --test-concurrency=1 tests/firestore.rules.test.mjs tests/storage.rules.test.mjs tests/migrations.test.mjs\"",
-    "test:unit": "node --test tests/display-name.test.mjs tests/profile-gate-policy.test.mjs tests/gameweek-selection.test.mjs tests/firestore-read-retry.test.mjs tests/firestore-cache-only.test.mjs tests/firestore-server-preferring.test.mjs tests/dashboard-session-cache.test.mjs tests/dashboard-stale-banner.test.mjs tests/match-card-display.test.mjs tests/market-odds.test.mjs tests/market-odds-firestore.test.mjs tests/firebase-hosting-headers.test.mjs tests/crowd-picks-display.test.mjs tests/prediction-save-chunks.test.mjs tests/prediction-save-plan.test.mjs tests/player-count-display.test.mjs tests/user-profile-save.test.mjs tests/bottom-navigation-layout.test.mjs tests/season-standings.test.mjs tests/i18n-plural.test.mjs tests/weekly-rankings-merge.test.mjs tests/rankings-week-nav.test.mjs tests/rankings-table-layout.test.mjs tests/profile-layout.test.mjs",
-    "build-test-deploy": "npm run type-check && npm run lint && npm run test:unit && npm run build"
+    "test:unit": "node --test tests/display-name.test.mjs tests/user-create-display-name.test.mjs tests/profile-gate-policy.test.mjs tests/profile-gates-layout.test.mjs tests/gameweek-selection.test.mjs tests/firestore-read-retry.test.mjs tests/firestore-cache-only.test.mjs tests/firestore-server-preferring.test.mjs tests/dashboard-session-cache.test.mjs tests/dashboard-stale-banner.test.mjs tests/match-card-display.test.mjs tests/market-odds.test.mjs tests/market-odds-firestore.test.mjs tests/firebase-hosting-headers.test.mjs tests/crowd-picks-display.test.mjs tests/prediction-save-chunks.test.mjs tests/prediction-save-plan.test.mjs tests/player-count-display.test.mjs tests/user-profile-save.test.mjs tests/bottom-navigation-layout.test.mjs tests/season-standings.test.mjs tests/i18n-plural.test.mjs tests/weekly-rankings-merge.test.mjs tests/rankings-week-nav.test.mjs tests/rankings-table-layout.test.mjs tests/profile-layout.test.mjs",
+    "test:profile-gates-render": "tsx --test tests/profile-gates-render.test.tsx",
+    "build-test-deploy": "npm run type-check && npm run lint && npm run test:unit && npm run test:profile-gates-render && npm run build"
   },
   "dependencies": {
     "@heroicons/react": "^2.2.0",
@@ -39,9 +40,11 @@
     "eslint": "^8.56.0",
     "eslint-config-next": "^14.2.0",
     "firebase-tools": "^14.25.0",
+    "happy-dom": "^21.0.4",
     "postcss": "^8.4.0",
     "prettier": "^3.2.0",
     "tailwindcss": "^3.4.0",
+    "tsx": "^4.23.15",
     "typescript": "5.9.3"
   }
 }

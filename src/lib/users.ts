@@ -9,6 +9,7 @@ import { db } from './firebase'
 import { RankingEntry } from '@/types/dashboard'
 import { withTimeout } from './firestore-utils'
 import { isMissingProfileDisplayName } from './display-name'
+import { displayNameForUserCreate } from './user-create-display-name.mjs'
 
 /**
  * User document structure in Firestore
@@ -198,7 +199,7 @@ export async function getUserReferralCode(user: User): Promise<string> {
     if (!userDoc.exists()) {
       // A referral-code-only merge is a create, which the rules reject.
       // Creating the full profile also assigns a code.
-      await ensureUserDocument(user, user.displayName || 'Player')
+      await ensureUserDocument(user, displayNameForUserCreate(user.displayName))
       const created = await getDoc(userRef)
       const createdCode = (created.data() as UserDocument | undefined)?.referralCode
       if (!createdCode) {
@@ -480,7 +481,7 @@ export async function ensureUserDocument(user: User, displayName: string, referr
       // Creating new user document
       const userData: Partial<UserDocument> = {
         uid: user.uid,
-        displayName: displayName || 'Player',
+        displayName: displayNameForUserCreate(displayName ?? user.displayName),
         photoURL: user.photoURL || null,
         points: 0,
         pointsSpent: 0,
@@ -570,7 +571,7 @@ export async function markOnboardingIntroSeen(user: User): Promise<void> {
     const userRef = doc(db, 'users', user.uid)
     const userDoc = await getDoc(userRef)
     if (!userDoc.exists()) {
-      await ensureUserDocument(user, user.displayName || 'Player')
+      await ensureUserDocument(user, displayNameForUserCreate(user.displayName))
     }
 
     const updates: Partial<UserDocument> = {
