@@ -1205,6 +1205,58 @@ describe('referrals', () => {
   })
 })
 
+describe('seasons and standings', () => {
+  const seasonDoc = {
+    name: 'Season 1',
+    name_esMX: 'Temporada 1',
+    seasonNumber: 1,
+    gameweekIds: [GAMEWEEK_ID],
+    bestN: 3,
+    weekCount: 6,
+    status: 'active',
+    createdAt: Timestamp.now(),
+    startAt: Timestamp.now(),
+  }
+  const weeklyStandingsDoc = {
+    gameweekId: GAMEWEEK_ID,
+    entries: [{ uid: USER, displayName: 'Player', photoURL: null, points: 5, correct: 5, rank: 1 }],
+    updatedAt: Timestamp.now(),
+  }
+  const seasonStandingsDoc = {
+    seasonId: 'season-1',
+    bestN: 3,
+    entries: [
+      {
+        uid: USER,
+        displayName: 'Player',
+        photoURL: null,
+        seasonPoints: 5,
+        totalCorrect: 5,
+        rank: 1,
+        countingWeekIds: [GAMEWEEK_ID],
+      },
+    ],
+    updatedAt: Timestamp.now(),
+  }
+
+  it('allows signed-in read and denies client writes for seasons and standings', async () => {
+    await seed((db) =>
+      Promise.all([
+        setDoc(doc(db, 'seasons', 'season-1'), seasonDoc),
+        setDoc(doc(db, 'weeklyStandings', GAMEWEEK_ID), weeklyStandingsDoc),
+        setDoc(doc(db, 'seasonStandings', 'season-1'), seasonStandingsDoc),
+      ])
+    )
+    await assertSucceeds(getDoc(doc(dbAs(USER), 'seasons', 'season-1')))
+    await assertSucceeds(getDoc(doc(dbAs(USER), 'weeklyStandings', GAMEWEEK_ID)))
+    await assertSucceeds(getDoc(doc(dbAs(USER), 'seasonStandings', 'season-1')))
+    await assertDenied(getDoc(doc(dbAnon(), 'seasons', 'season-1')))
+    await assertDenied(setDoc(doc(dbAs(USER), 'seasons', 'season-2'), seasonDoc))
+    await assertDenied(setDoc(doc(dbAs(ADMIN), 'weeklyStandings', 'gw-2'), weeklyStandingsDoc))
+    await assertDenied(setDoc(doc(dbAs(ADMIN), 'seasonStandings', 'season-2'), seasonStandingsDoc))
+  })
+})
+
 describe('fixture search cache', () => {
   const cache = {
     from: '2026-11-01',

@@ -17,11 +17,20 @@ import {
   getGameweekFixtureDetails,
 } from '@/lib/rankings'
 import { getAllGameweeks, getGameweekById } from '@/lib/admin'
+import {
+  getActiveSeason,
+  getPrecomputedWeeklyRankings,
+  getSeasonRankings,
+  seasonDisplayName,
+  SeasonRankingEntry,
+} from '@/lib/seasons'
+import { useLocale } from 'next-intl'
 
 const PAST_GAMEWEEKS_LIMIT = 10
 
 export default function RankingsPage() {
   const { user, loading: authLoading } = useAuth()
+  const locale = useLocale() as 'en' | 'es-MX'
   const [username, setUsername] = useState<string | undefined>(undefined)
   const [allTimeRankings, setAllTimeRankings] = useState<RankingEntry[]>([])
   const [weeklyRankings, setWeeklyRankings] = useState<RankingEntry[] | undefined>(undefined)
@@ -36,6 +45,9 @@ export default function RankingsPage() {
   const [weeklyLoading, setWeeklyLoading] = useState(true)
   const [rankingsError, setRankingsError] = useState<string | null>(null)
   const [weeklyError, setWeeklyError] = useState<string | null>(null)
+  const [seasonRankings, setSeasonRankings] = useState<SeasonRankingEntry[]>([])
+  const [seasonTitle, setSeasonTitle] = useState<string | undefined>()
+  const [seasonLoading, setSeasonLoading] = useState(true)
 
   useEffect(() => {
     const abortController = new AbortController()
@@ -115,13 +127,21 @@ export default function RankingsPage() {
 
         // Handle weekly rankings if gameweek is available
         if (!currentGameweek) {
-          // No gameweek available, disable weekly view
           setCurrentGameweekId(null)
           setCurrentGameweekData(undefined)
           setCurrentWeeklyRankings(undefined)
           setWeeklyRankings(undefined)
           setGameweekData(undefined)
           setSelectedGameweekId(null)
+          const activeSeasonOnly = await getActiveSeason()
+          if (!abortController.signal.aborted && activeSeasonOnly) {
+            setSeasonTitle(seasonDisplayName(activeSeasonOnly, locale))
+            const standings = await getSeasonRankings(activeSeasonOnly.seasonId, user?.uid || null)
+            if (!abortController.signal.aborted) {
+              setSeasonRankings(standings)
+            }
+          }
+          setSeasonLoading(false)
           return
         }
 
@@ -142,13 +162,12 @@ export default function RankingsPage() {
         }
 
         // Parallelize transformGameweekData and getWeeklyRankings since they're independent
-        const [transformedData, rankings] = await Promise.all([
+        const [transformedData, precomputed, rankingsLive] = await Promise.all([
           transformGameweekData(currentGameweek, fixtures),
-          getWeeklyRankings(
-            currentGameweek.gameweekId,
-            user?.uid || null
-          ),
+          getPrecomputedWeeklyRankings(currentGameweek.gameweekId, user?.uid || null),
+          getWeeklyRankings(currentGameweek.gameweekId, user?.uid || null),
         ])
+        const rankings = precomputed ?? rankingsLive
 
         if (abortController.signal.aborted) return
 
@@ -158,6 +177,16 @@ export default function RankingsPage() {
         setGameweekData(transformedData)
         setWeeklyRankings(rankings)
         setSelectedGameweekId(currentGameweek.gameweekId)
+
+        const activeSeason = await getActiveSeason()
+        if (!abortController.signal.aborted && activeSeason) {
+          setSeasonTitle(seasonDisplayName(activeSeason, locale))
+          const standings = await getSeasonRankings(activeSeason.seasonId, user?.uid || null)
+          if (!abortController.signal.aborted) {
+            setSeasonRankings(standings)
+          }
+        }
+        setSeasonLoading(false)
       } catch (error) {
         if (abortController.signal.aborted) return
         console.error('Error fetching rankings:', error)
@@ -199,7 +228,7 @@ export default function RankingsPage() {
     return () => {
       abortController.abort()
     }
-  }, [user])
+  }, [user, locale])
 
   // Lazy-load past week when user selects a different gameweek
   useEffect(() => {
@@ -226,10 +255,12 @@ export default function RankingsPage() {
           setWeeklyLoading(false)
           return
         }
-        const [transformedData, rankings] = await Promise.all([
+        const [transformedData, precomputed, rankingsLive] = await Promise.all([
           transformGameweekData(gameweek, fixtures),
+          getPrecomputedWeeklyRankings(selectedGameweekId, user?.uid || null),
           getWeeklyRankings(selectedGameweekId, user?.uid || null),
         ])
+        const rankings = precomputed ?? rankingsLive
         if (abortController.signal.aborted) return
         setGameweekData(transformedData)
         setWeeklyRankings(rankings)
@@ -297,6 +328,9 @@ export default function RankingsPage() {
       allTimeRankings={allTimeRankings}
       weeklyRankings={weeklyRankings}
       gameweekData={gameweekData}
+      seasonRankings={seasonRankings}
+      seasonTitle={seasonTitle}
+      seasonLoading={seasonLoading}
       username={username}
       latestCompletedGameweekId={latestCompletedGameweekId}
       completedGameweeks={completedGameweeks}

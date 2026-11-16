@@ -49,6 +49,8 @@ export interface UserDocument {
   // Most recently completed gameweek in which user placed 1/2/3
   lastWeekPlace?: 1 | 2 | 3 | null
   lastCompletedGameweekId?: string | null
+  seasonTitles?: number
+  seasonPodiums?: number
   createdAt: Timestamp
   lastUpdated: Timestamp
 }

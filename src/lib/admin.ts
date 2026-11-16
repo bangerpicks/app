@@ -40,6 +40,8 @@ export type DashboardFirestoreReadOptions = {
   servedFromCacheRef?: { current: boolean }
 }
 import { isFlagshipGameweek } from './gameweek-constants'
+import { getActiveSeason } from './seasons'
+import { shouldAppendGameweekToSeason } from './season-standings.mjs'
 import type { GameweekFixtureEditorial } from '@/types/admin'
 import type { MarketOddsSnapshot } from '@/types/dashboard'
 
@@ -170,6 +172,7 @@ export interface AdminGameweekData {
   lockAt?: Timestamp
   endAt?: Timestamp
   podiumAwardedAt?: Timestamp
+  seasonId?: string
 }
 
 /**
@@ -318,6 +321,14 @@ export async function createGameweek(data: CreateGameweekData): Promise<string> 
     const gameweekId = `gw-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
     
     const now = Timestamp.now()
+    let seasonId: string | undefined
+    if (isFlagshipGameweek(data)) {
+      const activeSeason = await getActiveSeason()
+      if (activeSeason && shouldAppendGameweekToSeason(activeSeason, gameweekId)) {
+        seasonId = activeSeason.seasonId
+      }
+    }
+
     const gameweekData: AdminGameweekData = {
       gameweekId,
       name: data.name.trim(),
@@ -339,6 +350,7 @@ export async function createGameweek(data: CreateGameweekData): Promise<string> 
         lockAt: Timestamp.fromDate(data.lockAt),
       }),
       ...(data.endAt !== undefined && { endAt: Timestamp.fromDate(data.endAt) }),
+      ...(seasonId !== undefined && { seasonId }),
     }
 
     if (data.lockAt) {

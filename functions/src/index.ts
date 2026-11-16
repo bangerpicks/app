@@ -27,6 +27,10 @@ import {
   rankPodiumFromWeeklyPoints,
 } from './gameweek-podium'
 import { syncPreMatchOddsForActiveGameweeks } from './prematch-odds-sync'
+import {
+  assignGameweekToActiveSeason,
+  refreshStandingsAfterGameweekActivity,
+} from './standings-update'
 
 admin.initializeApp()
 
@@ -306,6 +310,7 @@ export const autoScoring = functions
 
       let totalAwarded = 0
       let totalProcessed = 0
+      const gameweeksToRefreshStandings = new Set<string>()
 
       for (const gameweekDoc of gameweeksSnapshot.docs) {
         const gameweekId = gameweekDoc.id
@@ -447,6 +452,7 @@ export const autoScoring = functions
               if (batchCount > 0) {
                 await batch.commit()
                 totalProcessed += batchCount
+                gameweeksToRefreshStandings.add(gameweekId)
               }
 
               for (const [uid, stats] of userStatsUpdates.entries()) {
@@ -490,6 +496,14 @@ export const autoScoring = functions
 
       if (totalProcessed > 0 || totalAwarded > 0) {
         console.log(`[autoScoring] Processed ${totalProcessed} predictions; awarded ${totalAwarded} points`)
+      }
+
+      for (const gameweekId of gameweeksToRefreshStandings) {
+        try {
+          await refreshStandingsAfterGameweekActivity(db, gameweekId)
+        } catch (standingsError: unknown) {
+          console.error(`[autoScoring] standings refresh failed for ${gameweekId}:`, standingsError)
+        }
       }
 
       return null
@@ -593,13 +607,19 @@ export const onGameweekUpdate = functions.firestore
         await archiveOtherActiveFlagshipWeeks(db, gameweekId)
       }
 
+      const becameCompleted = prevStatus !== 'completed' && newStatus === 'completed'
+
       if (
         !shouldAwardPodiumBonuses(prevStatus, newStatus, after?.podiumAwardedAt)
       ) {
+        if (becameCompleted) {
+          await refreshStandingsAfterGameweekActivity(db, gameweekId)
+        }
         return null
       }
 
       await awardPodiumIfNeeded(db, gameweekId, after)
+      await refreshStandingsAfterGameweekActivity(db, gameweekId)
       return null
     } catch (error: unknown) {
       console.error(`[onGameweekUpdate] Error processing gameweek ${gameweekId}:`, error)
@@ -616,6 +636,10 @@ export const onGameweekCreate = functions.firestore
 
     if (data?.status === 'active' && isFlagshipGameweek(data)) {
       await archiveOtherActiveFlagshipWeeks(db, gameweekId)
+    }
+
+    if (isFlagshipGameweek(data)) {
+      await assignGameweekToActiveSeason(db, gameweekId, data)
     }
 
     return null
