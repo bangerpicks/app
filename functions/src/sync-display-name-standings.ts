@@ -1,4 +1,5 @@
-import * as admin from 'firebase-admin'
+import type { Firestore } from 'firebase-admin/firestore'
+import { FieldValue } from 'firebase-admin/firestore'
 
 interface StandingsEntryRow {
   uid: string
@@ -30,7 +31,7 @@ function patchEntriesDisplayName(
  * Idempotent: updates denormalized displayName copies for one user in weekly and season standings.
  */
 export async function syncDisplayNameInStandings(
-  db: admin.firestore.Firestore,
+  db: Firestore,
   uid: string,
   newDisplayName: string,
   previousDisplayName?: string
@@ -61,7 +62,7 @@ export async function syncDisplayNameInStandings(
         docSnap.ref,
         {
           entries: next,
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
         },
         { merge: true }
       )
