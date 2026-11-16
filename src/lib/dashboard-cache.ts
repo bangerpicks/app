@@ -142,6 +142,45 @@ export function clearDashboardSessionCache(uid: string | null, locale: string): 
   }
 }
 
+/**
+ * Update playerCount on a cached gameweek when the user joins mid-session
+ * (so a reload within the TTL does not replay a stale 0).
+ */
+export function patchDashboardSessionGameweekPlayerCount(
+  uid: string | null,
+  locale: string,
+  gameweekId: string,
+  playerCount: number
+): void {
+  if (typeof sessionStorage === 'undefined') {
+    return
+  }
+  try {
+    const key = dashboardSessionCacheKey(uid, locale)
+    const raw = sessionStorage.getItem(key)
+    if (!raw) return
+    const parsed = JSON.parse(raw) as {
+      version: number
+      savedAt: number
+      gameweekId: string
+      gameweek: SerializedGameweekData
+      matches: SerializedMatchCardData[]
+      locale?: string
+      uid?: string | null
+    }
+    if (parsed.version !== CACHE_VERSION) return
+    if (!isCacheEntryFresh(parsed.savedAt)) {
+      sessionStorage.removeItem(key)
+      return
+    }
+    if (parsed.gameweekId !== gameweekId) return
+    parsed.gameweek = { ...parsed.gameweek, playerCount }
+    sessionStorage.setItem(key, JSON.stringify(parsed))
+  } catch {
+    /* ignore */
+  }
+}
+
 export function clearAllDashboardSessionCaches(): void {
   if (typeof sessionStorage === 'undefined') {
     return

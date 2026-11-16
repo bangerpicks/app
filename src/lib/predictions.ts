@@ -18,6 +18,7 @@ import { Prediction, MatchCardData } from '@/types/dashboard'
 import { withTimeout } from './firestore-utils'
 import { getDocServerPreferring } from './firestore-server-read'
 import { chunkPredictionFixtures } from './prediction-save-chunks.mjs'
+import { fixturesNeedingWrite } from './prediction-save-plan.mjs'
 
 /** Stable sentinel; translate in dashboard UI via dashboard.partialPredictionsSave. */
 export const PARTIAL_PREDICTIONS_SAVE_ERROR = 'partial-predictions-save'
@@ -89,19 +90,23 @@ interface GameweekPredictionsCache {
  * @param gameweekId - Optional gameweek ID; when provided, updates cache for fast loading
  * @returns Promise<void>
  */
+export type SavePredictionsResult = {
+  joinedGameweek: boolean
+}
+
 export async function savePredictions(
   uid: string,
   predictions: Map<number, Prediction>,
   matchData: MatchCardData[],
   gameweekId?: string | null
-): Promise<void> {
+): Promise<SavePredictionsResult> {
   try {
     if (!uid) {
       throw new Error('User ID is required')
     }
 
     if (predictions.size === 0) {
-      return
+      return { joinedGameweek: false }
     }
 
     if (!gameweekId) {
@@ -129,28 +134,44 @@ export async function savePredictions(
     const existingPredictions: Record<string, Prediction> = cacheSnap.exists()
       ? (cacheSnap.data() as GameweekPredictionsCache).predictions || {}
       : {}
-    const mergedPredictions: Record<string, Prediction> = { ...existingPredictions }
-
-    const fixtureIdsToWrite: number[] = []
-    let firstNewFixtureId: string | null = null
-
     const orderedFixtureIds = [...predictions.keys()].sort((a, b) => a - b)
+    const mergedPredictions: Record<string, Prediction> = { ...existingPredictions }
     for (const fixtureId of orderedFixtureIds) {
       const pick = predictions.get(fixtureId)
-      const match = matchDataMap.get(fixtureId)
-      if (!pick || !match) {
-        continue
-      }
-      fixtureIdsToWrite.push(fixtureId)
-      const entryRef = doc(db, 'predictions', String(fixtureId), 'entries', uid)
-      const entrySnap = await getDoc(entryRef)
-      if (!entrySnap.exists() && firstNewFixtureId == null) {
-        firstNewFixtureId = String(fixtureId)
+      if (pick) {
+        mergedPredictions[String(fixtureId)] = pick
       }
     }
 
+    const fixtureIdsToWrite = fixturesNeedingWrite({
+      creatingCache,
+      existingPredictions,
+      predictions,
+    })
+
     if (fixtureIdsToWrite.length === 0) {
-      return
+      return { joinedGameweek: false }
+    }
+
+    const entrySnaps = await Promise.all(
+      fixtureIdsToWrite.map(async (fixtureId) => {
+        const entryRef = doc(db, 'predictions', String(fixtureId), 'entries', uid)
+        const entrySnap = await getDoc(entryRef)
+        return { fixtureId, entrySnap }
+      })
+    )
+    const entrySnapByFixtureId = new Map(
+      entrySnaps.map(({ fixtureId, entrySnap }) => [fixtureId, entrySnap])
+    )
+
+    let firstNewFixtureId: string | null = null
+    if (creatingCache) {
+      for (const fixtureId of fixtureIdsToWrite) {
+        const entrySnap = entrySnapByFixtureId.get(fixtureId)
+        if (entrySnap && !entrySnap.exists() && firstNewFixtureId == null) {
+          firstNewFixtureId = String(fixtureId)
+        }
+      }
     }
 
     // Production caps security-rule document accesses at 20 per atomic writeBatch
@@ -172,7 +193,7 @@ export async function savePredictions(
         const match = matchDataMap.get(fixtureId)!
         const parentRef = doc(db, 'predictions', String(fixtureId))
         const entryRef = doc(db, 'predictions', String(fixtureId), 'entries', uid)
-        const entrySnap = await getDoc(entryRef)
+        const entrySnap = entrySnapByFixtureId.get(fixtureId)!
         if (entrySnap.exists()) {
           batch.set(parentRef, { exists: true }, { merge: true })
         } else {
@@ -215,7 +236,6 @@ export async function savePredictions(
         }
 
         batch.set(entryRef, entryData, { merge: true })
-        mergedPredictions[String(fixtureId)] = pick
       }
 
       if (joinExtrasThisBatch) {
@@ -241,6 +261,8 @@ export async function savePredictions(
         throw batchError
       }
     }
+
+    return { joinedGameweek: creatingCache }
   } catch (error: any) {
     console.error('Error saving predictions:', error)
     
@@ -387,21 +409,28 @@ export async function getUserPredictions(
  * @param fixtureIds - Array of fixture IDs for the gameweek
  * @returns Promise<number> - Number of unique players who have predicted
  */
-export async function getGameweekPlayerCount(
+export type GameweekPlayerCountRead = {
+  count: number
+  servedFromCache: boolean
+}
+
+export async function readGameweekPlayerCount(
   fixtureIds: number[],
   gameweekId?: string | null
-): Promise<number> {
+): Promise<GameweekPlayerCountRead> {
   try {
     if (gameweekId) {
       try {
-        const gameweekSnap = await withTimeout(
-          getDoc(doc(db, 'gameweeks', gameweekId)),
-          10000,
-          'Failed to load player count - request timed out'
-        )
-        const count = gameweekSnap.exists() ? gameweekSnap.data().playerCount : undefined
+        const gameweekRef = doc(db, 'gameweeks', gameweekId)
+        const gameweekRead = await getDocServerPreferring(gameweekRef, {
+          timeoutMs: 10000,
+          timeoutMessage: 'Failed to load player count - request timed out',
+        })
+        const count = gameweekRead.data.exists()
+          ? gameweekRead.data.data().playerCount
+          : undefined
         if (typeof count === 'number') {
-          return count
+          return { count, servedFromCache: gameweekRead.servedFromCache }
         }
       } catch (error) {
         console.warn('Public player count unavailable, falling back to entry reads:', error)
@@ -409,7 +438,7 @@ export async function getGameweekPlayerCount(
     }
 
     if (!fixtureIds || fixtureIds.length === 0) {
-      return 0
+      return { count: 0, servedFromCache: false }
     }
 
     // Use a Set to track unique user IDs
@@ -437,9 +466,17 @@ export async function getGameweekPlayerCount(
 
     await Promise.all(fetchPromises)
 
-    return uniquePlayerIds.size
+    return { count: uniquePlayerIds.size, servedFromCache: false }
   } catch (error) {
     console.error('Error counting players for gameweek:', error)
-    return 0
+    return { count: 0, servedFromCache: false }
   }
+}
+
+export async function getGameweekPlayerCount(
+  fixtureIds: number[],
+  gameweekId?: string | null
+): Promise<number> {
+  const result = await readGameweekPlayerCount(fixtureIds, gameweekId)
+  return result.count
 }

@@ -4,7 +4,11 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { useTranslations } from 'next-intl'
 import { useAuth } from '@/lib/AuthProvider'
 import { getUserDisplayName, hasSeenOnboardingIntro } from '@/lib/users'
-import { getUserPredictionsForGameweek, getGameweekPlayerCount } from '@/lib/predictions'
+import { getUserPredictionsForGameweek, readGameweekPlayerCount } from '@/lib/predictions'
+import {
+  mergePlayerCountDisplay,
+  shouldSkipGameweekPlayerCountRefetch,
+} from '@/lib/player-count-display.mjs'
 import { DashboardClient } from '@/components/dashboard/DashboardClient'
 import { OnboardingIntro } from '@/components/dashboard/OnboardingIntro'
 import { AppShell } from '@/components/dashboard/AppShell'
@@ -304,23 +308,25 @@ export default function DashboardPage() {
 
         const storedCount = resolvePlayerCountFromGameweek(currentGameweek)
         if (
-          storedCount !== undefined &&
+          !shouldSkipGameweekPlayerCountRefetch(storedCount) &&
           currentGameweek.fixtureIds &&
           currentGameweek.fixtureIds.length > 0
         ) {
-          getGameweekPlayerCount(currentGameweek.fixtureIds, currentGameweek.gameweekId)
-            .then((playerCount) => {
+          readGameweekPlayerCount(currentGameweek.fixtureIds, currentGameweek.gameweekId)
+            .then(({ count, servedFromCache }) => {
               if (abortController.signal.aborted) return
-              setGameweek((prev) => (prev ? { ...prev, playerCount } : null))
-            })
-            .catch(() => {
-              // Keep stored count on refetch failure
-            })
-        } else if (currentGameweek.fixtureIds && currentGameweek.fixtureIds.length > 0) {
-          getGameweekPlayerCount(currentGameweek.fixtureIds, currentGameweek.gameweekId)
-            .then((playerCount) => {
-              if (abortController.signal.aborted) return
-              setGameweek((prev) => (prev ? { ...prev, playerCount } : null))
+              setGameweek((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      playerCount: mergePlayerCountDisplay(
+                        prev.playerCount,
+                        count,
+                        servedFromCache
+                      ),
+                    }
+                  : null
+              )
             })
             .catch(() => {
               /* leave count unchanged */
