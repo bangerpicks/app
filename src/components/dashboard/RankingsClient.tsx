@@ -12,12 +12,13 @@ import {
   PastGameweekOption,
 } from '@/types/dashboard'
 import { SeasonRankingEntry } from '@/lib/seasons'
+import { pickPluralKey } from '@/lib/i18n-plural.mjs'
 import {
-  hasWeeklyStandingsRows,
-  pickPluralKey,
+  hasWeeklyRankingsTableRows,
   shouldShowWeeklyStandingsEmpty,
-} from '@/lib/i18n-plural.mjs'
-import { Trophy, Medal, Award } from 'lucide-react'
+} from '@/lib/weekly-rankings-merge.mjs'
+import { weekNavigationState } from '@/lib/rankings-week-nav.mjs'
+import { Trophy, Medal, Award, ChevronLeft, ChevronRight } from 'lucide-react'
 
 interface RankingsClientProps {
   allTimeRankings: RankingEntry[]
@@ -191,10 +192,31 @@ export function RankingsClient({
   const isHallOfFame = activeView === 'hall-of-fame'
   const isSeasonView = activeView === 'season'
 
-  const showWeekSelector =
-    isThisWeekView &&
-    (currentGameweekId || completedGameweeks.length > 0) &&
-    onSelectGameweek
+  const navigableWeeks = (() => {
+    const past = completedGameweeks.filter(
+      (gw) => gw.gameweekId !== currentGameweekId
+    )
+    if (currentGameweekId) {
+      const currentName =
+        gameweekData?.gameweek.gameweekId === currentGameweekId
+          ? gameweekData.gameweek.name
+          : t('thisWeek')
+      return [
+        { gameweekId: currentGameweekId, name: currentName },
+        ...past,
+      ]
+    }
+    return past
+  })()
+
+  const selectedWeekIndex =
+    selectedGameweekId != null
+      ? navigableWeeks.findIndex((gw) => gw.gameweekId === selectedGameweekId)
+      : -1
+  const weekNav = weekNavigationState(
+    selectedWeekIndex,
+    navigableWeeks.length
+  )
 
   const hallOfFameList = allTimeRankings
 
@@ -271,42 +293,6 @@ export function RankingsClient({
 
       {isThisWeekView && (
         <div className="w-full max-w-2xl lg:max-w-4xl">
-          {showWeekSelector && (
-            <div className="w-full mb-2">
-              <p className="text-ivory/70 text-xs font-medium mb-1.5">{t('selectWeek')}</p>
-              <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-thin">
-                {currentGameweekId && (
-                  <button
-                    type="button"
-                    onClick={() => onSelectGameweek?.(currentGameweekId)}
-                    className={`flex-shrink-0 py-2 px-3 rounded-lg font-semibold text-sm transition-colors ${
-                      selectedGameweekId === currentGameweekId
-                        ? 'bg-lime-yellow text-midnight-violet'
-                        : 'bg-ivory/10 text-ivory/70 hover:bg-ivory/15'
-                    }`}
-                  >
-                    {t('thisWeek')}
-                  </button>
-                )}
-                {completedGameweeks
-                  .filter((gw) => gw.gameweekId !== currentGameweekId)
-                  .map((gw) => (
-                    <button
-                      key={gw.gameweekId}
-                      type="button"
-                      onClick={() => onSelectGameweek?.(gw.gameweekId)}
-                      className={`flex-shrink-0 py-2 px-3 rounded-lg font-semibold text-sm transition-colors ${
-                        selectedGameweekId === gw.gameweekId
-                          ? 'bg-lime-yellow text-midnight-violet'
-                          : 'bg-ivory/10 text-ivory/70 hover:bg-ivory/15'
-                      }`}
-                    >
-                      {gw.name}
-                    </button>
-                  ))}
-              </div>
-            </div>
-          )}
           {gameweekData && (
             <>
               {weeklyLoading && selectedGameweekId !== currentGameweekId && (
@@ -314,12 +300,33 @@ export function RankingsClient({
                   <p className="text-ivory/70 text-sm">{t('loadingWeek')}</p>
                 </div>
               )}
-              <div className="w-full bg-lime-yellow rounded-t-lg px-4 py-3">
-                <div className="flex flex-col items-center gap-1">
-                  <h2 className="text-midnight-violet font-bold text-lg">
+              <div className="w-full bg-lime-yellow rounded-t-lg px-3 py-2.5 sm:px-4 sm:py-3">
+                <div className="flex items-center justify-center gap-1 sm:gap-2">
+                  {navigableWeeks.length > 1 && onSelectGameweek && (
+                    <button
+                      type="button"
+                      disabled={!weekNav.canGoToOlderWeek}
+                      onClick={() => {
+                        if (
+                          weekNav.canGoToOlderWeek &&
+                          weekNav.olderWeekIndex != null
+                        ) {
+                          onSelectGameweek(
+                            navigableWeeks[weekNav.olderWeekIndex].gameweekId
+                          )
+                        }
+                      }}
+                      className="p-1.5 rounded-lg text-midnight-violet disabled:opacity-30 hover:bg-midnight-violet/10 transition-colors flex-shrink-0"
+                      aria-label={t('previousWeek')}
+                    >
+                      <ChevronLeft className="w-5 h-5" />
+                    </button>
+                  )}
+                  <div className="flex flex-col items-center gap-0.5 min-w-0 flex-1">
+                  <h2 className="text-midnight-violet font-bold text-base sm:text-lg text-center truncate max-w-full">
                     {gameweekData.gameweek.name}
                   </h2>
-                  <p className="text-midnight-violet/80 text-sm font-semibold">
+                  <p className="text-midnight-violet/80 text-xs sm:text-sm font-semibold">
                     {t(
                       pickPluralKey(
                         gameweekData.gameweek.playerCount,
@@ -329,10 +336,31 @@ export function RankingsClient({
                       { count: gameweekData.gameweek.playerCount }
                     )}
                   </p>
+                  </div>
+                  {navigableWeeks.length > 1 && onSelectGameweek && (
+                    <button
+                      type="button"
+                      disabled={!weekNav.canGoToNewerWeek}
+                      onClick={() => {
+                        if (
+                          weekNav.canGoToNewerWeek &&
+                          weekNav.newerWeekIndex != null
+                        ) {
+                          onSelectGameweek(
+                            navigableWeeks[weekNav.newerWeekIndex].gameweekId
+                          )
+                        }
+                      }}
+                      className="p-1.5 rounded-lg text-midnight-violet disabled:opacity-30 hover:bg-midnight-violet/10 transition-colors flex-shrink-0"
+                      aria-label={t('nextWeek')}
+                    >
+                      <ChevronRight className="w-5 h-5" />
+                    </button>
+                  )}
                 </div>
               </div>
               <div className="w-full -mt-px">
-                {hasWeeklyStandingsRows(weeklyRankings) ? (
+                {hasWeeklyRankingsTableRows(weeklyRankings) ? (
                   <RankingsTable
                     rankings={weeklyRankings!}
                     gameweekData={gameweekData}

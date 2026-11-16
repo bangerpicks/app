@@ -150,7 +150,7 @@
     "seasonCorrectPicksMany": "{count} correct this season",
     "playerCountOne": "1 player",
     "playerCountMany": "{count} players",
-    "weeklyStandingsEmpty": "Standings appear once the first match is scored.",
+    "weeklyStandingsEmpty": "No one has saved picks for this week yet.",
     "loadingSeason": "Loading season standings…",
     "noSeasonStandings": "Season standings will appear after the first scored week.",
     "you": "(You)",
@@ -168,8 +168,9 @@
     "errorLoading": "Error loading rankings",
     "failedToLoad": "Failed to load rankings. Please try again later.",
     "failedToLoadWeekly": "Failed to load weekly rankings. Please try again later.",
-    "selectWeek": "Select week",
-    "loadingWeek": "Loading week..."
+    "loadingWeek": "Loading week...",
+    "previousWeek": "Previous week",
+    "nextWeek": "Next week"
   },
   "shop": {
     "title": "Shop",

@@ -65,7 +65,7 @@ export function ProfileClient({ user, userData }: ProfileClientProps) {
     <AppShell
       username={displayName}
       userPhotoUrl={photoURL || undefined}
-      mainClassName="flex flex-1 flex-col px-4 sm:px-5 pb-bottom-nav py-4 sm:py-5 overflow-x-hidden"
+      mainClassName="flex min-h-0 flex-1 flex-col px-4 sm:px-5 pb-bottom-nav py-4 sm:py-5 overflow-x-hidden overflow-y-auto"
     >
         {/* Profile Header Section */}
         <div className="w-full flex flex-col items-center gap-4 mb-6">
@@ -135,7 +135,10 @@ export function ProfileClient({ user, userData }: ProfileClientProps) {
         </div>
 
         {/* Trophy case */}
-        <div className="w-full max-w-2xl mx-auto mb-6 bg-ivory/5 border border-ivory/20 rounded-lg px-4 py-4">
+        <div
+          className="w-full max-w-2xl mx-auto mb-6 bg-ivory/5 border border-ivory/20 rounded-lg px-4 py-4 shrink-0"
+          data-testid="profile-trophy-case"
+        >
           <h3 className="text-ivory font-bold text-base mb-3 flex items-center gap-2">
             <Trophy className="w-5 h-5 text-lime-yellow" />
             {t('trophyCaseTitle')}
@@ -239,7 +242,10 @@ export function ProfileClient({ user, userData }: ProfileClientProps) {
           </button>
         </div>
 
-        <p className="mt-auto pt-8 text-center text-xs text-ivory/40">
+        <p
+          className="mt-auto pt-6 pb-2 text-center text-xs text-ivory/40 shrink-0"
+          data-testid="profile-version-line"
+        >
           {t('versionLine', {
             version: process.env.NEXT_PUBLIC_APP_VERSION || '0.0.0',
             sha: process.env.NEXT_PUBLIC_GIT_SHA || 'unknown',
