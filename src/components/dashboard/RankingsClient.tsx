@@ -17,6 +17,7 @@ import {
   hasWeeklyRankingsTableRows,
   shouldShowWeeklyStandingsEmpty,
 } from '@/lib/weekly-rankings-merge.mjs'
+import { weekNavigationState } from '@/lib/rankings-week-nav.mjs'
 import { Trophy, Medal, Award, ChevronLeft, ChevronRight } from 'lucide-react'
 
 interface RankingsClientProps {
@@ -212,9 +213,10 @@ export function RankingsClient({
     selectedGameweekId != null
       ? navigableWeeks.findIndex((gw) => gw.gameweekId === selectedGameweekId)
       : -1
-  const canGoPrev = selectedWeekIndex > 0
-  const canGoNext =
-    selectedWeekIndex >= 0 && selectedWeekIndex < navigableWeeks.length - 1
+  const weekNav = weekNavigationState(
+    selectedWeekIndex,
+    navigableWeeks.length
+  )
 
   const hallOfFameList = allTimeRankings
 
@@ -303,10 +305,15 @@ export function RankingsClient({
                   {navigableWeeks.length > 1 && onSelectGameweek && (
                     <button
                       type="button"
-                      disabled={!canGoPrev}
+                      disabled={!weekNav.canGoToOlderWeek}
                       onClick={() => {
-                        if (canGoPrev) {
-                          onSelectGameweek(navigableWeeks[selectedWeekIndex - 1].gameweekId)
+                        if (
+                          weekNav.canGoToOlderWeek &&
+                          weekNav.olderWeekIndex != null
+                        ) {
+                          onSelectGameweek(
+                            navigableWeeks[weekNav.olderWeekIndex].gameweekId
+                          )
                         }
                       }}
                       className="p-1.5 rounded-lg text-midnight-violet disabled:opacity-30 hover:bg-midnight-violet/10 transition-colors flex-shrink-0"
@@ -333,10 +340,15 @@ export function RankingsClient({
                   {navigableWeeks.length > 1 && onSelectGameweek && (
                     <button
                       type="button"
-                      disabled={!canGoNext}
+                      disabled={!weekNav.canGoToNewerWeek}
                       onClick={() => {
-                        if (canGoNext) {
-                          onSelectGameweek(navigableWeeks[selectedWeekIndex + 1].gameweekId)
+                        if (
+                          weekNav.canGoToNewerWeek &&
+                          weekNav.newerWeekIndex != null
+                        ) {
+                          onSelectGameweek(
+                            navigableWeeks[weekNav.newerWeekIndex].gameweekId
+                          )
                         }
                       }}
                       className="p-1.5 rounded-lg text-midnight-violet disabled:opacity-30 hover:bg-midnight-violet/10 transition-colors flex-shrink-0"
