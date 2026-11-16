@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.2.6 — 2026-11-16
+
+### Fix: Rankings QA hang hook respects LoadBudget
+
+- `rankingsHungReadGate` races simulated hangs against `budget.remaining()` so timeouts surface Try again within the 32s budget.
+- Hang simulation is disabled in production bundles unless `NEXT_PUBLIC_RANKINGS_QA_HANG=true`; dev may also use `?qa=1`.
+
+## 1.2.3 — 2026-11-16
+
+### Fix: Rankings load reliability (Option B)
+
+- This Week and Season load independently on a shared 32s `LoadBudget` with server-first Firestore reads, stale banner, and Try again (en + es-MX).
+- Distinct loaded / empty / error states: silent timeouts and empty cache no longer masquerade as “no rankings”; season spinner always clears.
+- Session cache stores only successful server loads; refetch on resume after failure or ~2 min stale.
+- QA hook: set `window.__BANGER_RANKINGS_SIMULATE_HANG__` to `fixtures`, `entries`, `users`, `weeklyStandings`, `seasonStandings`, or `activeSeason` to hang a read.
+
 ## 1.1.12 — 2026-11-16
 
 ### Fix: stale “Players Joined” after first save

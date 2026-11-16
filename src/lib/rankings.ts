@@ -3,24 +3,43 @@
  * Handles fetching and calculating weekly rankings for gameweeks
  */
 
-import {
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  query,
-  where,
-  Timestamp,
-} from 'firebase/firestore'
+import { collection, doc, Timestamp, type QuerySnapshot } from 'firebase/firestore'
 import { db } from './firebase'
 import { getGameweekById, AdminGameweekData, GameweekFixtureData } from './admin'
 import { getGameweekPlayerCount } from './predictions'
-import { withTimeout } from './firestore-utils'
 import {
   fetchCurrentGameweek,
   mapAdminGameweekToDashboardStatus,
   resolvePlayerCountFromGameweek,
+  LoadBudget,
 } from './gameweek-selection'
+import {
+  getDocSnapshotServerPreferring,
+  getQuerySnapshotServerPreferring,
+  markServedFromCacheRef,
+} from './firestore-server-read'
+import { mapWithConcurrency } from './rankings-concurrency'
+import { rankingsHungReadGate } from './rankings-load-state.mjs'
+
+export const RANKINGS_ENTRIES_CONCURRENCY = 4
+export const RANKINGS_USER_DOC_CONCURRENCY = 4
+
+export type RankingsFirestoreReadOptions = {
+  budget: LoadBudget
+  servedFromCacheRef?: { current: boolean }
+}
+
+export type WeeklyRankingsLoadContext = {
+  gameweek: AdminGameweekData
+  fixtures: Array<{
+    fixtureId: number
+    homeTeam: TeamInfo
+    awayTeam: TeamInfo
+  }>
+  readOptions: RankingsFirestoreReadOptions
+  /** Pre-fetched weeklyStandings rows (optional). */
+  precomputedStandings?: RankingEntry[] | null
+}
 import {
   RankingEntry,
   GameweekData,
@@ -45,26 +64,16 @@ export async function getCurrentGameweek(): Promise<AdminGameweekData | null> {
  * @param gameweekId - Gameweek ID
  * @returns Promise<Array of fixture data with TeamInfo>
  */
-export async function getGameweekFixtureDetails(
-  gameweekId: string
-): Promise<
-  Array<{
-    fixtureId: number
-    homeTeam: TeamInfo
-    awayTeam: TeamInfo
-  }>
-> {
-  try {
-    const fixturesRef = collection(db, 'gameweeks', gameweekId, 'fixtures')
-    const fixturesSnapshot = await withTimeout(
-      getDocs(fixturesRef),
-      10000,
-      'Failed to load gameweek fixtures - request timed out'
-    )
-
-    if (fixturesSnapshot.empty) {
-      return []
-    }
+function mapFixtureDocsToDetails(
+  fixturesSnapshot: QuerySnapshot
+): Array<{
+  fixtureId: number
+  homeTeam: TeamInfo
+  awayTeam: TeamInfo
+}> {
+  if (fixturesSnapshot.empty) {
+    return []
+  }
 
     const fixturesWithSortKey: Array<{
       fixtureId: number
@@ -73,9 +82,9 @@ export async function getGameweekFixtureDetails(
       _sortKey: number
     }> = []
 
-    fixturesSnapshot.forEach((doc) => {
-      const data = doc.data() as GameweekFixtureData
-      const fixtureId = data.fixtureId || parseInt(doc.id, 10)
+    fixturesSnapshot.forEach((docSnap) => {
+      const data = docSnap.data() as GameweekFixtureData
+      const fixtureId = data.fixtureId || parseInt(docSnap.id, 10)
 
       if (data.teams && data.teams.home && data.teams.away) {
         // Extract date for sorting - data.fixture is the full APIFootballFixture
@@ -115,11 +124,30 @@ export async function getGameweekFixtureDetails(
       return diff !== 0 ? diff : a.fixtureId - b.fixtureId
     })
 
-    return fixturesWithSortKey.map(({ _sortKey, ...fixture }) => fixture)
-  } catch (error) {
-    console.error('Error fetching gameweek fixture details:', error)
-    return []
-  }
+  return fixturesWithSortKey.map(({ _sortKey, ...fixture }) => fixture)
+}
+
+export async function getGameweekFixtureDetails(
+  gameweekId: string,
+  readOptions: RankingsFirestoreReadOptions
+): Promise<
+  Array<{
+    fixtureId: number
+    homeTeam: TeamInfo
+    awayTeam: TeamInfo
+  }>
+> {
+  await rankingsHungReadGate('fixtures', {
+    budgetRemainingMs: readOptions.budget.remaining(),
+  })
+  const fixturesRef = collection(db, 'gameweeks', gameweekId, 'fixtures')
+  const timeoutMessage = 'Failed to load gameweek fixtures'
+  const result = await getQuerySnapshotServerPreferring(fixturesRef, {
+    budget: readOptions.budget,
+    timeoutMessage,
+  })
+  markServedFromCacheRef(readOptions.servedFromCacheRef, result)
+  return mapFixtureDocsToDetails(result.data)
 }
 
 /**
@@ -178,19 +206,24 @@ export async function transformGameweekData(
  * @returns Promise<Map<userId, PredictionEntry>>
  */
 async function getPredictionsForFixture(
-  fixtureId: number
+  fixtureId: number,
+  readOptions: RankingsFirestoreReadOptions
 ): Promise<Map<string, PredictionEntry>> {
-  try {
-    const entriesRef = collection(db, 'predictions', String(fixtureId), 'entries')
-    const entriesSnapshot = await withTimeout(
-      getDocs(entriesRef),
-      10000,
-      'Failed to load prediction entries - request timed out'
-    )
+  await rankingsHungReadGate('entries', {
+    budgetRemainingMs: readOptions.budget.remaining(),
+  })
+  const entriesRef = collection(db, 'predictions', String(fixtureId), 'entries')
+  const timeoutMessage = `Failed to load prediction entries for fixture ${fixtureId}`
+  const result = await getQuerySnapshotServerPreferring(entriesRef, {
+    budget: readOptions.budget,
+    timeoutMessage,
+  })
+  markServedFromCacheRef(readOptions.servedFromCacheRef, result)
+  const entriesSnapshot = result.data
 
-    const predictions = new Map<string, PredictionEntry>()
+  const predictions = new Map<string, PredictionEntry>()
 
-    entriesSnapshot.forEach((doc) => {
+  entriesSnapshot.forEach((doc) => {
       const data = doc.data()
       const userId = doc.id
 
@@ -219,11 +252,7 @@ async function getPredictionsForFixture(
       predictions.set(userId, entry)
     })
 
-    return predictions
-  } catch (error) {
-    console.error(`Error fetching predictions for fixture ${fixtureId}:`, error)
-    return new Map()
-  }
+  return predictions
 }
 
 interface BatchUserData {
@@ -241,60 +270,57 @@ interface BatchUserData {
  * @param userIds - Array of user IDs to fetch
  * @returns Promise<Map<userId, BatchUserData>>
  */
-async function batchFetchUsers(userIds: string[]): Promise<Map<string, BatchUserData>> {
-  const userDataMap = new Map<string, BatchUserData>()
+async function fetchSingleUser(
+  userId: string,
+  readOptions: RankingsFirestoreReadOptions
+): Promise<{ userId: string } & BatchUserData> {
+  await rankingsHungReadGate('users', {
+    budgetRemainingMs: readOptions.budget.remaining(),
+  })
+  const userRef = doc(db, 'users', userId)
+  const result = await getDocSnapshotServerPreferring(userRef, {
+    budget: readOptions.budget,
+    timeoutMessage: `Failed to load user ${userId}`,
+  })
+  markServedFromCacheRef(readOptions.servedFromCacheRef, result)
+  const userDoc = result.data
+  if (userDoc.exists()) {
+    const data = userDoc.data()
+    const photoURL = data.favoritePlayer?.photo || data.photoURL || null
+    return {
+      userId,
+      displayName: data.displayName || 'Player',
+      points: data.points || 0,
+      photoURL: photoURL || null,
+      lastWeekPlace: data.lastWeekPlace ?? null,
+      lastCompletedGameweekId: data.lastCompletedGameweekId ?? null,
+    }
+  }
+  return {
+    userId,
+    displayName: 'Player',
+    points: 0,
+    photoURL: null,
+    lastWeekPlace: null,
+    lastCompletedGameweekId: null,
+  }
+}
 
+async function batchFetchUsers(
+  userIds: string[],
+  readOptions: RankingsFirestoreReadOptions
+): Promise<Map<string, BatchUserData>> {
+  const userDataMap = new Map<string, BatchUserData>()
   if (userIds.length === 0) {
     return userDataMap
   }
-
-  try {
-    const docPromises = userIds.map(async (userId) => {
-      try {
-        const userRef = doc(db, 'users', userId)
-        const userDoc = await withTimeout(
-          getDoc(userRef),
-          10000,
-          'Failed to load user data - request timed out'
-        )
-
-        if (userDoc.exists()) {
-          const data = userDoc.data()
-          const photoURL = data.favoritePlayer?.photo || data.photoURL || null
-          return {
-            userId,
-            displayName: data.displayName || 'Player',
-            points: data.points || 0,
-            photoURL: photoURL || null,
-            lastWeekPlace: data.lastWeekPlace ?? null,
-            lastCompletedGameweekId: data.lastCompletedGameweekId ?? null,
-          }
-        }
-
-        return {
-          userId,
-          displayName: 'Player',
-          points: 0,
-          photoURL: null,
-          lastWeekPlace: null,
-          lastCompletedGameweekId: null,
-        }
-      } catch (error) {
-        console.error(`Error fetching user ${userId}:`, error)
-        return {
-          userId,
-          displayName: 'Player',
-          points: 0,
-          photoURL: null,
-          lastWeekPlace: null,
-          lastCompletedGameweekId: null,
-        }
-      }
-    })
-
-    const results = await Promise.all(docPromises)
-
-    results.forEach(({ userId, displayName, points, photoURL, lastWeekPlace, lastCompletedGameweekId }) => {
+  const results = await mapWithConcurrency(
+    userIds,
+    RANKINGS_USER_DOC_CONCURRENCY,
+    (userId) => fetchSingleUser(userId, readOptions)
+  )
+  results.forEach(
+    ({ userId, displayName, points, photoURL, lastWeekPlace, lastCompletedGameweekId }) => {
       userDataMap.set(userId, {
         displayName,
         points,
@@ -302,13 +328,26 @@ async function batchFetchUsers(userIds: string[]): Promise<Map<string, BatchUser
         lastWeekPlace: lastWeekPlace ?? null,
         lastCompletedGameweekId: lastCompletedGameweekId ?? null,
       })
-    })
+    }
+  )
+  return userDataMap
+}
 
-    return userDataMap
-  } catch (error) {
-    console.error('Error batch fetching users:', error)
-    return userDataMap
+function buildUserDataFromStandings(
+  standings: RankingEntry[] | null | undefined
+): Map<string, BatchUserData> {
+  const map = new Map<string, BatchUserData>()
+  if (!standings) return map
+  for (const row of standings) {
+    map.set(row.userId, {
+      displayName: row.displayName || 'Player',
+      points: row.points || 0,
+      photoURL: row.photoURL ?? null,
+      lastWeekPlace: row.lastWeekPlace ?? null,
+      lastCompletedGameweekId: row.lastCompletedGameweekId ?? null,
+    })
   }
+  return map
 }
 
 /**
@@ -320,27 +359,28 @@ async function batchFetchUsers(userIds: string[]): Promise<Map<string, BatchUser
  */
 export async function getWeeklyRankings(
   gameweekId: string,
-  currentUserId?: string | null
+  currentUserId?: string | null,
+  context?: WeeklyRankingsLoadContext
 ): Promise<RankingEntry[]> {
-  try {
-    // Get gameweek data
-    const gameweek = await getGameweekById(gameweekId)
-    if (!gameweek) {
-      console.error('Gameweek not found:', gameweekId)
-      return []
-    }
+  const gameweek = context?.gameweek ?? (await getGameweekById(gameweekId))
+  if (!gameweek) {
+    throw new Error(`Gameweek not found: ${gameweekId}`)
+  }
+  const readOptions = context?.readOptions
+  if (!readOptions) {
+    throw new Error('getWeeklyRankings requires server-preferring readOptions')
+  }
 
-    // Get fixture IDs
-    const fixtureIds = gameweek.fixtureIds || []
-    if (fixtureIds.length === 0) {
-      return []
-    }
+  const fixtureIds = gameweek.fixtureIds || []
+  if (fixtureIds.length === 0) {
+    return []
+  }
 
-    // Fetch all predictions for all fixtures in parallel
-    const predictionPromises = fixtureIds.map((fixtureId) =>
-      getPredictionsForFixture(fixtureId)
-    )
-    const predictionResults = await Promise.all(predictionPromises)
+  const predictionResults = await mapWithConcurrency(
+    fixtureIds,
+    RANKINGS_ENTRIES_CONCURRENCY,
+    (fixtureId) => getPredictionsForFixture(fixtureId, readOptions)
+  )
 
     // Build a map of userId -> { fixtureId -> prediction }
     const userPredictionsMap = new Map<
@@ -359,26 +399,31 @@ export async function getWeeklyRankings(
       })
     })
 
-    // Get fixture details for building match predictions
-    const fixtureDetails = await getGameweekFixtureDetails(gameweekId)
+  const fixtureDetails =
+    context?.fixtures ?? (await getGameweekFixtureDetails(gameweekId, readOptions))
 
-    // Build fixture details map for quick lookup
-    const fixtureDetailsMap = new Map<
-      number,
-      { homeTeam: TeamInfo; awayTeam: TeamInfo }
-    >()
-    fixtureDetails.forEach((fixture) => {
-      fixtureDetailsMap.set(fixture.fixtureId, {
-        homeTeam: fixture.homeTeam,
-        awayTeam: fixture.awayTeam,
-      })
+  const fixtureDetailsMap = new Map<number, { homeTeam: TeamInfo; awayTeam: TeamInfo }>()
+  fixtureDetails.forEach((fixture) => {
+    fixtureDetailsMap.set(fixture.fixtureId, {
+      homeTeam: fixture.homeTeam,
+      awayTeam: fixture.awayTeam,
     })
+  })
 
-    // Collect all unique user IDs who made predictions
-    const userIds = Array.from(userPredictionsMap.keys())
-    
-    // Batch fetch all user documents at once (optimized: reduces N+1 queries)
-    const userDataMap = await batchFetchUsers(userIds)
+  const userIds = Array.from(userPredictionsMap.keys())
+  const isCompleted =
+    gameweek.status === 'completed' || gameweek.status === 'archived'
+  const standingsRows = context?.precomputedStandings
+  const standingsUserData = buildUserDataFromStandings(standingsRows)
+  const canUseStandingsForUsers =
+    isCompleted &&
+    standingsRows &&
+    standingsRows.length > 0 &&
+    userIds.every((uid) => standingsUserData.has(uid))
+
+  const userDataMap = canUseStandingsForUsers
+    ? standingsUserData
+    : await batchFetchUsers(userIds, readOptions)
 
     // Build ranking entries
     const rankingEntries: RankingEntry[] = []
@@ -497,9 +542,5 @@ export async function getWeeklyRankings(
       previousPoints = points
     })
 
-    return rankingEntries
-  } catch (error) {
-    console.error('Error getting weekly rankings:', error)
-    return []
-  }
+  return rankingEntries
 }

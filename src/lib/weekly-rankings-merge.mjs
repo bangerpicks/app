@@ -104,8 +104,10 @@ export function mergeWeeklyRankingsWithStandings(standingsRows, liveRows) {
  * @param {unknown[] | null | undefined} mergedRankings
  * @param {boolean} weeklyLoading
  */
-export function shouldShowWeeklyStandingsEmpty(mergedRankings, weeklyLoading) {
+export function shouldShowWeeklyStandingsEmpty(mergedRankings, weeklyLoading, options = {}) {
+  const { boardStatus, sliceStatus } = options
   if (weeklyLoading) return false
+  if (boardStatus === 'error' || sliceStatus === 'error') return false
   return !mergedRankings || mergedRankings.length === 0
 }
 
