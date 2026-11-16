@@ -4,6 +4,7 @@ import './globals.css'
 import { ViewportTracker } from '@/components/ViewportTracker'
 import { DynamicLang } from '@/components/DynamicLang'
 import { AuthProvider } from '@/lib/AuthProvider'
+import { UserProfileProvider } from '@/lib/UserProfileProvider'
 import { LanguageProvider } from '@/lib/LanguageProvider'
 import { IntlProvider } from '@/lib/IntlProvider'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
@@ -45,15 +46,17 @@ export default function RootLayout({
           strategy="lazyOnload"
         />
         <AuthProvider>
-          <ErrorBoundary>
-            <LanguageProvider>
+          <UserProfileProvider>
+            <ErrorBoundary>
+              <LanguageProvider>
               <DynamicLang />
               <IntlProvider>
                 <ViewportTracker />
                 {children}
               </IntlProvider>
             </LanguageProvider>
-          </ErrorBoundary>
+            </ErrorBoundary>
+          </UserProfileProvider>
         </AuthProvider>
       </body>
     </html>

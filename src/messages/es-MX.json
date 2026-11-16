@@ -77,6 +77,7 @@
     "picksRemainingToSave": "Faltan {count} picks para poder guardar",
     "saveRequiresAllPicks": "Elige un pick en cada partido antes de guardar.",
     "signInToSavePicks": "Inicia sesión para guardar tus picks",
+    "saveRequiresProfileName": "Elige tu nombre de pantalla antes de guardar predicciones en la clasificación.",
     "guestSaveHint": "Inicia sesión para confirmar tu tarjeta—conservamos tus elecciones.",
     "savedSuccessfully": "¡Predicciones guardadas exitosamente!",
     "partialPredictionsSave": "Se guardaron algunos picks, pero no se pudieron completar todos. Vuelve a guardar para terminar tu tarjeta.",
@@ -283,6 +284,13 @@
       "generic": "Algo salió mal. Intenta de nuevo."
     }
   },
+  "usernameGate": {
+    "subtitle": "Tu perfil en Firestore necesita un nombre de pantalla antes de jugar o aparecer en las clasificaciones.",
+    "saveFailed": "No pudimos guardar tu nombre de pantalla. Revisa tu conexión e inténtalo de nuevo.",
+    "saveTimeout": "Guardar tu nombre de pantalla tardó demasiado.",
+    "tryAgain": "Intentar de nuevo",
+    "confirmName": "Confirmar nombre"
+  },
   "onboarding": {
     "chooseDisplayName": "Elige Tu Nombre de Pantalla",
     "welcome": "¡Bienvenido a Banger Picks!",
@@ -308,6 +316,7 @@
     "displayNameMaxLength": "El nombre de pantalla debe tener 30 caracteres o menos",
     "displayNameInvalid": "El nombre de pantalla solo puede contener letras, números, espacios, guiones y guiones bajos",
     "displayNameTaken": "Este nombre de pantalla ya está en uso. Por favor, elige otro.",
+    "displayNameReserved": "\"Player\" y \"Jugador\" están reservados. Elige otro nombre de pantalla.",
     "failedToUpdate": "Error al actualizar el nombre de pantalla",
     "noUserFoundSignIn": "No se encontró usuario. Por favor, inicia sesión de nuevo."
   },

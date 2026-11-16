@@ -8,6 +8,7 @@ import { User } from 'firebase/auth'
 import { db } from './firebase'
 import { RankingEntry } from '@/types/dashboard'
 import { withTimeout } from './firestore-utils'
+import { isMissingProfileDisplayName } from './display-name'
 
 /**
  * User document structure in Firestore
@@ -56,15 +57,13 @@ export interface UserDocument {
 }
 
 /**
- * Gets the user's display name from Firestore, falling back to Auth displayName or 'Player'
- * 
- * @param user - The Firebase Auth user object
- * @returns Promise<string> - The user's display name
+ * Gets the user's display name from Firestore (single source of truth).
+ * Returns undefined when the profile name is missing or still a placeholder.
  */
-export async function getUserDisplayName(user: User): Promise<string> {
+export async function getUserDisplayName(user: User): Promise<string | undefined> {
   try {
     if (!user || !user.uid) {
-      return user?.displayName || 'Player'
+      return undefined
     }
 
     const userRef = doc(db, 'users', user.uid)
@@ -76,15 +75,15 @@ export async function getUserDisplayName(user: User): Promise<string> {
 
     if (userDoc.exists()) {
       const data = userDoc.data() as UserDocument
-      return data.displayName || user.displayName || 'Player'
+      if (!isMissingProfileDisplayName(data.displayName)) {
+        return data.displayName.trim()
+      }
     }
 
-    // Fallback to Auth displayName or 'Player'
-    return user.displayName || 'Player'
+    return undefined
   } catch (error) {
     console.error('Error fetching user display name:', error)
-    // Fallback to Auth displayName or 'Player'
-    return user.displayName || 'Player'
+    return undefined
   }
 }
 
@@ -294,26 +293,27 @@ export async function getUserData(
 
     if (userDoc.exists()) {
       const data = userDoc.data() as UserDocument
+      const displayName = isMissingProfileDisplayName(data.displayName)
+        ? 'Player'
+        : data.displayName.trim()
       return {
-        displayName: data.displayName || user.displayName || 'Player',
+        displayName,
         referralPoints: data.referralPoints || 0,
         correctPredictions: data.correctPredictions ?? 0,
         pointsSpent: data.pointsSpent ?? 0,
       }
     }
 
-    // Fallback to Auth data if document doesn't exist
     return {
-      displayName: user.displayName || 'Player',
+      displayName: 'Player',
       referralPoints: 0,
       correctPredictions: 0,
       pointsSpent: 0,
     }
   } catch (error) {
     console.error('Error fetching user data:', error)
-    // Fallback to Auth data on error
     return {
-      displayName: user.displayName || 'Player',
+      displayName: 'Player',
       referralPoints: 0,
       correctPredictions: 0,
       pointsSpent: 0,

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import type { User } from 'firebase/auth'
 import { useAuth } from '@/lib/AuthProvider'
-import { ensureUserDocument } from '@/lib/users'
+import { useUserProfile } from '@/lib/UserProfileProvider'
 import { savePredictions, PARTIAL_PREDICTIONS_SAVE_ERROR } from '@/lib/predictions'
 import {
   clearPendingPicksSession,
@@ -24,6 +24,7 @@ import { GafferDisplayPrefsProvider } from '@/lib/gaffer-display-prefs'
 import { useCrowdPickStats } from '@/hooks/useCrowdPickStats'
 import { useLanguage } from '@/lib/LanguageProvider'
 import { patchDashboardSessionGameweekPlayerCount } from '@/lib/dashboard-cache'
+import { PROFILE_DISPLAY_NAME_SAVED_EVENT } from '@/lib/user-profile-events'
 import { playerCountAfterFirstJoinSave } from '@/lib/player-count-display.mjs'
 
 interface DashboardClientProps {
@@ -43,6 +44,7 @@ export function DashboardClient({
   fixturesPending = false,
 }: DashboardClientProps) {
   const { user } = useAuth()
+  const { hasValidProfileName, profileLoading } = useUserProfile()
   const { locale } = useLanguage()
   const t = useTranslations('dashboard')
   const [displayPlayerCount, setDisplayPlayerCount] = useState(playerCount)
@@ -189,6 +191,12 @@ export function DashboardClient({
     async (authUser: User, completePredictions: Map<number, Prediction>) => {
       if (isDisabled || isSaving) return
 
+      if (!hasValidProfileName) {
+        savePendingPicksToSession(gameweek.gameweekId, completePredictions)
+        setSaveError(t('saveRequiresProfileName'))
+        return
+      }
+
       if (gameweek.status !== 'OPEN') {
         setSaveError(t('gameweekClosed'))
         return
@@ -204,7 +212,6 @@ export function DashboardClient({
       setSaveSuccess(false)
 
       try {
-        await ensureUserDocument(authUser, username || authUser.displayName || 'Player')
         const saveResult = await savePredictions(
           authUser.uid,
           completePredictions,
@@ -262,12 +269,13 @@ export function DashboardClient({
       locale,
       matches,
       t,
-      username,
+      hasValidProfileName,
     ]
   )
 
   useEffect(() => {
     if (!user || isDisabled || matches.length === 0) return
+    if (!hasValidProfileName || profileLoading) return
     if (postSignInSaveStarted.current) return
 
     const shouldSaveAfterSignIn = consumeSaveAfterSignInIntent(gameweek.gameweekId)
@@ -284,7 +292,25 @@ export function DashboardClient({
 
     postSignInSaveStarted.current = true
     void performSave(user, stored)
-  }, [user, isDisabled, matches, gameweek.gameweekId, performSave])
+  }, [user, isDisabled, matches, gameweek.gameweekId, performSave, hasValidProfileName, profileLoading])
+
+  useEffect(() => {
+    if (!user || isDisabled || !hasValidProfileName) return
+
+    const tryFlushAfterName = () => {
+      const shouldSaveAfterSignIn = consumeSaveAfterSignInIntent(gameweek.gameweekId)
+      const stored = loadPendingPicksFromSession(gameweek.gameweekId)
+      if (!shouldSaveAfterSignIn || !stored || stored.size === 0) return
+      const slateComplete = matches.every((m) => stored.has(m.fixtureId))
+      if (!slateComplete || postSignInSaveStarted.current) return
+      postSignInSaveStarted.current = true
+      void performSave(user, stored)
+    }
+
+    window.addEventListener(PROFILE_DISPLAY_NAME_SAVED_EVENT, tryFlushAfterName)
+    tryFlushAfterName()
+    return () => window.removeEventListener(PROFILE_DISPLAY_NAME_SAVED_EVENT, tryFlushAfterName)
+  }, [user, isDisabled, hasValidProfileName, gameweek.gameweekId, matches, performSave])
 
   const handleSubmit = async () => {
     if (!user) return

@@ -7,11 +7,14 @@ import { ShopComingSoon } from '@/components/dashboard/ShopComingSoon'
 import { NotSignedIn } from '@/components/dashboard/NotSignedIn'
 import { ShopItem } from '@/types/shop'
 import { getUserData } from '@/lib/users'
+import { useUserProfile } from '@/lib/UserProfileProvider'
+import { isMissingProfileDisplayName } from '@/lib/display-name'
 import { getAllShopItems } from '@/lib/shop'
 import { computeShopPointsBalance } from '@/lib/redemptions'
 
 export default function ShopPage() {
   const { user, loading: authLoading } = useAuth()
+  const { profileDisplayName, hasValidProfileName } = useUserProfile()
   const [username, setUsername] = useState<string | undefined>(undefined)
   const [userPoints, setUserPoints] = useState<number>(0)
   const [shopItems, setShopItems] = useState<ShopItem[]>([])
@@ -26,7 +29,9 @@ export default function ShopPage() {
       getUserData(user)
         .then(({ displayName, referralPoints, correctPredictions, pointsSpent }) => {
           if (abortController.signal.aborted) return
-          setUsername(displayName)
+          if (!isMissingProfileDisplayName(displayName)) {
+            setUsername(displayName)
+          }
           setUserPoints(computeShopPointsBalance(correctPredictions, referralPoints, pointsSpent))
           setError(null)
         })
@@ -34,7 +39,6 @@ export default function ShopPage() {
           if (abortController.signal.aborted) return
           console.error('Error fetching user data:', error)
           setError('Failed to load user data. Please try refreshing.')
-          setUsername(user.displayName || undefined)
           setUserPoints(0)
         })
     } else {
@@ -47,6 +51,12 @@ export default function ShopPage() {
       abortController.abort()
     }
   }, [user])
+
+  useEffect(() => {
+    if (hasValidProfileName && profileDisplayName) {
+      setUsername(profileDisplayName)
+    }
+  }, [hasValidProfileName, profileDisplayName])
 
   useEffect(() => {
     getAllShopItems({ status: 'active' })

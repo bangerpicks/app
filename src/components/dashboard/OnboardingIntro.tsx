@@ -7,10 +7,10 @@ import { useRouter, usePathname } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { Target, Calendar, Trophy, ShoppingBag, ArrowRight } from 'lucide-react'
 import { auth } from '@/lib/firebase'
-import { updateProfile } from 'firebase/auth'
-import { markOnboardingIntroSeen, ensureUserDocument, isDisplayNameAvailable } from '@/lib/users'
+import { markOnboardingIntroSeen } from '@/lib/users'
 import { trackReferralSignup } from '@/lib/referrals'
-import { getRandomSuggestions } from '@/data/displayNameSuggestions'
+import { DisplayNameCapturePanel } from './DisplayNameCapturePanel'
+import { dispatchProfileDisplayNameSaved } from '@/lib/user-profile-events'
 
 interface OnboardingIntroProps {
   isOpen: boolean
@@ -24,16 +24,11 @@ interface OnboardingIntroProps {
 
 export function OnboardingIntro({ isOpen, onClose, requiresDisplayName = false, referralCode = null, referralMessage = null, previewOnly = false }: OnboardingIntroProps) {
   const t = useTranslations('onboarding')
-  const tCommon = useTranslations('common')
   const tSettings = useTranslations('settings')
   const [mounted, setMounted] = useState(false)
   const [loading, setLoading] = useState(false)
   const [step, setStep] = useState<'displayName' | 'instructions'>(requiresDisplayName ? 'displayName' : 'instructions')
-  const [selectedDisplayName, setSelectedDisplayName] = useState<string>('')
-  const [customDisplayName, setCustomDisplayName] = useState<string>('')
-  const [error, setError] = useState<string | null>(null)
   const [referralStatus, setReferralStatus] = useState<string | null>(null)
-  const [recommendedNames] = useState<string[]>(() => getRandomSuggestions(12))
   const router = useRouter()
   const pathname = usePathname()
 
@@ -50,10 +45,7 @@ export function OnboardingIntro({ isOpen, onClose, requiresDisplayName = false, 
       // This ensures new users always set their displayName, even if they have one in Firebase Auth
       const initialStep = requiresDisplayName ? 'displayName' : 'instructions'
       setStep(initialStep)
-      setError(null)
       setReferralStatus(referralMessage || null)
-      setSelectedDisplayName('')
-      setCustomDisplayName('')
     } else {
       // Reset to initial state when closed
       setStep(requiresDisplayName ? 'displayName' : 'instructions')
@@ -84,90 +76,30 @@ export function OnboardingIntro({ isOpen, onClose, requiresDisplayName = false, 
     }
   }, [isOpen])
 
-  const validateDisplayName = (name: string): string | null => {
-    if (!name || name.trim().length === 0) {
-      return t('displayNameRequired')
-    }
-    if (name.trim().length < 2) {
-      return t('displayNameMinLength')
-    }
-    if (name.trim().length > 30) {
-      return t('displayNameMaxLength')
-    }
-    // Allow letters, numbers, spaces, hyphens, and underscores
-    if (!/^[a-zA-Z0-9\s\-_]+$/.test(name.trim())) {
-      return t('displayNameInvalid')
-    }
-    return null
-  }
-
-  const handleDisplayNameSelect = (name: string) => {
-    setSelectedDisplayName(name)
-    setCustomDisplayName('')
-    setError(null)
-  }
-
-  const handleDisplayNameSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError(null)
-    setLoading(true)
-
-    try {
-      const displayName = customDisplayName.trim() || selectedDisplayName
-      const validationError = validateDisplayName(displayName)
-      
-      if (validationError) {
-        setError(validationError)
-        setLoading(false)
-        return
-      }
-
-      const trimmedDisplayName = displayName.trim()
-
-      if (previewOnly) {
-        setStep('instructions')
-        setLoading(false)
-        return
-      }
-
-      const user = auth.currentUser
-      if (!user) {
-        throw new Error(t('noUserFoundSignIn'))
-      }
-
-      // Check if display name is available (case-insensitive)
-      const isAvailable = await isDisplayNameAvailable(trimmedDisplayName, user.uid)
-      if (!isAvailable) {
-        setError(t('displayNameTaken'))
-        setLoading(false)
-        return
-      }
-
-      // Update Firebase Auth profile
-      await updateProfile(user, { displayName: trimmedDisplayName })
-
-      // Save to Firestore (with referral code if present)
-      await ensureUserDocument(user, trimmedDisplayName, referralCode || undefined)
-
-      // Process referral if code was provided
-      if (referralCode) {
-        try {
-          await trackReferralSignup(user.uid, referralCode)
-          setReferralStatus('Referral applied! Your friend earned 5 points.')
-        } catch (refError) {
-          console.error('Error processing referral:', refError)
-          setReferralStatus('Referral could not be applied. Contact support if needed.')
-        }
-      }
-
-      // Move to instructions step
+  const handleDisplayNameSaved = async (trimmedDisplayName: string) => {
+    if (previewOnly) {
       setStep('instructions')
-    } catch (err: any) {
-      setError(err.message || t('failedToUpdate'))
-      console.error('Display name update error:', err)
-    } finally {
-      setLoading(false)
+      return
     }
+
+    const user = auth.currentUser
+    if (!user) {
+      return
+    }
+
+    dispatchProfileDisplayNameSaved()
+
+    if (referralCode) {
+      try {
+        await trackReferralSignup(user.uid, referralCode)
+        setReferralStatus('Referral applied! Your friend earned 5 points.')
+      } catch (refError) {
+        console.error('Error processing referral:', refError)
+        setReferralStatus('Referral could not be applied. Contact support if needed.')
+      }
+    }
+
+    setStep('instructions')
   }
 
   const handleComplete = async () => {
@@ -264,67 +196,13 @@ export function OnboardingIntro({ isOpen, onClose, requiresDisplayName = false, 
 
         {/* Display Name Step */}
         {currentStep === 'displayName' && (
-          <form onSubmit={handleDisplayNameSubmit} className="space-y-4 overflow-x-hidden pb-6">
-            <p className="text-ivory/80 text-sm sm:text-base mb-4 text-center">
-              {t('displayNameDescription')}
-            </p>
-
-            {error && (
-              <div className="mb-4 p-3 bg-cinnabar text-ivory rounded text-sm">
-                {error}
-              </div>
-            )}
-
-            <div>
-              <label className="block text-sm font-semibold text-ivory mb-2">
-                {t('recommendedNames')}
-              </label>
-              <div className="flex flex-wrap gap-2 mb-4">
-                {recommendedNames.map((name) => (
-                  <button
-                    key={name}
-                    type="button"
-                    onClick={() => handleDisplayNameSelect(name)}
-                    className={`px-4 py-2 rounded font-semibold text-sm min-h-[44px] transition-colors ${
-                      selectedDisplayName === name && !customDisplayName.trim()
-                        ? 'bg-lime-yellow text-midnight-violet'
-                        : 'bg-ivory/10 text-ivory hover:bg-ivory/20'
-                    }`}
-                  >
-                    {name}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div>
-              <label htmlFor="custom-display-name" className="block text-sm font-semibold text-ivory mb-2">
-                {t('orEnterCustom')}
-              </label>
-              <input
-                id="custom-display-name"
-                type="text"
-                value={customDisplayName}
-                onChange={(e) => {
-                  setCustomDisplayName(e.target.value)
-                  setSelectedDisplayName('')
-                }}
-                placeholder={t('enterDisplayName')}
-                maxLength={30}
-                className="w-full px-4 py-2.5 min-h-[44px] rounded border border-ivory/30 text-ivory bg-midnight-violet focus:outline-none focus:ring-2 focus:ring-lime-yellow text-base placeholder:text-ivory/40"
-              />
-              <p className="mt-1 text-xs text-ivory/70">
-                {t('displayNameRequirements')}
-              </p>
-            </div>
-            <button
-              type="submit"
-              disabled={loading || (!selectedDisplayName && !customDisplayName.trim())}
-              className="w-full bg-lime-yellow text-midnight-violet py-3 px-4 rounded-lg font-semibold hover:bg-opacity-90 disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px] active:bg-opacity-80 flex items-center justify-center gap-2 transition-colors"
-            >
-              {loading ? tSettings('saving') : tCommon('continue')}
-              <ArrowRight className="w-5 h-5" />
-            </button>
-          </form>
+          <DisplayNameCapturePanel
+            authDisplayName={auth.currentUser?.displayName}
+            referralCode={referralCode}
+            readOnlyPreview={previewOnly}
+            onSuccess={handleDisplayNameSaved}
+            submitLabel={loading ? tSettings('saving') : undefined}
+          />
         )}
 
         {/* Instructions Step */}

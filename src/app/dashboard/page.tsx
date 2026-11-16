@@ -3,7 +3,8 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useTranslations } from 'next-intl'
 import { useAuth } from '@/lib/AuthProvider'
-import { getUserDisplayName, hasSeenOnboardingIntro } from '@/lib/users'
+import { hasSeenOnboardingIntro } from '@/lib/users'
+import { useUserProfile } from '@/lib/UserProfileProvider'
 import { getUserPredictionsForGameweek, readGameweekPlayerCount } from '@/lib/predictions'
 import {
   mergePlayerCountDisplay,
@@ -137,6 +138,7 @@ function DashboardShell({
 
 export default function DashboardPage() {
   const { user, loading: authLoading } = useAuth()
+  const { profileDisplayName, hasValidProfileName } = useUserProfile()
   const { locale } = useLanguage()
   const t = useTranslations('dashboard')
   const [username, setUsername] = useState<string | undefined>(undefined)
@@ -168,30 +170,16 @@ export default function DashboardPage() {
     const abortController = new AbortController()
 
     if (user) {
-      getUserDisplayName(user)
-        .then((displayName) => {
-          if (abortController.signal.aborted) return
-          setUsername(displayName)
-        })
-        .catch(() => {
-          if (abortController.signal.aborted) return
-          setUsername(user.displayName || undefined)
-        })
-
-      const needsDisplayName = !user.displayName || user.displayName.trim() === 'Player'
-
       hasSeenOnboardingIntro(user)
         .then((hasSeen) => {
           if (abortController.signal.aborted) return
-          if (!hasSeen || needsDisplayName) {
+          if (!hasSeen) {
             setShowOnboarding(true)
           }
         })
         .catch(() => {
           if (abortController.signal.aborted) return
-          if (needsDisplayName) {
-            setShowOnboarding(true)
-          }
+          setShowOnboarding(true)
         })
     } else {
       setUsername(undefined)
@@ -202,6 +190,14 @@ export default function DashboardPage() {
       abortController.abort()
     }
   }, [user])
+
+  useEffect(() => {
+    if (hasValidProfileName && profileDisplayName) {
+      setUsername(profileDisplayName)
+    } else {
+      setUsername(undefined)
+    }
+  }, [hasValidProfileName, profileDisplayName])
 
   useEffect(() => {
     const abortController = new AbortController()
@@ -434,9 +430,7 @@ export default function DashboardPage() {
 
   const onboardingOpen =
     showOnboarding || (isDevOnboardingPreview && !devPreviewDismissed)
-  const needsDisplayName = Boolean(
-    user && (!user.displayName || user.displayName.trim() === 'Player')
-  )
+  const needsDisplayName = false
   const closeOnboarding = () => {
     setShowOnboarding(false)
     if (isDevOnboardingPreview) {

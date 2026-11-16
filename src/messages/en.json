@@ -77,6 +77,7 @@
     "picksRemainingToSave": "{count} picks left before you can save",
     "saveRequiresAllPicks": "Choose a pick for every match before saving.",
     "signInToSavePicks": "Sign in to save picks",
+    "saveRequiresProfileName": "Choose your display name before saving picks to the leaderboard.",
     "guestSaveHint": "Sign in to lock in your slate—we'll keep your choices.",
     "savedSuccessfully": "Predictions saved successfully!",
     "partialPredictionsSave": "Some picks were saved, but the rest could not be completed. Save again to finish your card.",
@@ -283,6 +284,13 @@
       "generic": "Something went wrong. Please try again."
     }
   },
+  "usernameGate": {
+    "subtitle": "Your Firestore profile needs a display name before you can play or appear on rankings.",
+    "saveFailed": "We couldn't save your display name. Check your connection and try again.",
+    "saveTimeout": "Saving your display name took too long.",
+    "tryAgain": "Try again",
+    "confirmName": "Confirm name"
+  },
   "onboarding": {
     "chooseDisplayName": "Choose Your Display Name",
     "welcome": "Welcome to Banger Picks!",
@@ -308,6 +316,7 @@
     "displayNameMaxLength": "Display name must be 30 characters or less",
     "displayNameInvalid": "Display name can only contain letters, numbers, spaces, hyphens, and underscores",
     "displayNameTaken": "This display name is already taken. Please choose another.",
+    "displayNameReserved": "\"Player\" and \"Jugador\" are reserved. Choose a different display name.",
     "failedToUpdate": "Failed to update display name",
     "noUserFoundSignIn": "No user found. Please sign in again."
   },

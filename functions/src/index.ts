@@ -31,6 +31,7 @@ import {
   assignGameweekToActiveSeason,
   refreshStandingsAfterGameweekActivity,
 } from './standings-update'
+import { syncDisplayNameInStandings } from './sync-display-name-standings'
 
 admin.initializeApp()
 
@@ -625,6 +626,19 @@ export const onGameweekUpdate = functions.firestore
       console.error(`[onGameweekUpdate] Error processing gameweek ${gameweekId}:`, error)
       throw error
     }
+  })
+
+export const onUserDisplayNameUpdate = functions.firestore
+  .document('users/{uid}')
+  .onUpdate(async (change, context) => {
+    const beforeName = change.before.data()?.displayName as string | undefined
+    const afterName = change.after.data()?.displayName as string | undefined
+    if (!afterName || beforeName === afterName) {
+      return null
+    }
+    const db = admin.firestore()
+    await syncDisplayNameInStandings(db, context.params.uid as string, afterName, beforeName)
+    return null
   })
 
 export const onGameweekCreate = functions.firestore
