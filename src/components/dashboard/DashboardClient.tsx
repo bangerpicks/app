@@ -22,6 +22,9 @@ import { SignInModal } from './SignInModal'
 import { GameweekData, MatchCardData, Prediction } from '@/types/dashboard'
 import { GafferDisplayPrefsProvider } from '@/lib/gaffer-display-prefs'
 import { useCrowdPickStats } from '@/hooks/useCrowdPickStats'
+import { useLanguage } from '@/lib/LanguageProvider'
+import { patchDashboardSessionGameweekPlayerCount } from '@/lib/dashboard-cache'
+import { playerCountAfterFirstJoinSave } from '@/lib/player-count-display.mjs'
 
 interface DashboardClientProps {
   gameweek: GameweekData
@@ -40,7 +43,13 @@ export function DashboardClient({
   fixturesPending = false,
 }: DashboardClientProps) {
   const { user } = useAuth()
+  const { locale } = useLanguage()
   const t = useTranslations('dashboard')
+  const [displayPlayerCount, setDisplayPlayerCount] = useState(playerCount)
+
+  useEffect(() => {
+    setDisplayPlayerCount(playerCount)
+  }, [playerCount, gameweek.gameweekId])
   const containerRef = useRef<HTMLDivElement>(null)
   const lastScrollY = useRef(0)
   const lastScrollTime = useRef(Date.now())
@@ -196,7 +205,25 @@ export function DashboardClient({
 
       try {
         await ensureUserDocument(authUser, username || authUser.displayName || 'Player')
-        await savePredictions(authUser.uid, completePredictions, matches, gameweek.gameweekId)
+        const saveResult = await savePredictions(
+          authUser.uid,
+          completePredictions,
+          matches,
+          gameweek.gameweekId
+        )
+
+        if (saveResult.joinedGameweek) {
+          setDisplayPlayerCount((current) => {
+            const next = playerCountAfterFirstJoinSave(current)
+            patchDashboardSessionGameweekPlayerCount(
+              authUser.uid,
+              locale,
+              gameweek.gameweekId,
+              next
+            )
+            return next
+          })
+        }
 
         setSavedPredictions((prev) => {
           const next = new Map(prev)
@@ -227,7 +254,16 @@ export function DashboardClient({
         setIsSaving(false)
       }
     },
-    [gameweek.gameweekId, gameweek.status, isDisabled, isSaving, matches, t, username]
+    [
+      gameweek.gameweekId,
+      gameweek.status,
+      isDisabled,
+      isSaving,
+      locale,
+      matches,
+      t,
+      username,
+    ]
   )
 
   useEffect(() => {
@@ -375,7 +411,7 @@ export function DashboardClient({
         <div className="w-full flex flex-col items-center gap-5 lg:hidden">
           <GameweekCard
             gameweek={gameweek}
-            playerCount={playerCount}
+            playerCount={displayPlayerCount}
             hasAnyPicks={hasAnyPicks}
           />
 
@@ -393,7 +429,7 @@ export function DashboardClient({
             <aside className="hidden lg:flex flex-col gap-5 lg:sticky lg:top-[calc(var(--header-height)+1rem)] lg:self-start w-full">
               <GameweekCard
                 gameweek={gameweek}
-                playerCount={playerCount}
+                playerCount={displayPlayerCount}
                 hasAnyPicks={hasAnyPicks}
               />
 

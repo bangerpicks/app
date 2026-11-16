@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.1.12 — 2026-11-16
+
+### Fix: stale “Players Joined” after first save
+
+- After a successful first join, bump the gameweek card count locally and patch the dashboard session cache so reloads within the TTL stay correct.
+- Fresh server loads still overwrite session cache; refetch player count only when the gameweek doc has no numeric `playerCount`.
+- `readGameweekPlayerCount` uses server-first reads; never downgrade an in-memory count with a cache-served lower value.
+
+### Fix: prediction save latency (~25s)
+
+- Skip redundant `ensureUserDocument` merge writes when the profile is already valid.
+- Load prediction entry docs once in parallel and reuse snapshots in the write loop.
+- On follow-up saves, write only fixtures whose pick changed (first join still writes the full slate). Gameweek `playerCount` increment unchanged (once per user per gameweek on cache create).
+
 ## 1.1.11 — 2026-11-15
 
 ### Fix: dashboard gameweek load timeouts on mobile

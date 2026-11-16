@@ -3,6 +3,7 @@
  */
 
 import { doc, getDoc, setDoc, updateDoc, serverTimestamp, Timestamp, collection, query, orderBy, limit, getDocs, where, writeBatch } from 'firebase/firestore'
+import { shouldSkipEnsureUserProfileWrite } from './user-profile-save.mjs'
 import { User } from 'firebase/auth'
 import { db } from './firebase'
 import { RankingEntry } from '@/types/dashboard'
@@ -492,14 +493,18 @@ export async function ensureUserDocument(user: User, displayName: string, referr
       await setDoc(userRef, userData)
       return { isNewUser: true }
     } else {
-      // User document exists - update displayName
       const currentData = userDoc.data()
-      const updates: Partial<UserDocument> = {
-        displayName: displayName || currentData.displayName || 'Player',
-        lastUpdated: serverTimestamp() as any,
+
+      if (shouldSkipEnsureUserProfileWrite(currentData, displayName, user.photoURL)) {
+        return { isNewUser: false }
       }
 
-      // Also update photoURL if it changed
+      const updates: Partial<UserDocument> = {}
+      const resolvedDisplayName = displayName || currentData.displayName || 'Player'
+      if (resolvedDisplayName !== (currentData.displayName || 'Player')) {
+        updates.displayName = resolvedDisplayName
+      }
+
       if (user.photoURL !== currentData.photoURL) {
         updates.photoURL = user.photoURL || null
       }
@@ -524,6 +529,11 @@ export async function ensureUserDocument(user: User, displayName: string, referr
         }
       }
 
+      if (Object.keys(updates).length === 0) {
+        return { isNewUser: false }
+      }
+
+      updates.lastUpdated = serverTimestamp() as any
       await setDoc(userRef, updates, { merge: true })
       return { isNewUser: false }
     }
