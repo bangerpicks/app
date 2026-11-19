@@ -1,39 +1,20 @@
 'use client'
 
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useTranslations } from 'next-intl'
 import { useAuth } from '@/lib/AuthProvider'
 import { getUserDisplayName, hasSeenOnboardingIntro } from '@/lib/users'
-import { getUserPredictionsForGameweek, readGameweekPlayerCount } from '@/lib/predictions'
-import {
-  mergePlayerCountDisplay,
-  shouldSkipGameweekPlayerCountRefetch,
-} from '@/lib/player-count-display.mjs'
 import { DashboardClient } from '@/components/dashboard/DashboardClient'
 import { OnboardingIntro } from '@/components/dashboard/OnboardingIntro'
 import { AppShell } from '@/components/dashboard/AppShell'
-import { GameweekData, MatchCardData, FormResult } from '@/types/dashboard'
-import { getGameweekFixtures, AdminGameweekData, GameweekFixtureData } from '@/lib/admin'
-import { useLiveMatches } from '@/lib/useLiveMatches'
-import { useLanguage } from '@/lib/LanguageProvider'
-import { formatMatchKickoffTime } from '@/lib/locale-format'
+import { GameweekData } from '@/types/dashboard'
+import { getAllGameweeks, AdminGameweekData } from '@/lib/admin'
 import {
-  mapApiFootballStatusToMatchStatus,
-  venueFromApiFootball,
-} from '@/lib/match-card-display'
-import { marketOddsFromFirestoreData } from '@/lib/market-odds-firestore'
-import type { Locale } from '@/i18n/config'
-import {
-  fetchCurrentGameweek,
   mapAdminGameweekToDashboardStatus,
   resolvePlayerCountFromGameweek,
   getEffectiveDeadline,
   LoadBudget,
 } from '@/lib/gameweek-selection'
-import {
-  readDashboardSessionCache,
-  writeDashboardSessionCache,
-} from '@/lib/dashboard-cache'
 import { FirestoreServedFromCacheError } from '@/lib/firestore-server-read'
 import {
   shouldShowDashboardStaleBanner,
@@ -48,73 +29,9 @@ function convertGameweekData(adminGameweek: AdminGameweekData): GameweekData {
     playerCount: resolvePlayerCountFromGameweek(adminGameweek) ?? 0,
     status: mapAdminGameweekToDashboardStatus(adminGameweek),
     deadline: lock?.toDate(),
-    startDate: adminGameweek.startDate.toDate(),
-    endDate: adminGameweek.endDate.toDate(),
+    startDate: adminGameweek.startDate?.toDate(),
+    endDate: adminGameweek.endDate?.toDate(),
     forceOpenForTesting: adminGameweek.forceOpenForTesting,
-  }
-}
-
-function convertFormString(formString: string): FormResult[] {
-  if (!formString) return []
-  return formString
-    .slice(-5)
-    .split('')
-    .filter((char): char is FormResult => char === 'W' || char === 'D' || char === 'L')
-}
-
-function convertFixtureToMatchCard(
-  fixtureData: GameweekFixtureData,
-  teamPositions: Map<number, number> = new Map(),
-  teamForms: Map<number, FormResult[]> = new Map(),
-  locale: Locale = 'en'
-): MatchCardData {
-  const fixture = fixtureData.fixture.fixture
-  const fixtureDate = new Date(fixture.date)
-
-  const matchStatus = mapApiFootballStatusToMatchStatus(fixture.status.short)
-
-  const score =
-    fixtureData.fixture.goals.home !== null && fixtureData.fixture.goals.away !== null
-      ? {
-          home: fixtureData.fixture.goals.home,
-          away: fixtureData.fixture.goals.away,
-        }
-      : undefined
-
-  const minute = fixture.status.elapsed ?? undefined
-
-  return {
-    fixtureId: fixtureData.fixtureId,
-    league: {
-      id: fixtureData.league.id,
-      name: fixtureData.league.name,
-      logo: fixtureData.league.logo,
-    },
-    venue: venueFromApiFootball(fixture.venue),
-    date: fixtureDate,
-    time: formatMatchKickoffTime(fixtureDate, locale),
-    homeTeam: {
-      id: fixtureData.teams.home.id,
-      name: fixtureData.teams.home.name,
-      logo: fixtureData.teams.home.logo,
-      position: teamPositions.get(fixtureData.teams.home.id),
-      form: teamForms.get(fixtureData.teams.home.id) || [],
-    },
-    awayTeam: {
-      id: fixtureData.teams.away.id,
-      name: fixtureData.teams.away.name,
-      logo: fixtureData.teams.away.logo,
-      position: teamPositions.get(fixtureData.teams.away.id),
-      form: teamForms.get(fixtureData.teams.away.id) || [],
-    },
-    matchStatus,
-    minute,
-    score,
-    whyItMatters: fixtureData.whyItMatters,
-    whyItMatters_esMX: fixtureData.whyItMatters_esMX,
-    officialPick: fixtureData.officialPick,
-    officialConfidence: fixtureData.officialConfidence,
-    marketOdds: marketOddsFromFirestoreData(fixtureData.marketOdds),
   }
 }
 
@@ -137,25 +54,16 @@ function DashboardShell({
 
 export default function DashboardPage() {
   const { user, loading: authLoading } = useAuth()
-  const { locale } = useLanguage()
   const t = useTranslations('dashboard')
   const [username, setUsername] = useState<string | undefined>(undefined)
-  const [gameweek, setGameweek] = useState<GameweekData | null>(null)
-  const [initialMatches, setInitialMatches] = useState<MatchCardData[]>([])
-  const [gameweekId, setGameweekId] = useState<string | null>(null)
-  const [loadingGameweek, setLoadingGameweek] = useState(true)
-  const [loadingPredictions, setLoadingPredictions] = useState(false)
+  const [gameweeks, setGameweeks] = useState<GameweekData[]>([])
+  const [loadingGameweeks, setLoadingGameweeks] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [devPreviewDismissed, setDevPreviewDismissed] = useState(false)
-  const [emptyReason, setEmptyReason] = useState<'none' | 'no-week' | 'no-fixtures' | null>(null)
   const [loadGeneration, setLoadGeneration] = useState(0)
   const [refreshFailed, setRefreshFailed] = useState(false)
-  const [usingSessionCache, setUsingSessionCache] = useState(false)
-  const [isRefreshingGameweek, setIsRefreshingGameweek] = useState(false)
   const [servedFromFirestoreCache, setServedFromFirestoreCache] = useState(false)
-
-  const cacheUid = user?.uid ?? null
 
   const isDevOnboardingPreview =
     process.env.NODE_ENV === 'development' &&
@@ -205,232 +113,89 @@ export default function DashboardPage() {
 
   useEffect(() => {
     const abortController = new AbortController()
-    const sessionCache = readDashboardSessionCache(cacheUid, locale)
-    const hadCache = Boolean(sessionCache)
     const loadBudget = new LoadBudget()
     const servedFromCacheRef = { current: false }
-    const fixtureReadOpts = {
+    const readOpts = {
       serverPreferring: true as const,
       budget: loadBudget,
       servedFromCacheRef,
     }
 
-    if (hadCache && sessionCache) {
-      setGameweek(sessionCache.gameweek)
-      setInitialMatches(sessionCache.matches)
-      setGameweekId(sessionCache.gameweekId)
-      setUsingSessionCache(true)
-      setLoadingGameweek(false)
-    }
-
-    async function fetchActiveGameweek() {
+    async function fetchAvailableGameweeks() {
       try {
-        if (!hadCache) {
-          setLoadingGameweek(true)
-          setError(null)
-          setEmptyReason(null)
-          setGameweek(null)
-          setInitialMatches([])
-          setGameweekId(null)
-        } else {
-          setRefreshFailed(false)
-          setServedFromFirestoreCache(false)
-          setIsRefreshingGameweek(true)
-        }
+        setLoadingGameweeks(true)
+        setError(null)
+        setRefreshFailed(false)
+        setServedFromFirestoreCache(false)
 
-        servedFromCacheRef.current = false
-        const currentGameweek = await fetchCurrentGameweek(loadBudget, servedFromCacheRef)
-
-        if (abortController.signal.aborted) return
-
-        if (!currentGameweek) {
-          setEmptyReason('no-week')
-          setServedFromFirestoreCache(false)
-          setRefreshFailed(false)
-          return
-        }
-
-        const fixtures = await getGameweekFixtures(
-          currentGameweek.gameweekId,
-          fixtureReadOpts
+        // 1. Fetch active gameweeks (any tournaments or league weeks)
+        let rawGameweeks = await getAllGameweeks(
+          {
+            status: 'active',
+            sortBy: 'date',
+            sortOrder: 'desc',
+          },
+          readOpts
         )
 
-        if (abortController.signal.aborted) return
-
-        if (fixtures.length === 0) {
-          setGameweek(convertGameweekData(currentGameweek))
-          setGameweekId(currentGameweek.gameweekId)
-          setEmptyReason('no-fixtures')
-          return
-        }
-
-        const teamPositions = new Map<number, number>()
-        const teamForms = new Map<number, FormResult[]>()
-
-        if (currentGameweek.standings) {
-          Object.entries(currentGameweek.standings).forEach(([, standings]) => {
-            if (!Array.isArray(standings)) {
-              return
-            }
-            standings.forEach((team) => {
-              if (team?.team && typeof team.team.id === 'number') {
-                teamPositions.set(team.team.id, team.rank)
-                teamForms.set(team.team.id, convertFormString(team.form || ''))
-              }
-            })
-          })
-        }
-
-        const sortedMatches = fixtures
-          .map((fixture) =>
-            convertFixtureToMatchCard(fixture, teamPositions, teamForms, locale)
+        // 2. Fallback to completed/archived if no active gameweeks
+        if (rawGameweeks.length === 0) {
+          rawGameweeks = await getAllGameweeks(
+            {
+              status: 'completed',
+              sortBy: 'date',
+              sortOrder: 'desc',
+            },
+            readOpts
           )
-          .sort((a, b) => a.date.getTime() - b.date.getTime())
+        }
 
         if (abortController.signal.aborted) return
 
-        const dashboardGameweek = convertGameweekData(currentGameweek)
-        setGameweekId(currentGameweek.gameweekId)
-        setGameweek(dashboardGameweek)
-        setInitialMatches(sortedMatches)
-        const staleFirestoreLoad = servedFromCacheRef.current
-        setUsingSessionCache(false)
-        setRefreshFailed(staleFirestoreLoad)
-        setServedFromFirestoreCache(staleFirestoreLoad)
-        setIsRefreshingGameweek(false)
-        setError(null)
-        setEmptyReason(null)
-        writeDashboardSessionCache(cacheUid, locale, {
-          gameweekId: currentGameweek.gameweekId,
-          gameweek: dashboardGameweek,
-          matches: sortedMatches,
-        })
-
-        const storedCount = resolvePlayerCountFromGameweek(currentGameweek)
-        if (
-          !shouldSkipGameweekPlayerCountRefetch(storedCount) &&
-          currentGameweek.fixtureIds &&
-          currentGameweek.fixtureIds.length > 0
-        ) {
-          readGameweekPlayerCount(currentGameweek.fixtureIds, currentGameweek.gameweekId)
-            .then(({ count, servedFromCache }) => {
-              if (abortController.signal.aborted) return
-              setGameweek((prev) =>
-                prev
-                  ? {
-                      ...prev,
-                      playerCount: mergePlayerCountDisplay(
-                        prev.playerCount,
-                        count,
-                        servedFromCache
-                      ),
-                    }
-                  : null
-              )
-            })
-            .catch(() => {
-              /* leave count unchanged */
-            })
-        }
-
-        if (user) {
-          setLoadingPredictions(true)
-          try {
-            const fixtureIds = sortedMatches.map((match) => match.fixtureId)
-            const predictionRead = await getUserPredictionsForGameweek(
-              user.uid,
-              currentGameweek.gameweekId,
-              fixtureIds
-            )
-
-            if (abortController.signal.aborted) return
-
-            if (predictionRead.servedFromCache) {
-              servedFromCacheRef.current = true
-              setServedFromFirestoreCache(true)
-              setRefreshFailed(true)
-            }
-
-            setInitialMatches((prevMatches) =>
-              prevMatches.map((match) => ({
-                ...match,
-                userPrediction: predictionRead.predictions.get(match.fixtureId) || null,
-              }))
-            )
-          } catch {
-            /* predictions optional */
-          } finally {
-            if (!abortController.signal.aborted) {
-              setLoadingPredictions(false)
-            }
-          }
-        }
+        const mapped = rawGameweeks.map(convertGameweekData)
+        setGameweeks(mapped)
+        const staleLoad = servedFromCacheRef.current
+        setServedFromFirestoreCache(staleLoad)
+        setRefreshFailed(staleLoad)
       } catch (err: unknown) {
         if (abortController.signal.aborted) return
-        console.error('Error fetching active gameweek:', err)
-        const message = err instanceof Error ? err.message : 'Failed to load gameweek data'
+        console.error('Error fetching dashboard gameweeks:', err)
+        const message = err instanceof Error ? err.message : 'Failed to load competitions'
         const cacheOnly = err instanceof FirestoreServedFromCacheError
-        if (hadCache) {
-          setRefreshFailed(true)
-          setServedFromFirestoreCache(cacheOnly)
-          setError(message)
-          setEmptyReason(null)
-        } else {
-          setError(message)
-          setGameweek(null)
-          setInitialMatches([])
-          setGameweekId(null)
-          setEmptyReason(null)
-          setServedFromFirestoreCache(cacheOnly)
-        }
-        setLoadingPredictions(false)
-        if (hadCache) {
-          setIsRefreshingGameweek(false)
-        }
+        setError(message)
+        setServedFromFirestoreCache(cacheOnly)
+        setRefreshFailed(true)
       } finally {
-        // Always leave the loading gate when this attempt finishes (success, error, or empty).
-        // Aborted runs skip this so a newer effect owns the flag.
         if (!abortController.signal.aborted) {
-          setLoadingGameweek(false)
+          setLoadingGameweeks(false)
         }
       }
     }
 
-    fetchActiveGameweek()
+    fetchAvailableGameweeks()
 
     return () => {
       abortController.abort()
     }
-  }, [user, loadGeneration, locale, cacheUid])
+  }, [loadGeneration])
 
   const retryGameweekLoad = () => {
     setError(null)
     setRefreshFailed(false)
     setServedFromFirestoreCache(false)
-    setEmptyReason(null)
     setLoadGeneration((g) => g + 1)
   }
 
   const showStaleBanner = shouldShowDashboardStaleBanner({
     servedFromFirestoreCache,
     refreshFailed,
-    usingSessionCache,
-    isRefreshingGameweek,
+    usingSessionCache: false,
+    isRefreshingGameweek: false,
   })
   const showStaleRetry = staleBannerShowsRetry({
     servedFromFirestoreCache,
     refreshFailed,
   })
-
-  const baseMatches = useMemo(
-    () =>
-      initialMatches.map((m) => ({
-        ...m,
-        time: formatMatchKickoffTime(m.date, locale),
-      })),
-    [initialMatches, locale]
-  )
-  const liveMatches = useLiveMatches(gameweekId, baseMatches, locale)
 
   const onboardingOpen =
     showOnboarding || (isDevOnboardingPreview && !devPreviewDismissed)
@@ -455,7 +220,7 @@ export default function DashboardPage() {
     />
   )
 
-  if (authLoading || loadingGameweek) {
+  if (authLoading || loadingGameweeks) {
     return (
       <>
         <DashboardShell username={username}>
@@ -466,7 +231,7 @@ export default function DashboardPage() {
     )
   }
 
-  if (error && !gameweek) {
+  if (error && gameweeks.length === 0) {
     return (
       <>
         <DashboardShell username={username}>
@@ -480,44 +245,6 @@ export default function DashboardPage() {
             {t('loadErrorRetry')}
           </button>
         </DashboardShell>
-        {onboardingLayer}
-      </>
-    )
-  }
-
-  if (emptyReason === 'no-week') {
-    return (
-      <>
-        <DashboardShell username={username}>
-          <p className="text-ivory text-lg font-semibold">{t('noActiveGameweekTitle')}</p>
-          <p className="text-ivory/70 text-sm max-w-md">{t('noActiveGameweekBody')}</p>
-        </DashboardShell>
-        {onboardingLayer}
-      </>
-    )
-  }
-
-  if (!gameweek) {
-    return (
-      <>
-        <DashboardShell username={username}>
-          <p className="text-ivory">{t('loadError')}</p>
-        </DashboardShell>
-        {onboardingLayer}
-      </>
-    )
-  }
-
-  if (emptyReason === 'no-fixtures' || liveMatches.length === 0) {
-    return (
-      <>
-        <DashboardClient
-          gameweek={gameweek}
-          playerCount={gameweek.playerCount}
-          matches={[]}
-          username={username}
-          fixturesPending
-        />
         {onboardingLayer}
       </>
     )
@@ -542,9 +269,7 @@ export default function DashboardPage() {
         </div>
       )}
       <DashboardClient
-        gameweek={gameweek}
-        playerCount={gameweek.playerCount}
-        matches={liveMatches}
+        gameweeks={gameweeks}
         username={username}
       />
       {onboardingLayer}

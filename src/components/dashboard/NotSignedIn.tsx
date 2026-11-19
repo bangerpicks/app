@@ -6,7 +6,19 @@ import { AppShell } from './AppShell'
 import { SignInModal } from './SignInModal'
 import { Lock } from 'lucide-react'
 
-export function NotSignedIn() {
+interface NotSignedInProps {
+  title?: string
+  description?: string
+  backHref?: string
+  backLabel?: string
+}
+
+export function NotSignedIn({
+  title,
+  description,
+  backHref,
+  backLabel,
+}: NotSignedInProps = {}) {
   const t = useTranslations('auth')
   const [isModalOpen, setIsModalOpen] = useState(false)
 
@@ -24,10 +36,10 @@ export function NotSignedIn() {
           {/* Message */}
           <div className="flex flex-col gap-3">
             <h1 className="text-3xl sm:text-4xl font-bold text-ivory">
-              {t('signInRequired')}
+              {title || t('signInRequired')}
             </h1>
             <p className="text-ivory/70 text-base sm:text-lg">
-              {t('pleaseSignIn')}
+              {description || t('pleaseSignIn')}
             </p>
           </div>
 
@@ -38,6 +50,16 @@ export function NotSignedIn() {
           >
             {t('signIn')}
           </button>
+
+          {/* Optional Back Link */}
+          {backHref && (
+            <a
+              href={backHref}
+              className="text-sm text-lime-yellow hover:underline transition-colors mt-1"
+            >
+              {backLabel || '\u2190 Back to Dashboard'}
+            </a>
+          )}
       </div>
     </AppShell>
   )
