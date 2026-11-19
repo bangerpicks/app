@@ -30,7 +30,7 @@ export function Header({ logoUrl = '/logo.svg', username, userPhotoUrl }: Header
       </Link>
       <DesktopHeaderNav />
       <div className="flex-shrink-0 ml-auto">
-        <UserBadge username={username} />
+        <UserBadge username={username} userPhotoUrl={userPhotoUrl} />
       </div>
     </header>
   )

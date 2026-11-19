@@ -58,7 +58,16 @@
     "trophyWeekWins2nd": "Segundos lugares",
     "trophyWeekWins3rd": "Terceros lugares",
     "trophySeasonTitles": "Títulos de temporada",
-    "trophySeasonPodiums": "Podios de temporada"
+    "trophySeasonPodiums": "Podios de temporada",
+    "howItWorksTitle": "Cómo funciona Banger Picks",
+    "howItWorksIntro": "Elige cada semana, suma puntos y sube en las tablas.",
+    "howItWorksSummary": "Tablas semanales y de temporada, trofeos por podios e invita amigos por puntos extra.",
+    "howItWorksStepsTitle": "Inicio rápido",
+    "howItWorksDeepDiveTitle": "Más detalles",
+    "howItWorksReferralsTitle": "Invita amigos",
+    "howItWorksRankingsCalloutTitle": "Clasificaciones",
+    "howItWorksRankingsDetail": "La tabla semanal usa los puntos de esa semana. La de temporada cuenta tus tres mejores Banger Weeks.",
+    "howItWorksTrophiesDetail": "Tu vitrina muestra podios semanales y títulos de temporada."
   },
   "navigation": {
     "dashboard": "Panel",
@@ -135,7 +144,19 @@
     "refreshingGameweek": "Actualizando esta Banger Week…",
     "noActiveGameweekTitle": "No hay jornada activa",
     "noActiveGameweekBody": "Cuando publiquen la próxima Banger Week, aquí verás los partidos y tus pronósticos.",
-    "fixturesLoading": "Los partidos de esta jornada aún no están disponibles."
+    "fixturesLoading": "Los partidos de esta jornada aún no están disponibles.",
+    "step": "Paso {number}",
+    "gameweekHowItWorksStep4": "Los picks correctos suman puntos y suben tu puesto.",
+    "makePicks": "Hacer Picks",
+    "viewResults": "Ver Resultados",
+    "weekClosed": "Semana Cerrada",
+    "comingSoon": "Próximamente",
+    "viewPicks": "Ver Pronósticos",
+    "viewDetails": "Ver Detalles",
+    "availableCompetitions": "Competiciones Activas",
+    "availableCompetitionsSubtitle": "Elige un torneo o jornada para enviar tus predicciones",
+    "noActiveCompetitions": "No hay competiciones activas en este momento. ¡Vuelve pronto!",
+    "signedInSubtitle": "Elige tus competiciones abajo."
   },
   "rankings": {
     "title": "Clasificaciones",
@@ -284,7 +305,9 @@
       "weakPassword": "La contraseña debe tener al menos 6 caracteres.",
       "tooManyRequests": "Demasiados intentos. Espera e intenta de nuevo.",
       "generic": "Algo salió mal. Intenta de nuevo."
-    }
+    },
+    "picksSignInRequired": "Inicia Sesión para Pronosticar",
+    "picksSignInDescription": "Inicia sesión o crea una cuenta para ver partidos, hacer predicciones y competir en la tabla."
   },
   "onboarding": {
     "chooseDisplayName": "Elige Tu Nombre de Pantalla",
@@ -340,5 +363,12 @@
     "failedToLoadGameweeks": "Error al cargar jornadas",
     "failedToDeleteGameweek": "Error al eliminar jornada",
     "failedToLoadSettings": "Error al cargar configuración"
+  },
+  "picks": {
+    "title": "Pronósticos de Partidos",
+    "backToDashboard": "Todas las Competiciones",
+    "gameweekNotFound": "Competición No Encontrada",
+    "gameweekNotFoundDesc": "No pudimos encontrar el torneo o jornada que solicitaste.",
+    "returnToDashboard": "Volver al Panel"
   }
 }

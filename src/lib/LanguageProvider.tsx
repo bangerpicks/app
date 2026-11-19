@@ -2,7 +2,6 @@
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
 import { useAuth } from './AuthProvider'
-import { getUserLanguage, updateUserLanguage } from './users'
 import { detectBrowserLanguage } from './browser-locale'
 import type { Locale } from '@/i18n/config'
 
@@ -26,6 +25,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   // Load user's language preference
   useEffect(() => {
     const loadLanguage = async () => {
+      const { getUserLanguage, updateUserLanguage } = await import('./user-language')
       if (user) {
         try {
           // If user is logged in, use their saved preference
@@ -59,6 +59,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   const setLocale = async (newLocale: Locale) => {
     if (user) {
       try {
+        const { updateUserLanguage } = await import('./user-language')
         await updateUserLanguage(user, newLocale)
         setLocaleState(newLocale)
       } catch (error) {

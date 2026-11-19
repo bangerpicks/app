@@ -3,11 +3,18 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useTranslations } from 'next-intl'
-import { dashboardNavItems, isDashboardNavItemActive } from './dashboard-nav'
+import { ChevronLeftIcon } from '@heroicons/react/24/solid'
+import {
+  dashboardNavItems,
+  isDashboardNavItemActive,
+  isPicksRoute,
+} from './dashboard-nav'
 
 export function DesktopHeaderNav() {
   const pathname = usePathname()
   const t = useTranslations()
+  const tPicks = useTranslations('picks')
+  const onPicksPage = isPicksRoute(pathname)
 
   return (
     <nav
@@ -15,9 +22,14 @@ export function DesktopHeaderNav() {
       aria-label="Main"
     >
       {dashboardNavItems.map((item) => {
-        const isActive = isDashboardNavItemActive(pathname, item.href)
-        const Icon = isActive ? item.iconSolid : item.iconOutline
-        const label = t(item.labelKey)
+        const dashboardAsBack =
+          onPicksPage && item.href === '/dashboard/'
+        const isActive =
+          !dashboardAsBack && isDashboardNavItemActive(pathname, item.href)
+        const Icon = dashboardAsBack ? ChevronLeftIcon : isActive ? item.iconSolid : item.iconOutline
+        const label = dashboardAsBack
+          ? tPicks('backToDashboard')
+          : t(item.labelKey)
 
         return (
           <Link
@@ -26,7 +38,9 @@ export function DesktopHeaderNav() {
             className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold tracking-wide transition-colors min-h-[44px] ${
               isActive
                 ? 'bg-lime-yellow text-midnight-violet'
-                : 'text-ivory/80 hover:text-ivory hover:bg-ivory/10'
+                : dashboardAsBack
+                  ? 'text-lime-yellow hover:text-lime-yellow/90 hover:bg-ivory/10'
+                  : 'text-ivory/80 hover:text-ivory hover:bg-ivory/10'
             }`}
             aria-current={isActive ? 'page' : undefined}
           >

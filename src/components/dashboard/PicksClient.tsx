@@ -1,7 +1,6 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import type { User } from 'firebase/auth'
 import { useAuth } from '@/lib/AuthProvider'
@@ -9,7 +8,6 @@ import { ensureUserDocument } from '@/lib/users'
 import { savePredictions, PARTIAL_PREDICTIONS_SAVE_ERROR } from '@/lib/predictions'
 import { AppShell } from './AppShell'
 import { GameweekCard } from './GameweekCard'
-import { GameweekHowItWorks } from './GameweekHowItWorks'
 import { MatchCard } from './MatchCard'
 import { SignInModal } from './SignInModal'
 import { GameweekData, MatchCardData, Prediction } from '@/types/dashboard'
@@ -18,7 +16,8 @@ import { useCrowdPickStats } from '@/hooks/useCrowdPickStats'
 import { useLanguage } from '@/lib/LanguageProvider'
 import { patchDashboardSessionGameweekPlayerCount } from '@/lib/dashboard-cache'
 import { playerCountAfterFirstJoinSave } from '@/lib/player-count-display.mjs'
-import { ChevronLeft } from 'lucide-react'
+import { PicksBackNav } from './PicksBackNav'
+import { StickySaveBar } from './StickySaveBar'
 
 interface PicksClientProps {
   gameweek: GameweekData
@@ -228,23 +227,17 @@ export function PicksClient({
   }
 
   const saveBlock = !isDisabled && matches.length > 0 && (
-    <div className="w-full flex flex-col gap-3 max-w-md lg:max-w-none">
+    <div className="w-full flex flex-col gap-2 max-w-md lg:max-w-none">
       {saveError && (
-        <div className="bg-cinnabar/20 border border-cinnabar/40 rounded-lg px-4 py-3 text-cinnabar text-sm">
+        <div className="bg-cinnabar/20 border border-cinnabar/40 rounded-lg px-3 py-2 text-cinnabar text-sm">
           {saveError}
         </div>
       )}
 
       {saveSuccess && (
-        <div className="bg-lime-yellow/20 border border-lime-yellow/40 rounded-lg px-4 py-3 text-lime-yellow text-sm">
+        <div className="bg-lime-yellow/20 border border-lime-yellow/40 rounded-lg px-3 py-2 text-lime-yellow text-sm">
           {t('savedSuccessfully')}
         </div>
-      )}
-
-      {!allPicksMade && (
-        <p className="text-center text-sm text-amber-glow lg:text-left">
-          {t('picksRemainingToSave', { count: missingPickCount })}
-        </p>
       )}
 
       <button
@@ -278,25 +271,32 @@ export function PicksClient({
     </>
   )
 
+  const showMobileSave = Boolean(saveBlock)
+  const mobileScrollPad =
+    showMobileSave && (saveError || saveSuccess)
+      ? 'max-lg:pb-[calc(var(--bottom-nav-height)+env(safe-area-inset-bottom,0px)+8.5rem)]'
+      : 'max-lg:pb-[calc(var(--bottom-nav-height)+env(safe-area-inset-bottom,0px)+5.25rem)]'
+
   return (
     <AppShell
       containerRef={containerRef}
       username={username}
-      mainClassName="flex-1 px-4 sm:px-5 py-2.5 pb-bottom-nav flex flex-col items-center gap-5 overflow-x-hidden"
-      footer={<SignInModal isOpen={isSignInOpen} onClose={() => setIsSignInOpen(false)} />}
+      banner={
+        <PicksBackNav href="/dashboard/">{tPicks('backToDashboard')}</PicksBackNav>
+      }
+      mainClassName={
+        showMobileSave
+          ? `flex-1 px-4 sm:px-5 py-2.5 pb-bottom-nav ${mobileScrollPad} flex flex-col items-center gap-5 overflow-x-hidden`
+          : 'flex-1 px-4 sm:px-5 py-2.5 pb-bottom-nav flex flex-col items-center gap-5 overflow-x-hidden'
+      }
+      footer={
+        <>
+          {saveBlock && <StickySaveBar>{saveBlock}</StickySaveBar>}
+          <SignInModal isOpen={isSignInOpen} onClose={() => setIsSignInOpen(false)} />
+        </>
+      }
     >
       <div className="w-full max-w-6xl mx-auto flex flex-col items-center gap-5 lg:gap-6">
-        {/* Navigation Breadcrumb back to Dashboard */}
-        <div className="w-full flex items-center justify-between">
-          <Link
-            href="/dashboard/"
-            className="inline-flex items-center gap-1.5 text-lime-yellow hover:text-lime-yellow/80 transition-colors text-sm font-semibold"
-          >
-            <ChevronLeft size={18} />
-            <span>{tPicks('backToDashboard')}</span>
-          </Link>
-        </div>
-
         {/* Mobile Gameweek Card */}
         <div className="w-full flex flex-col items-center gap-5 lg:hidden">
           <GameweekCard
@@ -305,12 +305,6 @@ export function PicksClient({
             hasAnyPicks={hasAnyPicks}
             isInteractive={false}
           />
-
-          {gameweek.status === 'OPEN' ? (
-            <div className="w-full max-w-md">
-              <GameweekHowItWorks />
-            </div>
-          ) : null}
         </div>
 
         {/* Match Slate + Desktop Sidebar */}
@@ -326,15 +320,11 @@ export function PicksClient({
                 isInteractive={false}
               />
 
-              {gameweek.status === 'OPEN' ? <GameweekHowItWorks /> : null}
-
               {saveBlock}
             </aside>
           </div>
         </GafferDisplayPrefsProvider>
 
-        {/* Mobile Save Block */}
-        <div className="w-full lg:hidden">{saveBlock}</div>
       </div>
     </AppShell>
   )

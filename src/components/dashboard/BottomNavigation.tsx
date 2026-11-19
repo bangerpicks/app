@@ -3,11 +3,18 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useTranslations } from 'next-intl'
-import { dashboardNavItems, isDashboardNavItemActive } from './dashboard-nav'
+import { ChevronLeftIcon as ChevronLeftSolidIcon } from '@heroicons/react/24/solid'
+import {
+  dashboardNavItems,
+  isDashboardNavItemActive,
+  isPicksRoute,
+} from './dashboard-nav'
 
 export function BottomNavigation() {
   const pathname = usePathname()
   const t = useTranslations()
+  const tPicks = useTranslations('picks')
+  const onPicksPage = isPicksRoute(pathname)
 
   return (
     <nav
@@ -17,9 +24,19 @@ export function BottomNavigation() {
       style={{ paddingBottom: 'calc(0.5rem + env(safe-area-inset-bottom, 0px))' }}
     >
       {dashboardNavItems.map((item) => {
-        const isActive = isDashboardNavItemActive(pathname, item.href)
-        const Icon = isActive ? item.iconSolid : item.iconOutline
-        const label = t(item.labelKey)
+        const dashboardAsBack =
+          onPicksPage && item.href === '/dashboard/'
+        const isActive =
+          !dashboardAsBack && isDashboardNavItemActive(pathname, item.href)
+        const Icon = dashboardAsBack
+          ? ChevronLeftSolidIcon
+          : isActive
+            ? item.iconSolid
+            : item.iconOutline
+        const label = dashboardAsBack
+          ? tPicks('backToDashboard')
+          : t(item.labelKey)
+        const emphasized = isActive || dashboardAsBack
 
         return (
           <Link
@@ -31,13 +48,13 @@ export function BottomNavigation() {
           >
             <Icon
               className={`w-7 h-7 sm:w-8 sm:h-8 shrink-0 text-midnight-violet ${
-                isActive ? 'opacity-100' : 'opacity-65'
+                emphasized ? 'opacity-100' : 'opacity-65'
               }`}
               aria-hidden="true"
             />
             <span
               className={`text-xs sm:text-sm font-semibold tracking-[0.7px] text-midnight-violet truncate w-full text-center ${
-                isActive ? 'font-bold' : ''
+                emphasized ? 'font-bold' : ''
               }`}
             >
               {label}

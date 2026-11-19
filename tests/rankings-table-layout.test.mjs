@@ -15,6 +15,11 @@ describe('RankingsTable mobile sticky geometry', () => {
     'utf8'
   )
 
+  const scrollAreaSource = readFileSync(
+    new URL('../src/components/dashboard/RankingsTableScrollArea.tsx', import.meta.url),
+    'utf8'
+  )
+
   const globals = readFileSync(
     new URL('../src/app/globals.css', import.meta.url),
     'utf8'
@@ -26,8 +31,10 @@ describe('RankingsTable mobile sticky geometry', () => {
   })
 
   it('exposes a horizontal scroller with iOS-friendly touch styles', () => {
-    assert.match(source, /data-testid="rankings-table-scroller"/)
-    assert.match(source, /rankings-table-scroller/)
+    assert.match(source, /RankingsTableScrollArea/)
+    assert.match(scrollAreaSource, /data-testid=\{scrollerTestId\}/)
+    assert.match(scrollAreaSource, /scrollerTestId = 'rankings-table-scroller'/)
+    assert.match(scrollAreaSource, /rankings-table-scroller/)
     assert.match(globals, /\.rankings-table-scroller[\s\S]*touch-action: pan-x pan-y/)
     assert.match(globals, /overscroll-behavior-x: contain/)
     assert.match(globals, /-webkit-overflow-scrolling: touch/)

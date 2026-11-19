@@ -51,7 +51,16 @@ html {
 }
 
 body {
-  font-family: 'Inter', system-ui, sans-serif;
+  font-family:
+    'Inter',
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    sans-serif,
+    'Apple Color Emoji',
+    'Segoe UI Emoji',
+    'Segoe UI Symbol',
+    'Noto Color Emoji';
   background-color: #240830;
   color: #fdfff0;
   /* Prevent horizontal scrolling on mobile */
@@ -134,6 +143,69 @@ td[class*="sticky"] {
   overscroll-behavior-x: contain;
   touch-action: pan-x pan-y;
   -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 1023px) {
+  .rankings-table-scroller {
+    scrollbar-width: none;
+  }
+
+  .rankings-table-scroller::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+}
+
+.rankings-table-scroll-track-shell {
+  touch-action: none;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.rankings-table-scroll-thumb {
+  background-color: var(--lime-yellow);
+  background-image:
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.28) 0%,
+      transparent 38%,
+      rgba(36, 8, 48, 0.14) 100%
+    ),
+  repeating-linear-gradient(
+      90deg,
+      rgba(36, 8, 48, 0.11) 0 1px,
+      transparent 1px 4px
+    );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    inset 0 -2px 0 rgba(36, 8, 48, 0.18),
+    0 0 0 1px rgba(36, 8, 48, 0.35);
+}
+
+.rankings-table-scroll-thumb:active {
+  background-color: #c8eb00;
+}
+
+.rankings-table-scroll-thumb-grip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  height: 100%;
+  width: 100%;
+  pointer-events: none;
+}
+
+.rankings-table-scroll-thumb-grip span {
+  display: block;
+  width: 3px;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(36, 8, 48, 0.28);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.25),
+    0 0 0 0.5px rgba(36, 8, 48, 0.12);
 }
 
 /* Improve scroll performance on iOS */

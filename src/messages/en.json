@@ -58,7 +58,16 @@
     "trophyWeekWins2nd": "2nd-place weeks",
     "trophyWeekWins3rd": "3rd-place weeks",
     "trophySeasonTitles": "Season titles",
-    "trophySeasonPodiums": "Season podiums"
+    "trophySeasonPodiums": "Season podiums",
+    "howItWorksTitle": "How Banger Picks works",
+    "howItWorksIntro": "Pick each week, score points, climb the ranks.",
+    "howItWorksSummary": "Weekly and season leaderboards + trophies for podiums. Invite friends for bonus points.",
+    "howItWorksStepsTitle": "Quick start",
+    "howItWorksDeepDiveTitle": "Learn more",
+    "howItWorksReferralsTitle": "Invite friends",
+    "howItWorksRankingsCalloutTitle": "Rankings",
+    "howItWorksRankingsDetail": "Weekly ranks use that week's points. Season ranks count your best three Banger Weeks in the season.",
+    "howItWorksTrophiesDetail": "Your trophy case tracks weekly podium finishes and season titles."
   },
   "navigation": {
     "dashboard": "Dashboard",
@@ -135,7 +144,19 @@
     "refreshingGameweek": "Updating this Banger Week…",
     "noActiveGameweekTitle": "No gameweek right now",
     "noActiveGameweekBody": "When the next Banger Week is published, fixtures and picks will show up here.",
-    "fixturesLoading": "Fixtures for this gameweek are not available yet."
+    "fixturesLoading": "Fixtures for this gameweek are not available yet.",
+    "step": "Step {number}",
+    "gameweekHowItWorksStep4": "Correct picks earn points and move you up the rankings.",
+    "makePicks": "Make Picks",
+    "viewResults": "View Results",
+    "weekClosed": "Week Closed",
+    "comingSoon": "Coming Soon",
+    "viewPicks": "View Picks",
+    "viewDetails": "View Details",
+    "availableCompetitions": "Active Competitions",
+    "availableCompetitionsSubtitle": "Select a tournament or gameweek below to submit your predictions",
+    "noActiveCompetitions": "No active competitions right now. Check back soon for upcoming tournaments!",
+    "signedInSubtitle": "Pick your competitions below."
   },
   "rankings": {
     "title": "Rankings",
@@ -284,7 +305,9 @@
       "weakPassword": "Password must be at least 6 characters.",
       "tooManyRequests": "Too many attempts. Please wait and try again.",
       "generic": "Something went wrong. Please try again."
-    }
+    },
+    "picksSignInRequired": "Sign In to Make Picks",
+    "picksSignInDescription": "Sign in or create an account to view matches, make predictions, and compete on the leaderboard."
   },
   "onboarding": {
     "chooseDisplayName": "Choose Your Display Name",
@@ -340,5 +363,12 @@
     "failedToLoadGameweeks": "Failed to load gameweeks",
     "failedToDeleteGameweek": "Failed to delete gameweek",
     "failedToLoadSettings": "Failed to load settings"
+  },
+  "picks": {
+    "title": "Match Predictions",
+    "backToDashboard": "All Competitions",
+    "gameweekNotFound": "Competition Not Found",
+    "gameweekNotFoundDesc": "We could not find the tournament or gameweek you requested.",
+    "returnToDashboard": "Back to Dashboard"
   }
 }

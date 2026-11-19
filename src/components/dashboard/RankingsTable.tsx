@@ -3,6 +3,7 @@
 import Image from 'next/image'
 import { useTranslations } from 'next-intl'
 import { RankingEntry, GameweekRankingData } from '@/types/dashboard'
+import { RankingsTableScrollArea } from './RankingsTableScrollArea'
 
 interface RankingsTableProps {
   rankings: RankingEntry[]
@@ -36,11 +37,7 @@ export function RankingsTable({
   }
 
   return (
-    <div
-      id="rankings-table-scroller"
-      data-testid="rankings-table-scroller"
-      className="rankings-table-scroller w-full overflow-x-auto"
-    >
+    <RankingsTableScrollArea>
       <table className="w-full border-collapse min-w-full border-separate border-spacing-0">
         {/* Header */}
         <thead className="bg-midnight-violet">
@@ -255,6 +252,6 @@ export function RankingsTable({
             )})}
           </tbody>
         </table>
-    </div>
+    </RankingsTableScrollArea>
   )
 }

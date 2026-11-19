@@ -12,6 +12,7 @@ import { UserDocument } from '@/lib/users'
 import { useIsAdmin } from '@/lib/useIsAdmin'
 import { clearAllDashboardSessionCaches } from '@/lib/dashboard-cache'
 import { User as UserIcon, Trophy, Target, Coins, LogOut, Settings, Shield } from 'lucide-react'
+import { ProfileHowItWorks } from './ProfileHowItWorks'
 
 interface ProfileClientProps {
   user: User
@@ -208,6 +209,8 @@ export function ProfileClient({ user, userData }: ProfileClientProps) {
             </div>
           </div>
         )}
+
+        <ProfileHowItWorks />
 
         {/* Action Buttons */}
         <div className="w-full max-w-2xl mx-auto flex flex-col gap-3">

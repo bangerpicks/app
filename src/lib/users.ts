@@ -89,6 +89,34 @@ export async function getUserDisplayName(user: User): Promise<string> {
 }
 
 /**
+ * Profile image for header / avatar chrome (favorite player redemption photo wins).
+ */
+export async function getUserHeaderPhotoURL(user: User): Promise<string | null> {
+  try {
+    if (!user?.uid) {
+      return user?.photoURL ?? null
+    }
+
+    const userRef = doc(db, 'users', user.uid)
+    const userDoc = await withTimeout(
+      getDoc(userRef),
+      10000,
+      'Failed to load user photo - request timed out'
+    )
+
+    if (userDoc.exists()) {
+      const data = userDoc.data() as UserDocument
+      return data.favoritePlayer?.photo || data.photoURL || user.photoURL || null
+    }
+
+    return user.photoURL ?? null
+  } catch (error) {
+    console.error('Error fetching user header photo:', error)
+    return user.photoURL ?? null
+  }
+}
+
+/**
  * Checks if a display name is available (not already taken by another user).
  * Performs case-insensitive comparison (e.g., "John" and "john" are considered duplicates).
  * 
@@ -321,67 +349,7 @@ export async function getUserData(
   }
 }
 
-/**
- * Saved language on the user doc, or null when unset (no preference yet).
- */
-export async function getUserLanguage(user: User): Promise<'en' | 'es-MX' | null> {
-  try {
-    if (!user?.uid) {
-      return null
-    }
-
-    const userRef = doc(db, 'users', user.uid)
-    const userDoc = await getDoc(userRef)
-
-    if (!userDoc.exists()) {
-      return null
-    }
-
-    const data = userDoc.data() as UserDocument
-    if (data.language === 'en' || data.language === 'es-MX') {
-      return data.language
-    }
-
-    return null
-  } catch (error) {
-    console.error('Error fetching user language:', error)
-    return null
-  }
-}
-
-/**
- * Updates the user's language preference in Firestore
- * 
- * @param user - The Firebase Auth user object
- * @param language - The language preference ('en' | 'es-MX')
- * @returns Promise<void>
- */
-export async function updateUserLanguage(user: User, language: 'en' | 'es-MX'): Promise<void> {
-  try {
-    if (!user || !user.uid) {
-      throw new Error('Invalid user object')
-    }
-
-    const userRef = doc(db, 'users', user.uid)
-    const updates: Partial<UserDocument> = {
-      language,
-      lastUpdated: serverTimestamp() as any,
-    }
-
-    await setDoc(userRef, updates, { merge: true })
-  } catch (error: any) {
-    console.error(`Error updating user language for ${user.uid}:`, error)
-    
-    // Provide more specific error information
-    if (error.code === 'permission-denied') {
-      throw new Error('Permission denied. Please check your authentication status.')
-    } else if (error.code === 'unauthenticated') {
-      throw new Error('User not authenticated. Please log in again.')
-    }
-    
-    throw error
-  }
-}
+export { getUserLanguage, updateUserLanguage } from './user-language'
 
 /**
  * Updates the user's favorite player in Firestore

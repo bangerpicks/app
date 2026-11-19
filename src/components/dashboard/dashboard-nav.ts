@@ -3,13 +3,11 @@ import {
   Squares2X2Icon as DashboardOutlineIcon,
   TrophyIcon as RankingsOutlineIcon,
   ShoppingBagIcon as ShopOutlineIcon,
-  UserCircleIcon as ProfileOutlineIcon,
 } from '@heroicons/react/24/outline'
 import {
   Squares2X2Icon as DashboardSolidIcon,
   TrophyIcon as RankingsSolidIcon,
   ShoppingBagIcon as ShopSolidIcon,
-  UserCircleIcon as ProfileSolidIcon,
 } from '@heroicons/react/24/solid'
 
 export type DashboardNavIcon = React.ComponentType<SVGProps<SVGSVGElement>>
@@ -42,12 +40,6 @@ export const dashboardNavItems: DashboardNavItem[] = [
     labelKey: 'navigation.shop',
     href: '/shop/',
   },
-  {
-    iconOutline: ProfileOutlineIcon,
-    iconSolid: ProfileSolidIcon,
-    labelKey: 'navigation.profile',
-    href: '/profile/',
-  },
 ]
 
 function normalizePath(path: string): string {
@@ -59,4 +51,8 @@ function normalizePath(path: string): string {
 
 export function isDashboardNavItemActive(pathname: string, href: string): boolean {
   return normalizePath(pathname) === normalizePath(href)
+}
+
+export function isPicksRoute(pathname: string): boolean {
+  return normalizePath(pathname) === '/picks'
 }
