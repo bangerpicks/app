@@ -76,6 +76,7 @@ export function DashboardClient({
                     playerCount={gw.playerCount}
                     href={`/picks/?id=${gw.gameweekId}`}
                     isInteractive
+                    showMatchPreviews
                   />
                 </div>
               ))}

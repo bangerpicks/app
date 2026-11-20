@@ -327,6 +327,31 @@ export type GameweekPredictionsReadResult = {
   servedFromCache: boolean
 }
 
+/**
+ * Fast single-doc check: user has at least one saved pick for this gameweek.
+ */
+export async function userHasAnyPickForGameweek(
+  uid: string,
+  gameweekId: string
+): Promise<boolean> {
+  if (!uid || !gameweekId) return false
+
+  try {
+    const cacheRef = doc(db, 'users', uid, 'gameweek_predictions', gameweekId)
+    const cacheRead = await getDocServerPreferring(cacheRef, {
+      timeoutMs: 5000,
+      timeoutMessage: 'Failed to load predictions - request timed out',
+    })
+    if (!cacheRead.data.exists()) return false
+    const data = cacheRead.data.data() as GameweekPredictionsCache
+    const predictions = data.predictions || {}
+    return Object.values(predictions).some((pick) => pick === 'H' || pick === 'D' || pick === 'A')
+  } catch (error) {
+    console.warn('userHasAnyPickForGameweek failed:', error)
+    return false
+  }
+}
+
 export async function getUserPredictionsForGameweek(
   uid: string,
   gameweekId: string,

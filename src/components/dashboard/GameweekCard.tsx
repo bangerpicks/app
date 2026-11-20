@@ -3,58 +3,96 @@
 import { Users } from 'lucide-react'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
-import { GameweekData } from '@/types/dashboard'
+import { GameweekData, MatchCardData } from '@/types/dashboard'
 import { useCountdown } from '@/hooks/useCountdown'
 import { useMemo } from 'react'
+import { GameweekMatchPreviewPills } from './GameweekMatchPreviewPills'
+import {
+  resolveGameweekDisplayPhase,
+  type GameweekDisplayPhase,
+  type UrgencyLevel,
+} from '@/lib/gameweek-display-phase'
+import {
+  fixturesStateFromMatches,
+  useGameweekFixtures,
+} from '@/hooks/useGameweekFixtures'
+import { useGameweekHasPicks } from '@/hooks/useGameweekHasPicks'
 
 interface GameweekCardProps {
   gameweek: GameweekData
   playerCount: number
-  /** When true, user has at least one prediction (saved or pending) for this week. Used for dynamic note. */
+  /** Saved or pending picks; omit on dashboard to load from Firestore when signed in. */
   hasAnyPicks?: boolean
   href?: string
   onTimerClick?: () => void
   /** When false (e.g. inside the picks-page sidebar) the CTA button is hidden. */
   isInteractive?: boolean
+  /** Show compact live / upcoming fixture pills (dashboard competition cards). */
+  showMatchPreviews?: boolean
+  /** When set (picks page), phase + pills use this list instead of a second Firestore load. */
+  fixtureMatches?: MatchCardData[]
 }
 
-interface StatusBadgeProps {
-  status: GameweekData['status']
-  deadline?: Date
-  urgencyLevel: 'normal' | 'warning' | 'critical' | 'expired'
-}
-
-interface CTAButtonProps {
-  status: GameweekData['status']
-  href: string
-  onClick?: () => void
-  urgencyLevel: 'normal' | 'warning' | 'critical' | 'expired'
-  hasAnyPicks: boolean
-}
-
-const STATUS_LABEL_KEY: Record<
-  GameweekData['status'],
-  'gameweekStatusOpen' | 'gameweekStatusClosed' | 'gameweekStatusUpcoming' | 'gameweekStatusCompleted'
+const PHASE_LABEL_KEY: Record<
+  GameweekDisplayPhase,
+  | 'gameweekStatusOpen'
+  | 'gameweekPhaseClosingSoon'
+  | 'gameweekPhasePicksLocked'
+  | 'gameweekPhaseLive'
+  | 'gameweekPhaseFinal'
+  | 'gameweekStatusUpcoming'
+  | 'gameweekStatusCompleted'
 > = {
   OPEN: 'gameweekStatusOpen',
-  CLOSED: 'gameweekStatusClosed',
+  CLOSING_SOON: 'gameweekPhaseClosingSoon',
+  PICKS_LOCKED: 'gameweekPhasePicksLocked',
+  LIVE: 'gameweekPhaseLive',
+  FINAL: 'gameweekPhaseFinal',
   UPCOMING: 'gameweekStatusUpcoming',
   COMPLETED: 'gameweekStatusCompleted',
 }
 
-/** Compact pill — shows status label + live countdown only. No CTA. */
-function StatusBadge({ status, deadline, urgencyLevel }: StatusBadgeProps) {
+function legacyPhaseFromStatus(status: GameweekData['status']): GameweekDisplayPhase {
+  switch (status) {
+    case 'UPCOMING':
+      return 'UPCOMING'
+    case 'COMPLETED':
+      return 'COMPLETED'
+    case 'OPEN':
+      return 'OPEN'
+    default:
+      return 'PICKS_LOCKED'
+  }
+}
+
+interface StatusBadgeProps {
+  phase: GameweekDisplayPhase
+  deadline?: Date
+  urgencyLevel: UrgencyLevel
+  picksWindowOpen: boolean
+}
+
+function StatusBadge({ phase, deadline, urgencyLevel, picksWindowOpen }: StatusBadgeProps) {
   const t = useTranslations('dashboard')
-  const { time, formatted } = useCountdown(status === 'OPEN' ? deadline : null)
+  const { time, formatted } = useCountdown(picksWindowOpen ? deadline : null)
 
   const getBadgeColor = () => {
-    if (status === 'OPEN' && urgencyLevel === 'critical') return 'bg-cinnabar text-midnight-violet'
-    if (status === 'OPEN' && urgencyLevel === 'warning') return 'bg-amber-glow text-midnight-violet'
-    switch (status) {
+    if (phase === 'CLOSING_SOON' && urgencyLevel === 'critical') {
+      return 'bg-cinnabar text-midnight-violet'
+    }
+    if (phase === 'CLOSING_SOON' && urgencyLevel === 'warning') {
+      return 'bg-amber-glow text-midnight-violet'
+    }
+    switch (phase) {
       case 'OPEN':
+      case 'CLOSING_SOON':
         return 'bg-lime-yellow/20 text-lime-yellow border border-lime-yellow/50'
-      case 'CLOSED':
-        return 'bg-cinnabar/20 text-cinnabar border border-cinnabar/40'
+      case 'PICKS_LOCKED':
+        return 'bg-ivory/10 text-ivory/80 border border-ivory/25'
+      case 'LIVE':
+        return 'bg-cinnabar/25 text-cinnabar border border-cinnabar/50'
+      case 'FINAL':
+        return 'bg-ivory/10 text-ivory/70 border border-ivory/30'
       case 'UPCOMING':
         return 'bg-amber-glow/20 text-amber-glow border border-amber-glow/40'
       case 'COMPLETED':
@@ -64,17 +102,25 @@ function StatusBadge({ status, deadline, urgencyLevel }: StatusBadgeProps) {
     }
   }
 
-  const shouldPulse = status === 'OPEN' && (urgencyLevel === 'warning' || urgencyLevel === 'critical')
+  const shouldPulse =
+    phase === 'CLOSING_SOON' && (urgencyLevel === 'warning' || urgencyLevel === 'critical')
   const pulseClass = urgencyLevel === 'critical' ? 'animate-pulse' : 'animate-pulse-slow'
+  const livePulse = phase === 'LIVE' ? 'animate-pulse-slow' : ''
+
+  const showCountdown =
+    (phase === 'OPEN' || phase === 'CLOSING_SOON') &&
+    deadline &&
+    time &&
+    !time.isExpired
 
   return (
     <div
-      className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-semibold tracking-wide ${getBadgeColor()} ${shouldPulse ? pulseClass : ''}`}
+      className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-semibold tracking-wide ${getBadgeColor()} ${shouldPulse ? pulseClass : ''} ${livePulse}`}
       role="status"
       aria-live="polite"
     >
-      <span className="font-black italic">{t(STATUS_LABEL_KEY[status])}</span>
-      {status === 'OPEN' && deadline && time && !time.isExpired && (
+      <span className="font-black italic">{t(PHASE_LABEL_KEY[phase])}</span>
+      {showCountdown && (
         <>
           <span className="opacity-50">•</span>
           <span className="tabular-nums font-semibold">{formatted}</span>
@@ -84,24 +130,18 @@ function StatusBadge({ status, deadline, urgencyLevel }: StatusBadgeProps) {
   )
 }
 
-/** Full-width CTA button — the primary action on the card. */
-function CTAButton({ status, href, onClick, urgencyLevel, hasAnyPicks }: CTAButtonProps) {
+interface CTAButtonProps {
+  phase: GameweekDisplayPhase
+  href: string
+  onClick?: () => void
+  urgencyLevel: UrgencyLevel
+  hasAnyPicks: boolean
+}
+
+function CTAButton({ phase, href, onClick, urgencyLevel, hasAnyPicks }: CTAButtonProps) {
   const t = useTranslations('dashboard')
 
-  if (status === 'CLOSED') {
-    return (
-      <div
-        className="w-full flex items-center justify-center min-h-[52px] rounded-[12px] bg-gray-700/50 border border-gray-600/40 cursor-not-allowed"
-        aria-disabled="true"
-      >
-        <span className="text-base font-black italic tracking-wide text-gray-500">
-          {t('weekClosed')}
-        </span>
-      </div>
-    )
-  }
-
-  if (status === 'UPCOMING') {
+  if (phase === 'UPCOMING') {
     return (
       <div
         className="w-full flex items-center justify-center min-h-[52px] rounded-[12px] border-2 border-amber-glow/50 bg-amber-glow/10 cursor-not-allowed"
@@ -114,13 +154,29 @@ function CTAButton({ status, href, onClick, urgencyLevel, hasAnyPicks }: CTAButt
     )
   }
 
-  if (status === 'COMPLETED') {
+  if (phase === 'PICKS_LOCKED' || phase === 'LIVE') {
+    const label = t('viewGameweek')
+    return (
+      <Link
+        href={href}
+        onClick={onClick}
+        className="w-full flex items-center justify-center min-h-[52px] rounded-[12px] border-2 border-cinnabar/50 bg-cinnabar/10 hover:bg-cinnabar/20 hover:border-cinnabar/70 transition-all duration-200 hover:scale-[1.01] active:scale-95 group"
+        aria-label={label}
+      >
+        <span className="text-base font-black italic tracking-wide text-cinnabar transition-colors duration-200 group-hover:brightness-110">
+          {label} →
+        </span>
+      </Link>
+    )
+  }
+
+  if (phase === 'FINAL' || phase === 'COMPLETED') {
     return (
       <Link
         href={href}
         onClick={onClick}
         className="w-full flex items-center justify-center min-h-[52px] rounded-[12px] border-2 border-ivory/30 bg-ivory/5 hover:bg-ivory/10 hover:border-ivory/50 transition-all duration-200 hover:scale-[1.01] active:scale-95 group"
-        aria-label="View results"
+        aria-label={t('viewResults')}
       >
         <span className="text-base font-black italic tracking-wide text-ivory/70 group-hover:text-ivory transition-colors duration-200">
           {t('viewResults')} →
@@ -129,7 +185,6 @@ function CTAButton({ status, href, onClick, urgencyLevel, hasAnyPicks }: CTAButt
     )
   }
 
-  // OPEN state — the hero CTA
   const isCritical = urgencyLevel === 'critical'
   const isWarning = urgencyLevel === 'warning'
 
@@ -161,20 +216,50 @@ function CTAButton({ status, href, onClick, urgencyLevel, hasAnyPicks }: CTAButt
   )
 }
 
+function gameweekNoteForPhase(
+  t: (key: string) => string,
+  phase: GameweekDisplayPhase,
+  hasAnyPicks: boolean
+): string {
+  if (phase === 'OPEN' || phase === 'CLOSING_SOON') {
+    return hasAnyPicks ? t('gameweekNoteHasPicks') : t('gameweekNoteNoPicks')
+  }
+  if (phase === 'PICKS_LOCKED') return t('gameweekNotePicksLocked')
+  if (phase === 'LIVE') return t('gameweekNoteLive')
+  if (phase === 'FINAL') return t('gameweekNoteFinal')
+  if (phase === 'COMPLETED') return t('gameweekNoteCompleted')
+  return t('gameweekNoteUpcoming')
+}
+
 export function GameweekCard({
   gameweek,
   playerCount,
-  hasAnyPicks = false,
+  hasAnyPicks: hasAnyPicksProp,
   href,
   onTimerClick,
   isInteractive = true,
+  showMatchPreviews = false,
+  fixtureMatches,
 }: GameweekCardProps) {
   const t = useTranslations('dashboard')
-  const isOpen = gameweek.status === 'OPEN'
+  const picksWindowOpen = gameweek.status === 'OPEN'
 
-  // Compute urgency level here so both badge + CTA share it
-  const { time } = useCountdown(isOpen ? gameweek.deadline : null)
-  const urgencyLevel = useMemo<'normal' | 'warning' | 'critical' | 'expired'>(() => {
+  const loadFixturesFromHook = showMatchPreviews && fixtureMatches === undefined
+  const hookFixtures = useGameweekFixtures(gameweek.gameweekId, loadFixturesFromHook)
+  const { previews, slate } =
+    fixtureMatches !== undefined
+      ? fixturesStateFromMatches(fixtureMatches)
+      : hookFixtures
+
+  const usePhaseFromFixtures = showMatchPreviews || fixtureMatches !== undefined
+  const picksFromHook = useGameweekHasPicks(
+    gameweek.gameweekId,
+    isInteractive && showMatchPreviews && hasAnyPicksProp === undefined
+  )
+  const hasAnyPicks = hasAnyPicksProp ?? picksFromHook ?? false
+
+  const { time } = useCountdown(picksWindowOpen ? gameweek.deadline : null)
+  const urgencyLevel = useMemo<UrgencyLevel>(() => {
     if (!time || time.isExpired || time.total <= 0) return 'expired'
     const mins = time.total / (1000 * 60)
     if (mins < 15) return 'critical'
@@ -182,27 +267,46 @@ export function GameweekCard({
     return 'normal'
   }, [time])
 
-  const headerClass = isOpen ? 'gameweek-card-header-glow' : 'gameweek-card-header-slot'
+  const phase = useMemo<GameweekDisplayPhase>(() => {
+    if (!usePhaseFromFixtures) {
+      if (picksWindowOpen && (urgencyLevel === 'warning' || urgencyLevel === 'critical')) {
+        return 'CLOSING_SOON'
+      }
+      return legacyPhaseFromStatus(gameweek.status)
+    }
+    return resolveGameweekDisplayPhase({
+      dashboardStatus: gameweek.status,
+      urgencyLevel,
+      slate,
+    })
+  }, [
+    usePhaseFromFixtures,
+    picksWindowOpen,
+    urgencyLevel,
+    gameweek.status,
+    slate,
+  ])
 
-  const noteMessage =
-    !isOpen
-      ? t('gameweekNoteClosed')
-      : hasAnyPicks
-        ? t('gameweekNoteHasPicks')
-        : t('gameweekNoteNoPicks')
+  const isPickPhaseActive = phase === 'OPEN' || phase === 'CLOSING_SOON'
+  const headerClass = isPickPhaseActive ? 'gameweek-card-header-glow' : 'gameweek-card-header-slot'
+
+  const noteMessage = gameweekNoteForPhase(t, phase, hasAnyPicks)
 
   const targetHref = href ?? `/picks/?id=${gameweek.gameweekId}`
 
-  // Border + card-level glow — stronger when open
-  const cardBorderClass = isOpen
-    ? 'border-2 border-lime-yellow shadow-[0_0_18px_rgba(218,255,0,0.22)] hover:shadow-[0_0_30px_rgba(218,255,0,0.38)]'
-    : 'border border-lime-yellow/40'
+  let cardBorderClass = 'border border-lime-yellow/40'
+  if (isPickPhaseActive) {
+    cardBorderClass =
+      'border-2 border-lime-yellow shadow-[0_0_18px_rgba(218,255,0,0.22)] hover:shadow-[0_0_30px_rgba(218,255,0,0.38)]'
+  } else if (phase === 'LIVE') {
+    cardBorderClass =
+      'border-2 border-cinnabar/50 shadow-[0_0_14px_rgba(238,65,54,0.2)] hover:shadow-[0_0_22px_rgba(238,65,54,0.35)]'
+  }
 
-  const usersColor = isOpen ? 'text-lime-yellow' : 'text-ivory/60'
+  const usersColor = isPickPhaseActive ? 'text-lime-yellow' : 'text-ivory/60'
 
   return (
     <div className="w-full gameweek-card-slot">
-      {/* Header */}
       <div
         className={`bg-lime-yellow rounded-t-[10px] px-4 py-3 flex items-center justify-center shadow-sm ${headerClass}`}
       >
@@ -211,11 +315,9 @@ export function GameweekCard({
         </h2>
       </div>
 
-      {/* Body */}
       <div
         className={`${cardBorderClass} border-t-0 rounded-b-[10px] px-4 py-5 flex flex-col gap-4 bg-midnight-violet/50 backdrop-blur-sm transition-all duration-300 gameweek-card-body-slot`}
       >
-        {/* Player count */}
         <div className="flex items-center justify-center gap-2.5">
           <Users size={22} className={`${usersColor} transition-transform duration-200`} aria-hidden="true" />
           <div className="flex items-baseline gap-2">
@@ -226,19 +328,20 @@ export function GameweekCard({
           </div>
         </div>
 
-        {/* Status badge — compact timer only */}
         <div className="flex justify-center">
           <StatusBadge
-            status={gameweek.status}
+            phase={phase}
             deadline={gameweek.deadline}
             urgencyLevel={urgencyLevel}
+            picksWindowOpen={picksWindowOpen}
           />
         </div>
 
-        {/* CTA button — only shown when card is interactive */}
+        {showMatchPreviews && <GameweekMatchPreviewPills previews={previews} />}
+
         {isInteractive && (
           <CTAButton
-            status={gameweek.status}
+            phase={phase}
             href={targetHref}
             onClick={onTimerClick}
             urgencyLevel={urgencyLevel}
@@ -246,10 +349,7 @@ export function GameweekCard({
           />
         )}
 
-        {/* Dynamic note */}
-        <p className="text-center text-xs text-ivory/60 italic">
-          {noteMessage}
-        </p>
+        <p className="text-center text-xs text-ivory/60 italic">{noteMessage}</p>
       </div>
     </div>
   )

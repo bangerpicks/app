@@ -304,6 +304,7 @@ export function PicksClient({
             playerCount={displayPlayerCount}
             hasAnyPicks={hasAnyPicks}
             isInteractive={false}
+            fixtureMatches={matches}
           />
         </div>
 
@@ -318,6 +319,7 @@ export function PicksClient({
                 playerCount={displayPlayerCount}
                 hasAnyPicks={hasAnyPicks}
                 isInteractive={false}
+                fixtureMatches={matches}
               />
 
               {saveBlock}
