@@ -52,6 +52,7 @@ export function GameweekForm({
   )
   const [completeConfirmOpen, setCompleteConfirmOpen] = useState(false)
   const [pendingPublish, setPendingPublish] = useState(false)
+  const [competitionId, setCompetitionId] = useState('banger-world')
   const [fixtureEditorial, setFixtureEditorial] = useState<
     Record<number, GameweekFixtureEditorial>
   >({})
@@ -98,6 +99,7 @@ export function GameweekForm({
         setName(gameweek.name)
         setDescription(gameweek.description || '')
         setStatus(gameweek.status)
+        setCompetitionId(gameweek.competitionId || 'banger-world')
 
         // Convert Firestore timestamps to datetime-local format
         const start = gameweek.startDate.toDate()
@@ -262,6 +264,7 @@ export function GameweekForm({
           lockAt: lockDate,
           status: nextStatus,
           fixtureIds,
+          competitionId: competitionId.trim() || 'banger-world',
         })
 
         // Update fixtures subcollection
@@ -283,6 +286,7 @@ export function GameweekForm({
           status: publish ? 'active' : 'draft',
           fixtureIds,
           createdBy: user.uid,
+          competitionId: competitionId.trim() || 'banger-world',
         })
 
         // Save fixtures subcollection
@@ -384,6 +388,16 @@ export function GameweekForm({
                     <option value="completed">Completed</option>
                     <option value="archived">Archived</option>
                   </select>
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm text-ivory mb-2">Competition ID</label>
+                  <input
+                    type="text"
+                    value={competitionId}
+                    onChange={(e) => setCompetitionId(e.target.value)}
+                    className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-[10px] text-ivory focus:outline-none focus:border-lime-yellow"
+                    placeholder="banger-world"
+                  />
                 </div>
                 <div>
                   <label className="block text-sm text-ivory mb-2">

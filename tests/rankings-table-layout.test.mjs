@@ -3,9 +3,9 @@ import { readFileSync } from 'node:fs'
 import { describe, it } from 'node:test'
 
 const MOBILE_SCROLLER_WIDTH_PX = 358 // 390 viewport minus AppShell px-4 (16px × 2)
-const RNK_COLUMN_PX = 48 // w-12 (spec target geometry)
+const RNK_COLUMN_PX = 36 // w-9 (compact rank column)
 const USER_COLUMN_MOBILE_PX = 96
-const PTS_COLUMN_MOBILE_PX = 44 // w-11
+const PTS_COLUMN_MOBILE_PX = 36 // w-9 (slim PTS sticky)
 const V122_USER_MAX_PX = 144 // max-w min(42vw, 9rem) at 390px
 const V122_PTS_PX = 49 // measured sticky PTS at 390px (v1.2.2)
 
@@ -25,9 +25,32 @@ describe('RankingsTable mobile sticky geometry', () => {
     'utf8'
   )
 
+  it('uses one flex-bound scrollport for sticky headers without double page scroll', () => {
+    const rankingsClient = readFileSync(
+      new URL('../src/components/dashboard/RankingsClient.tsx', import.meta.url),
+      'utf8'
+    )
+    assert.match(scrollAreaSource, /fillViewport/)
+    assert.match(scrollAreaSource, /rankings-table-vert-scroll/)
+    assert.match(rankingsClient, /lockWeeklyViewport/)
+    assert.match(rankingsClient, /fillViewport/)
+    assert.doesNotMatch(rankingsClient, /ReferralPopup/)
+    const tabsIdx = rankingsClient.indexOf('rankings-view-tabs')
+    const heroIdx = rankingsClient.indexOf("hallOfFameBlurb")
+    assert.ok(tabsIdx > -1 && heroIdx > tabsIdx, 'view tabs render above Season/HoF hero')
+    assert.match(source, /rankings-table-head-row/)
+    assert.match(globals, /\.rankings-table-vert-scroll[\s\S]*min-height: 0/)
+    assert.match(globals, /\.rankings-table-head-row th[\s\S]*top: 0/)
+    assert.match(source, /rankings-table-sticky-rank/)
+    assert.match(globals, /\.rankings-table-sticky-rank::before/)
+    assert.match(source, /rankings-table-sticky-user/)
+    assert.match(globals, /\.rankings-table-sticky-user[\s\S]*left: calc\(2.25rem - 3px\)/)
+  })
+
   it('uses compact 96px user column and narrower PTS column below sm', () => {
     assert.match(source, /w-\[96px\] min-w-\[96px\] max-w-\[96px\]/)
-    assert.match(source, /w-11 sm:w-14/)
+    assert.match(source, /rankings-table-sticky-pts/)
+    assert.match(source, /w-9 min-w-9 sm:w-11/)
   })
 
   it('exposes a horizontal scroller with iOS-friendly touch styles', () => {
@@ -53,7 +76,7 @@ describe('RankingsTable mobile sticky geometry', () => {
     const v122SwipeWindowPx =
       MOBILE_SCROLLER_WIDTH_PX - 49 - V122_USER_MAX_PX - V122_PTS_PX
 
-    assert.equal(swipeWindowPx, 170)
+    assert.equal(swipeWindowPx, 190)
     assert.ok(swipeWindowPx >= 165, 'swipe window should meet QA target')
     assert.ok(swipeWindowPx > v122SwipeWindowPx, 'should reclaim width vs v1.2.2')
     assert.equal(v122SwipeWindowPx, 116) // v1.2.2 measured swipe window at 390px
@@ -66,9 +89,9 @@ describe('ReferralPopup banner offset', () => {
     'utf8'
   )
 
-  it('sticks flush under header elsewhere and scrolls on rankings', () => {
+  it('sticks flush under header', () => {
     assert.match(source, /var\(--header-height\)/)
-    assert.match(source, /isRankingsPage/)
+    assert.match(source, /sticky z-50/)
     assert.doesNotMatch(source, /5rem/)
   })
 })

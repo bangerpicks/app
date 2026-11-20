@@ -188,7 +188,25 @@ export async function recomputeSeasonStandings(
     return []
   }
   const season = seasonSnap.data() || {}
-  const gameweekIds: string[] = Array.isArray(season.gameweekIds) ? season.gameweekIds : []
+  let gameweekIds: string[] = Array.isArray(season.gameweekIds) ? season.gameweekIds : []
+  const seasonCompetitionId =
+    typeof season.competitionId === 'string' ? season.competitionId : undefined
+  if (seasonCompetitionId) {
+    const scoped: string[] = []
+    for (const gameweekId of gameweekIds) {
+      const gwSnap = await db.collection('gameweeks').doc(gameweekId).get()
+      const gwCompetitionId = gwSnap.data()?.competitionId as string | undefined
+      const effective =
+        gwCompetitionId ||
+        (gwSnap.data()?.type === 'league' || gwSnap.data()?.type === 'cup'
+          ? undefined
+          : 'banger-world')
+      if (effective === seasonCompetitionId) {
+        scoped.push(gameweekId)
+      }
+    }
+    gameweekIds = scoped
+  }
   const bestN = typeof season.bestN === 'number' ? season.bestN : 3
 
   const perUser = new Map<

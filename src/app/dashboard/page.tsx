@@ -8,32 +8,14 @@ import { DashboardClient } from '@/components/dashboard/DashboardClient'
 import { OnboardingIntro } from '@/components/dashboard/OnboardingIntro'
 import { AppShell } from '@/components/dashboard/AppShell'
 import { GameweekData } from '@/types/dashboard'
-import { getAllGameweeks, AdminGameweekData } from '@/lib/admin'
-import {
-  mapAdminGameweekToDashboardStatus,
-  resolvePlayerCountFromGameweek,
-  getEffectiveDeadline,
-  LoadBudget,
-} from '@/lib/gameweek-selection'
+import { LoadBudget } from '@/lib/gameweek-selection'
+import { loadHomeCompetitionPlayCards } from '@/lib/competitions'
+import type { CompetitionPlayCard } from '@/types/competition'
 import { FirestoreServedFromCacheError } from '@/lib/firestore-server-read'
 import {
   shouldShowDashboardStaleBanner,
   staleBannerShowsRetry,
 } from '@/lib/dashboard-load-state'
-
-function convertGameweekData(adminGameweek: AdminGameweekData): GameweekData {
-  const lock = getEffectiveDeadline(adminGameweek)
-  return {
-    gameweekId: adminGameweek.gameweekId,
-    name: adminGameweek.name,
-    playerCount: resolvePlayerCountFromGameweek(adminGameweek) ?? 0,
-    status: mapAdminGameweekToDashboardStatus(adminGameweek),
-    deadline: lock?.toDate(),
-    startDate: adminGameweek.startDate?.toDate(),
-    endDate: adminGameweek.endDate?.toDate(),
-    forceOpenForTesting: adminGameweek.forceOpenForTesting,
-  }
-}
 
 function DashboardShell({
   children,
@@ -57,6 +39,8 @@ export default function DashboardPage() {
   const t = useTranslations('dashboard')
   const [username, setUsername] = useState<string | undefined>(undefined)
   const [gameweeks, setGameweeks] = useState<GameweekData[]>([])
+  const [competitionCards, setCompetitionCards] = useState<CompetitionPlayCard[]>([])
+  const [gameweeksById, setGameweeksById] = useState<Map<string, GameweekData>>(new Map())
   const [loadingGameweeks, setLoadingGameweeks] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showOnboarding, setShowOnboarding] = useState(false)
@@ -128,32 +112,16 @@ export default function DashboardPage() {
         setRefreshFailed(false)
         setServedFromFirestoreCache(false)
 
-        // 1. Fetch active gameweeks (any tournaments or league weeks)
-        let rawGameweeks = await getAllGameweeks(
-          {
-            status: 'active',
-            sortBy: 'date',
-            sortOrder: 'desc',
-          },
+        const { cards, gameweeksById: byId } = await loadHomeCompetitionPlayCards(
+          user?.uid ?? null,
           readOpts
         )
 
-        // 2. Fallback to completed/archived if no active gameweeks
-        if (rawGameweeks.length === 0) {
-          rawGameweeks = await getAllGameweeks(
-            {
-              status: 'completed',
-              sortBy: 'date',
-              sortOrder: 'desc',
-            },
-            readOpts
-          )
-        }
-
         if (abortController.signal.aborted) return
 
-        const mapped = rawGameweeks.map(convertGameweekData)
-        setGameweeks(mapped)
+        setCompetitionCards(cards)
+        setGameweeksById(byId)
+        setGameweeks([...byId.values()])
         const staleLoad = servedFromCacheRef.current
         setServedFromFirestoreCache(staleLoad)
         setRefreshFailed(staleLoad)
@@ -177,7 +145,7 @@ export default function DashboardPage() {
     return () => {
       abortController.abort()
     }
-  }, [loadGeneration])
+  }, [loadGeneration, user?.uid])
 
   const retryGameweekLoad = () => {
     setError(null)
@@ -231,7 +199,7 @@ export default function DashboardPage() {
     )
   }
 
-  if (error && gameweeks.length === 0) {
+  if (error && gameweeks.length === 0 && competitionCards.length === 0) {
     return (
       <>
         <DashboardShell username={username}>
@@ -270,6 +238,8 @@ export default function DashboardPage() {
       )}
       <DashboardClient
         gameweeks={gameweeks}
+        competitionCards={competitionCards}
+        gameweeksById={gameweeksById}
         username={username}
       />
       {onboardingLayer}

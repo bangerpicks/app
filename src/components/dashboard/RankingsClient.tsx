@@ -4,7 +4,6 @@ import { useState, useEffect, useRef } from 'react'
 import { useTranslations } from 'next-intl'
 import { AppShell } from './AppShell'
 import { RankingsTable } from './RankingsTable'
-import { ReferralPopup } from './ReferralPopup'
 import {
   RankingEntry,
   RankingView,
@@ -23,6 +22,8 @@ import {
   shouldShowWeeklyStandingsEmptyCopy,
 } from '@/lib/rankings-load-state.mjs'
 import { weekNavigationState } from '@/lib/rankings-week-nav.mjs'
+import type { CompetitionTrackId } from '@/lib/competition-tracks'
+import type { CompetitionPickerOption } from '@/lib/competitions'
 import { Trophy, Medal, Award, ChevronLeft, ChevronRight } from 'lucide-react'
 
 interface RankingsClientProps {
@@ -32,7 +33,6 @@ interface RankingsClientProps {
   seasonRankings?: SeasonRankingEntry[]
   seasonTitle?: string
   username?: string
-  latestCompletedGameweekId?: string | null
   completedGameweeks?: PastGameweekOption[]
   currentGameweekId?: string | null
   selectedGameweekId?: string | null
@@ -43,6 +43,19 @@ interface RankingsClientProps {
   weeklySliceStatus?: 'idle' | 'loading' | 'loaded' | 'empty' | 'error'
   seasonBoardStatus?: 'idle' | 'loading' | 'ready' | 'empty' | 'error'
   onRetry?: () => void
+  competitionTracks?: CompetitionTrackId[]
+  selectedTrackId?: CompetitionTrackId | null
+  onSelectTrack?: (trackId: CompetitionTrackId) => void
+  competitionOptions?: CompetitionPickerOption[]
+  selectedCompetitionId?: string | null
+  onSelectCompetition?: (competitionId: string) => void
+  showGlobalSeasonNotice?: boolean
+}
+
+const TRACK_LABEL_KEY: Record<CompetitionTrackId, string> = {
+  'banger-world': 'trackBangerWorld',
+  league: 'trackLeague',
+  cup: 'trackCup',
 }
 
 function ScoreMathDisplay({ entry }: { entry: RankingEntry }) {
@@ -61,13 +74,11 @@ function ScoreMathDisplay({ entry }: { entry: RankingEntry }) {
 function RankingRow({
   entry,
   index,
-  latestCompletedGameweekId,
   scoreLabelKey,
   showSeasonDetail,
 }: {
   entry: RankingEntry
   index: number
-  latestCompletedGameweekId: string | null
   scoreLabelKey: 'score' | 'points' | 'seasonPoints'
   showSeasonDetail?: boolean
 }) {
@@ -87,21 +98,6 @@ function RankingRow({
   }
 
   const seasonEntry = entry as SeasonRankingEntry
-  const showLastWeekBadge =
-    scoreLabelKey === 'score' &&
-    latestCompletedGameweekId &&
-    entry.lastCompletedGameweekId === latestCompletedGameweekId &&
-    (entry.lastWeekPlace === 1 || entry.lastWeekPlace === 2 || entry.lastWeekPlace === 3)
-
-  const lastWeekBadgeKey =
-    entry.lastWeekPlace === 1
-      ? 'lastWeekChampion'
-      : entry.lastWeekPlace === 2
-        ? 'lastWeek2nd'
-        : entry.lastWeekPlace === 3
-          ? 'lastWeek3rd'
-          : null
-
   const cardDelay = Math.min(index * 80, 400)
   const displayScore =
     scoreLabelKey === 'score'
@@ -145,9 +141,6 @@ function RankingRow({
           {entry.isCurrentUser && (
             <span className="text-xs text-lime-yellow font-bold">{t('you')}</span>
           )}
-          {showLastWeekBadge && lastWeekBadgeKey && (
-            <span className="text-xs font-medium text-amber-glow/90">{t(lastWeekBadgeKey)}</span>
-          )}
         </div>
         {showSeasonDetail && seasonEntry.totalCorrect !== undefined && (
           <div className="text-xs text-ivory/70 mt-1">
@@ -185,7 +178,6 @@ export function RankingsClient({
   seasonRankings = [],
   seasonTitle,
   username,
-  latestCompletedGameweekId = null,
   completedGameweeks = [],
   currentGameweekId = null,
   selectedGameweekId = null,
@@ -196,6 +188,13 @@ export function RankingsClient({
   weeklySliceStatus = 'idle',
   seasonBoardStatus = 'idle',
   onRetry,
+  competitionTracks = [],
+  selectedTrackId = null,
+  onSelectTrack,
+  competitionOptions = [],
+  selectedCompetitionId = null,
+  onSelectCompetition,
+  showGlobalSeasonNotice = false,
 }: RankingsClientProps) {
   const t = useTranslations('rankings')
   const [activeView, setActiveView] = useState<RankingView>('this-week')
@@ -249,6 +248,9 @@ export function RankingsClient({
     sliceStatus: weeklySliceStatus,
   })
 
+  const showWeeklyTable = hasWeeklyRankingsTableRows(weeklyRankings)
+  const lockWeeklyViewport = isThisWeekView && Boolean(gameweekData) && showWeeklyTable
+
   useEffect(() => {
     const noop = () => {}
     window.addEventListener('scroll', noop, { passive: true })
@@ -259,35 +261,58 @@ export function RankingsClient({
     <AppShell
       containerRef={containerRef}
       username={username}
-      banner={<ReferralPopup />}
-      mainClassName={`flex-1 px-4 sm:px-5 pb-bottom-nav flex flex-col items-center overflow-x-hidden ${
-        isThisWeekView ? 'py-2 gap-2' : 'py-2.5 gap-5'
+      shellClassName={
+        lockWeeklyViewport
+          ? 'h-[100dvh] max-h-[100dvh] overflow-hidden'
+          : undefined
+      }
+      mainClassName={`flex-1 min-h-0 px-4 sm:px-5 pb-bottom-nav flex flex-col items-center overflow-x-hidden py-2 gap-2 ${
+        lockWeeklyViewport ? 'overflow-hidden' : ''
       }`}
     >
-      {(isHallOfFame || isSeasonView) && (
-        <div className="w-full flex flex-col items-center gap-2 mt-4">
-          <Trophy className="w-12 h-12 text-lime-yellow mb-2" />
-          <h1 className="text-3xl sm:text-4xl font-bold text-ivory">{t('title')}</h1>
-          <p className="text-ivory/70 text-sm sm:text-base">{t('subtitle')}</p>
-          {isHallOfFame && (
-            <p className="text-ivory/50 text-xs sm:text-sm max-w-md text-center">
-              {t('hallOfFameBlurb')}
-            </p>
-          )}
-          {isSeasonView && seasonTitle && (
-            <p className="text-lime-yellow text-sm font-semibold">{seasonTitle}</p>
-          )}
-          {isSeasonView && (
-            <p className="text-ivory/50 text-xs sm:text-sm max-w-md text-center">
-              {t('seasonBlurb')}
-            </p>
-          )}
+      {competitionOptions.length > 1 ? (
+        <div className="w-full max-w-2xl lg:max-w-4xl flex shrink-0 gap-2 overflow-x-auto rankings-competition-tracks">
+          {competitionOptions.map((opt) => (
+            <button
+              key={opt.id}
+              type="button"
+              onClick={() => onSelectCompetition?.(opt.id)}
+              className={`shrink-0 rounded-lg px-3 py-2 text-xs sm:text-sm font-semibold transition-colors ${
+                selectedCompetitionId === opt.id
+                  ? 'bg-lime-yellow text-midnight-violet'
+                  : 'bg-ivory/10 text-ivory/70 hover:bg-ivory/15'
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
         </div>
-      )}
+      ) : competitionTracks.length > 1 ? (
+        <div className="w-full max-w-2xl lg:max-w-4xl flex shrink-0 gap-2 overflow-x-auto rankings-competition-tracks">
+          {competitionTracks.map((trackId) => (
+            <button
+              key={trackId}
+              type="button"
+              onClick={() => onSelectTrack?.(trackId)}
+              className={`shrink-0 rounded-lg px-3 py-2 text-xs sm:text-sm font-semibold transition-colors ${
+                selectedTrackId === trackId
+                  ? 'bg-lime-yellow text-midnight-violet'
+                  : 'bg-ivory/10 text-ivory/70 hover:bg-ivory/15'
+              }`}
+            >
+              {t(TRACK_LABEL_KEY[trackId])}
+            </button>
+          ))}
+        </div>
+      ) : null}
 
-      <div
-        className={`w-full max-w-2xl lg:max-w-4xl flex gap-2 sm:gap-3 ${isThisWeekView ? 'mt-2' : ''}`}
-      >
+      {showGlobalSeasonNotice ? (
+        <p className="w-full max-w-2xl lg:max-w-4xl text-center text-[11px] sm:text-xs text-ivory/50 px-1">
+          {t('seasonGlobalNotice')}
+        </p>
+      ) : null}
+
+      <div className="w-full max-w-2xl lg:max-w-4xl flex shrink-0 gap-2 sm:gap-3 rankings-view-tabs">
         <button
           onClick={() => setActiveView('this-week')}
           className={`flex-1 py-3 px-3 sm:px-4 rounded-lg font-semibold text-xs sm:text-sm transition-colors ${
@@ -320,16 +345,37 @@ export function RankingsClient({
         </button>
       </div>
 
+      {(isHallOfFame || isSeasonView) && (
+        <div className="w-full max-w-2xl lg:max-w-4xl flex flex-col items-center gap-2 shrink-0 text-center">
+          <Trophy className="w-10 h-10 text-lime-yellow" />
+          <h1 className="text-2xl sm:text-3xl font-bold text-ivory">{t('title')}</h1>
+          <p className="text-ivory/70 text-sm sm:text-base">{t('subtitle')}</p>
+          {isHallOfFame && (
+            <p className="text-ivory/50 text-xs sm:text-sm max-w-md">{t('hallOfFameBlurb')}</p>
+          )}
+          {isSeasonView && seasonTitle && (
+            <p className="text-lime-yellow text-sm font-semibold">{seasonTitle}</p>
+          )}
+          {isSeasonView && (
+            <p className="text-ivory/50 text-xs sm:text-sm max-w-md">{t('seasonBlurb')}</p>
+          )}
+        </div>
+      )}
+
       {isThisWeekView && (
-        <div className="w-full max-w-2xl lg:max-w-4xl">
+        <div
+          className={`w-full max-w-2xl lg:max-w-4xl flex flex-col min-h-0 ${
+            lockWeeklyViewport ? 'flex-1' : ''
+          }`}
+        >
           {gameweekData && (
             <>
               {weeklyLoading && selectedGameweekId !== currentGameweekId && (
-                <div className="w-full mb-2 rounded-lg border border-ivory/20 bg-ivory/5 px-3 py-2 flex items-center justify-center">
+                <div className="w-full mb-2 shrink-0 rounded-lg border border-ivory/20 bg-ivory/5 px-3 py-2 flex items-center justify-center">
                   <p className="text-ivory/70 text-sm">{t('loadingWeek')}</p>
                 </div>
               )}
-              <div className="w-full bg-lime-yellow rounded-t-lg px-3 py-2.5 sm:px-4 sm:py-3">
+              <div className="w-full shrink-0 bg-lime-yellow rounded-t-lg px-3 py-2.5 sm:px-4 sm:py-3">
                 <div className="flex items-center justify-center gap-1 sm:gap-2">
                   {navigableWeeks.length > 1 && onSelectGameweek && (
                     <button
@@ -388,13 +434,19 @@ export function RankingsClient({
                   )}
                 </div>
               </div>
-              <div className="w-full -mt-px">
-                {hasWeeklyRankingsTableRows(weeklyRankings) ? (
-                  <RankingsTable
-                    rankings={weeklyRankings!}
-                    gameweekData={gameweekData}
-                    latestCompletedGameweekId={latestCompletedGameweekId}
-                  />
+              <div
+                className={`w-full -mt-px flex flex-col min-h-0 ${
+                  lockWeeklyViewport ? 'flex-1' : ''
+                }`}
+              >
+                {showWeeklyTable ? (
+                  <div className="rankings-table-bordered-host rankings-this-week-shell w-full min-h-0 flex-1 rounded-b-lg border-2 border-t-0 border-ivory/20 bg-midnight-violet">
+                    <RankingsTable
+                      rankings={weeklyRankings!}
+                      gameweekData={gameweekData}
+                      fillViewport
+                    />
+                  </div>
                 ) : showWeeklyError ? (
                   <div className="w-full rounded-b-lg border-2 border-t-0 border-ivory/20 bg-midnight-violet px-4 py-10 flex flex-col items-center justify-center gap-3">
                     <p className="text-ivory/80 text-sm text-center max-w-sm">{t('loadFailed')}</p>
@@ -472,7 +524,6 @@ export function RankingsClient({
                 key={entry.userId}
                 entry={entry}
                 index={index}
-                latestCompletedGameweekId={null}
                 scoreLabelKey="seasonPoints"
                 showSeasonDetail
               />
@@ -494,7 +545,6 @@ export function RankingsClient({
                 key={entry.userId}
                 entry={entry}
                 index={index}
-                latestCompletedGameweekId={latestCompletedGameweekId}
                 scoreLabelKey="score"
               />
             ))

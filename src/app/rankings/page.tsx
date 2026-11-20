@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/lib/AuthProvider'
 import { RankingsClient } from '@/components/dashboard/RankingsClient'
 import { NotSignedIn } from '@/components/dashboard/NotSignedIn'
@@ -16,7 +17,7 @@ import {
   getWeeklyRankings,
   RankingsFirestoreReadOptions,
 } from '@/lib/rankings'
-import { getAllGameweeks, getGameweekById } from '@/lib/admin'
+import { getAllGameweeks, getGameweekById, type AdminGameweekData } from '@/lib/admin'
 import { SeasonRankingEntry } from '@/lib/seasons'
 import {
   fetchActiveSeasonForRankings,
@@ -26,7 +27,25 @@ import {
 } from '@/lib/seasons-rankings-read'
 import { useLocale, useTranslations } from 'next-intl'
 import { mergeWeeklyRankingsWithStandings } from '@/lib/weekly-rankings-merge.mjs'
-import { fetchCurrentGameweek, LoadBudget } from '@/lib/gameweek-selection'
+import { LoadBudget } from '@/lib/gameweek-selection'
+import {
+  type CompetitionTrackId,
+  COMPETITION_TRACK_ORDER,
+} from '@/lib/competition-tracks'
+import {
+  DEFAULT_FLAGSHIP_ID,
+  defaultCompetitionIdForLegacyTrack,
+  filterGameweeksForCompetition,
+  listPastGameweeksForCompetition,
+  pickCurrentGameweekForCompetition,
+  pickDefaultCompetitionId,
+} from '@/lib/competition-catalog'
+import {
+  buildRankingsCompetitionOptions,
+  safeGetCompetitionById,
+  type CompetitionPickerOption,
+} from '@/lib/competitions'
+import { isFirestoreCatalogSkippableError } from '@/lib/firestore-utils'
 import {
   readRankingsSessionCache,
   writeRankingsSessionCache,
@@ -48,8 +67,17 @@ type WeeklyBoardStatus = 'idle' | 'loading' | 'ready' | 'no-week' | 'error'
 type WeeklySliceStatus = 'idle' | 'loading' | 'loaded' | 'empty' | 'error'
 type SeasonBoardStatus = 'idle' | 'loading' | 'ready' | 'empty' | 'error'
 
-export default function RankingsPage() {
+function parseTrackParam(value: string | null): CompetitionTrackId | null {
+  if (!value) return null
+  return COMPETITION_TRACK_ORDER.includes(value as CompetitionTrackId)
+    ? (value as CompetitionTrackId)
+    : null
+}
+
+function RankingsPageContent() {
   const { user, loading: authLoading } = useAuth()
+  const router = useRouter()
+  const searchParams = useSearchParams()
   const locale = useLocale() as 'en' | 'es-MX'
   const t = useTranslations('rankings')
   const tCommon = useTranslations('common')
@@ -62,7 +90,6 @@ export default function RankingsPage() {
   const [currentWeeklyRankings, setCurrentWeeklyRankings] = useState<RankingEntry[] | undefined>(undefined)
   const [completedGameweeks, setCompletedGameweeks] = useState<PastGameweekOption[]>([])
   const [selectedGameweekId, setSelectedGameweekId] = useState<string | null>(null)
-  const [latestCompletedGameweekId, setLatestCompletedGameweekId] = useState<string | null>(null)
   const [rankingsLoading, setRankingsLoading] = useState(true)
   const [weeklyLoading, setWeeklyLoading] = useState(true)
   const [rankingsError, setRankingsError] = useState<string | null>(null)
@@ -76,6 +103,13 @@ export default function RankingsPage() {
   const [usingSessionCache, setUsingSessionCache] = useState(false)
   const [isRefreshingRankings, setIsRefreshingRankings] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
+  const [competitionOptions, setCompetitionOptions] = useState<CompetitionPickerOption[]>([])
+  const [selectedCompetitionId, setSelectedCompetitionId] = useState<string | null>(
+    () => searchParams.get('competition')
+  )
+  const [selectedTrackId, setSelectedTrackId] = useState<CompetitionTrackId | null>(
+    () => parseTrackParam(searchParams.get('track'))
+  )
   const lastLoadMetaRef = useRef({ at: 0, failed: false, servedFromCache: false })
 
   const cacheUid = user?.uid ?? null
@@ -109,9 +143,23 @@ export default function RankingsPage() {
   useEffect(() => {
     const abortController = new AbortController()
     const sessionCache = readRankingsSessionCache(cacheUid, locale)
-    const hadCache = Boolean(sessionCache)
+    const urlTrack = parseTrackParam(searchParams.get('track'))
+    const urlCompetition = searchParams.get('competition')
+    const cacheScopeOk =
+      Boolean(sessionCache) &&
+      (!sessionCache?.competitionId ||
+        !urlCompetition ||
+        sessionCache.competitionId === urlCompetition) &&
+      (!sessionCache?.trackId || !urlTrack || sessionCache.trackId === urlTrack)
+    const hadCache = cacheScopeOk && Boolean(sessionCache)
 
     if (hadCache && sessionCache) {
+      if (sessionCache.competitionId && !urlCompetition) {
+        setSelectedCompetitionId(sessionCache.competitionId)
+      }
+      if (sessionCache.trackId && !urlTrack) {
+        setSelectedTrackId(sessionCache.trackId)
+      }
       const cachedGw = deserializeRankingsSessionGameweek(sessionCache.gameweekData)
       if (cachedGw) {
         setGameweekData(cachedGw)
@@ -136,7 +184,8 @@ export default function RankingsPage() {
     }
 
     const loadSeason = async (
-      readOpts: RankingsFirestoreReadOptions
+      readOpts: RankingsFirestoreReadOptions,
+      competitionId: string | null
     ): Promise<{ failed: boolean; title?: string; standings: SeasonRankingEntry[] }> => {
       if (!hadCache) {
         setSeasonLoading(true)
@@ -145,11 +194,24 @@ export default function RankingsPage() {
         setIsRefreshingRankings(true)
       }
       try {
-        const activeSeason = await fetchActiveSeasonForRankings(readOpts)
+        let seasonId: string | undefined
+        let seasonDoc = null as Awaited<ReturnType<typeof fetchActiveSeasonForRankings>>
+        if (competitionId) {
+          const comp = await safeGetCompetitionById(competitionId)
+          if (comp?.activeSeasonId) {
+            seasonId = comp.activeSeasonId
+          } else if (competitionId === DEFAULT_FLAGSHIP_ID) {
+            seasonDoc = await fetchActiveSeasonForRankings(readOpts)
+            seasonId = seasonDoc?.seasonId
+          }
+        } else {
+          seasonDoc = await fetchActiveSeasonForRankings(readOpts)
+          seasonId = seasonDoc?.seasonId
+        }
         if (abortController.signal.aborted) {
           return { failed: false, standings: [] }
         }
-        if (!activeSeason) {
+        if (!seasonId) {
           setSeasonTitle(undefined)
           setSeasonRankings([])
           setSeasonBoardStatus(
@@ -161,10 +223,22 @@ export default function RankingsPage() {
           )
           return { failed: false, standings: [] }
         }
-        const title = seasonDisplayName(activeSeason, locale)
-        setSeasonTitle(title)
+        let title: string | undefined
+        if (!seasonDoc && competitionId) {
+          const comp = await safeGetCompetitionById(competitionId)
+          if (comp?.displayName) {
+            title =
+              locale === 'es-MX' && comp.displayName_esMX
+                ? comp.displayName_esMX
+                : comp.displayName
+            setSeasonTitle(title)
+          }
+        } else if (seasonDoc) {
+          title = seasonDisplayName(seasonDoc, locale)
+          setSeasonTitle(title)
+        }
         const standings = await fetchSeasonRankingsForRankings(
-          activeSeason.seasonId,
+          seasonId,
           user?.uid ?? null,
           readOpts
         )
@@ -183,6 +257,17 @@ export default function RankingsPage() {
       } catch (error) {
         if (abortController.signal.aborted) {
           return { failed: true, standings: [] }
+        }
+        if (isFirestoreCatalogSkippableError(error)) {
+          setSeasonRankings([])
+          setSeasonBoardStatus(
+            resolveSeasonBoardStatus({
+              loadFailed: false,
+              standingsCount: 0,
+              hasActiveSeason: false,
+            })
+          )
+          return { failed: false, standings: [] }
         }
         console.error('Error loading season rankings:', error)
         setSeasonRankings([])
@@ -279,28 +364,50 @@ export default function RankingsPage() {
       let weeklyPayload: Awaited<ReturnType<typeof loadWeeklyForGameweek>> | null = null
       let weeklyFailed = false
       let seasonFailed = false
-
-      const seasonPromise = loadSeason(readOpts)
+      let resolvedCompetitionId: string | null = null
+      let seasonPromise: ReturnType<typeof loadSeason> | null = null
 
       try {
-        const [rankingsResult, currentGameweek, completedGameweeksList] = await Promise.all([
+        const [rankingsResult, allGameweeksList] = await Promise.all([
           getAllTimeRankings(user, 100),
-          fetchCurrentGameweek(loadBudget, servedFromCacheRef),
           getAllGameweeks({ sortBy: 'date', sortOrder: 'desc' }),
         ])
 
         if (abortController.signal.aborted) return
 
         allTimeOk = true
-        const completedOnly = completedGameweeksList.filter(
-          (gw) => gw.status === 'completed' || gw.status === 'archived'
-        )
-        const latestCompleted = completedOnly.length > 0 ? completedOnly[0].gameweekId : null
-        setLatestCompletedGameweekId(latestCompleted)
-
-        const pastOptions: PastGameweekOption[] = completedGameweeksList
-          .slice(0, PAST_GAMEWEEKS_LIMIT)
-          .map((gw) => ({ gameweekId: gw.gameweekId, name: gw.name }))
+        const options = await buildRankingsCompetitionOptions(allGameweeksList)
+        setCompetitionOptions(options)
+        const ids = options.map((o) => o.id)
+        const compFromUrl = searchParams.get('competition')
+        const trackFromUrl = parseTrackParam(searchParams.get('track'))
+        resolvedCompetitionId =
+          (compFromUrl && ids.includes(compFromUrl) && compFromUrl) ||
+          (selectedCompetitionId && ids.includes(selectedCompetitionId) && selectedCompetitionId) ||
+          (trackFromUrl
+            ? defaultCompetitionIdForLegacyTrack(trackFromUrl, allGameweeksList)
+            : null) ||
+          pickDefaultCompetitionId(ids)
+        if (resolvedCompetitionId) {
+          setSelectedCompetitionId(resolvedCompetitionId)
+        }
+        seasonPromise = loadSeason(readOpts, resolvedCompetitionId)
+        const filtered: AdminGameweekData[] = resolvedCompetitionId
+          ? (filterGameweeksForCompetition(
+              allGameweeksList,
+              resolvedCompetitionId
+            ) as AdminGameweekData[])
+          : []
+        const currentGameweek = pickCurrentGameweekForCompetition(
+          filtered
+        ) as AdminGameweekData | null
+        const pastOptions: PastGameweekOption[] = resolvedCompetitionId
+          ? listPastGameweeksForCompetition(
+              filtered,
+              currentGameweek?.gameweekId ?? null,
+              PAST_GAMEWEEKS_LIMIT
+            )
+          : []
         setCompletedGameweeks(pastOptions)
         setAllTimeRankings(rankingsResult)
         setRankingsLoading(false)
@@ -353,7 +460,7 @@ export default function RankingsPage() {
         }
       }
 
-      const seasonResult = await seasonPromise
+      const seasonResult = await (seasonPromise ?? Promise.resolve({ failed: false, standings: [] }))
       if (abortController.signal.aborted) return
 
       seasonFailed = seasonResult.failed
@@ -361,7 +468,12 @@ export default function RankingsPage() {
       setServedFromFirestoreCache(stale)
       lastLoadMetaRef.current.at = Date.now()
       lastLoadMetaRef.current.servedFromCache = stale
-      lastLoadMetaRef.current.failed = weeklyFailed || seasonFailed
+      const weeklyRefreshOk =
+        !weeklyFailed &&
+        weeklyPayload != null &&
+        weeklyPayload.boardStatus === 'ready' &&
+        weeklyPayload.sliceStatus !== 'error'
+      lastLoadMetaRef.current.failed = weeklyFailed || (seasonFailed && !weeklyRefreshOk)
 
       const sliceStatus =
         weeklyFailed || !weeklyPayload || !('sliceStatus' in weeklyPayload)
@@ -380,14 +492,16 @@ export default function RankingsPage() {
 
       if (canCacheWeekly && weeklyPayload && 'transformed' in weeklyPayload) {
         writeRankingsSessionCache({
-          version: 1,
+          version: 2,
           savedAt: Date.now(),
           locale,
           uid: cacheUid,
           currentGameweekId: weeklyPayload.gameweekId ?? null,
+          trackId: selectedTrackId ?? undefined,
+          competitionId: resolvedCompetitionId ?? undefined,
           gameweekData: serializeRankingsSessionGameweek(weeklyPayload.transformed),
           weeklyRankings: weeklyPayload.rankings,
-          seasonTitle: seasonResult.title,
+          seasonTitle: 'title' in seasonResult ? seasonResult.title : undefined,
           seasonRankings: seasonResult.standings,
         })
       } else if (weeklyFailed || seasonFailed) {
@@ -409,7 +523,6 @@ export default function RankingsPage() {
       setCurrentWeeklyRankings(undefined)
       setCompletedGameweeks([])
       setSelectedGameweekId(null)
-      setLatestCompletedGameweekId(null)
       setRankingsLoading(false)
       setWeeklyLoading(false)
       setSeasonLoading(false)
@@ -419,7 +532,7 @@ export default function RankingsPage() {
     }
 
     return () => abortController.abort()
-  }, [user, locale, reloadKey, cacheUid])
+  }, [user, locale, reloadKey, cacheUid, searchParams, selectedTrackId])
 
   useEffect(() => {
     const onResume = () => {
@@ -535,6 +648,22 @@ export default function RankingsPage() {
     }
   }
 
+  const handleSelectCompetition = useCallback(
+    (competitionId: string) => {
+      if (competitionId === selectedCompetitionId) return
+      setSelectedCompetitionId(competitionId)
+      setSelectedGameweekId(null)
+      clearRankingsSessionCache(cacheUid, locale)
+      const params = new URLSearchParams(searchParams.toString())
+      params.set('competition', competitionId)
+      params.delete('track')
+      params.delete('week')
+      router.replace(`/rankings/?${params.toString()}`)
+      setReloadKey((k) => k + 1)
+    },
+    [cacheUid, locale, router, searchParams, selectedCompetitionId]
+  )
+
   const initialWeeklyLoading = weeklyLoading && weeklyBoardStatus === 'loading'
   if (authLoading || rankingsLoading || initialWeeklyLoading) {
     return (
@@ -602,7 +731,6 @@ export default function RankingsPage() {
       seasonLoading={seasonLoading}
       seasonBoardStatus={seasonBoardStatus}
       username={username}
-      latestCompletedGameweekId={latestCompletedGameweekId}
       completedGameweeks={completedGameweeks}
       currentGameweekId={currentGameweekId}
       selectedGameweekId={selectedGameweekId}
@@ -611,7 +739,27 @@ export default function RankingsPage() {
       weeklyBoardStatus={weeklyBoardStatus}
       weeklySliceStatus={weeklySliceStatus}
       onRetry={bumpReload}
+      competitionOptions={competitionOptions}
+      selectedCompetitionId={selectedCompetitionId}
+      onSelectCompetition={handleSelectCompetition}
+      showGlobalSeasonNotice={
+        selectedCompetitionId != null && selectedCompetitionId !== DEFAULT_FLAGSHIP_ID
+      }
     />
   </>
+  )
+}
+
+export default function RankingsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-[100dvh] min-h-screen bg-midnight-violet flex items-center justify-center">
+          <div className="text-ivory">Loading…</div>
+        </div>
+      }
+    >
+      <RankingsPageContent />
+    </Suspense>
   )
 }

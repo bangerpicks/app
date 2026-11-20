@@ -1,3 +1,5 @@
+import type { GameweekType } from '@/types/admin'
+
 export type GameweekStatus = 'OPEN' | 'CLOSED' | 'UPCOMING' | 'COMPLETED'
 
 export interface GameweekData {
@@ -9,6 +11,10 @@ export interface GameweekData {
   startDate?: Date
   endDate?: Date
   forceOpenForTesting?: boolean
+  /** Admin slate type (flagship / league / cup). */
+  type?: GameweekType
+  description?: string
+  weekNumber?: number
 }
 
 export type Prediction = 'H' | 'D' | 'A' // Home, Draw, Away

@@ -138,6 +138,157 @@ td[class*="sticky"] {
   -webkit-backface-visibility: hidden;
 }
 
+/* Fills flex parent; only scroll surface for rankings player rows (no page + table double scroll) */
+.rankings-table-vert-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: 100%;
+  overflow: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.rankings-this-week-shell {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: 100%;
+}
+
+.rankings-table-head-row th {
+  position: -webkit-sticky;
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.12);
+  /* Beat th[class*="sticky"] GPU hack — it breaks vertical stick overlap */
+  transform: none;
+  -webkit-transform: none;
+  will-change: auto;
+  backface-visibility: visible;
+  -webkit-backface-visibility: visible;
+}
+
+.rankings-table-head-row th.rankings-table-head-cell--edge {
+  z-index: 50;
+}
+
+/* Rank sticky column: flush violet to table left border (no GPU-layer seam) */
+.rankings-table-bordered-host {
+  overflow: hidden;
+}
+
+.rankings-table-sticky-rank {
+  position: sticky;
+  transform: none;
+  -webkit-transform: none;
+  will-change: auto;
+  backface-visibility: visible;
+  -webkit-backface-visibility: visible;
+}
+
+.rankings-table-sticky-rank::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 100%;
+  width: 0.75rem;
+  background-color: var(--midnight-violet);
+  pointer-events: none;
+}
+
+.rankings-table-bordered-host .rankings-table-sticky-rank {
+  box-shadow: -3px 0 0 var(--midnight-violet);
+}
+
+.rankings-table-sticky-rank::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 100%;
+  width: 0.375rem;
+  background-color: var(--midnight-violet);
+  pointer-events: none;
+}
+
+/* User sticky column: tuck under rank (shared border + no translateZ seam) */
+.rankings-table-sticky-user {
+  position: sticky;
+  left: calc(2.25rem - 3px);
+  transform: none;
+  -webkit-transform: none;
+  will-change: auto;
+  backface-visibility: visible;
+  -webkit-backface-visibility: visible;
+  box-shadow: -3px 0 0 var(--midnight-violet);
+}
+
+.rankings-table-head-row .rankings-table-sticky-user {
+  z-index: 50;
+}
+
+.rankings-table-sticky-pts {
+  position: sticky;
+  right: 0;
+  transform: none;
+  -webkit-transform: none;
+  will-change: auto;
+  backface-visibility: visible;
+  -webkit-backface-visibility: visible;
+}
+
+.rankings-table-sticky-pts::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 100%;
+  width: 0.375rem;
+  background-color: var(--midnight-violet);
+  pointer-events: none;
+}
+
+.rankings-table-bordered-host .rankings-table-sticky-pts {
+  box-shadow: 3px 0 0 var(--midnight-violet);
+}
+
+.rankings-table-sticky-pts::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 100%;
+  width: 0.75rem;
+  background-color: var(--midnight-violet);
+  pointer-events: none;
+}
+
+.rankings-table-head-row .rankings-table-sticky-pts {
+  z-index: 50;
+}
+
+/* USER header: center label in visible column (sticky tucks left under rank) */
+.rankings-table-head-user {
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+  text-align: center;
+}
+
+.rankings-table-head-user > span {
+  /* sticky user tucks 3px under rank — nudge label to column center */
+  transform: translateX(2px);
+}
+
+@media (min-width: 640px) {
+  .rankings-table-head-user {
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+  }
+}
+
 /* Rankings table horizontal scroller — explicit pan-x so iOS does not axis-lock to page scroll */
 .rankings-table-scroller {
   overscroll-behavior-x: contain;

@@ -20,12 +20,15 @@ interface RankingsTableScrollAreaProps {
   children: ReactNode
   scrollerId?: string
   scrollerTestId?: string
+  /** When true, scroller fills remaining viewport height (weekly rankings). */
+  fillViewport?: boolean
 }
 
 export function RankingsTableScrollArea({
   children,
   scrollerId = 'rankings-table-scroller',
   scrollerTestId = 'rankings-table-scroller',
+  fillViewport = false,
 }: RankingsTableScrollAreaProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const trackRef = useRef<HTMLDivElement>(null)
@@ -137,13 +140,19 @@ export function RankingsTableScrollArea({
     window.addEventListener('pointercancel', onUp)
   }
 
+  const rootClass = fillViewport
+    ? 'rankings-this-week-shell flex w-full min-h-0 flex-1 flex-col'
+    : 'flex w-full flex-col'
+
   return (
-    <div className="flex w-full flex-col">
+    <div className={rootClass}>
       <div
         ref={scrollRef}
         id={scrollerId}
         data-testid={scrollerTestId}
-        className="rankings-table-scroller w-full overflow-x-auto"
+        className={`rankings-table-scroller w-full ${
+          fillViewport ? 'rankings-table-vert-scroll min-h-0 flex-1' : 'overflow-x-auto'
+        }`}
       >
         {children}
       </div>

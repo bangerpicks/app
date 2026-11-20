@@ -551,6 +551,14 @@ service cloud.firestore {
           && request.resource.data.updatedAt is timestamp;
         allow delete: if false;
       }
+
+      match /competitions/{competitionId} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow create: if isOwner(userId)
+          && request.resource.data.role == 'member'
+          && !exists(/databases/$(database)/documents/users/$(userId)/competitions/$(competitionId));
+        allow update, delete: if isAdmin() || isOwner(userId);
+      }
     }
 
     function cacheCreateOk(userId) {
@@ -679,6 +687,30 @@ service cloud.firestore {
         && !exists(cache)
         && existsAfter(cache)
         && cacheProvesNewEntry(cache);
+    }
+
+    function isCompetitionMember(competitionId) {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid)/competitions/$(competitionId));
+    }
+
+    function competitionReadable(competitionId) {
+      return isAdmin()
+        || (
+          resource.data.get('visibility', 'public') == 'public'
+          && resource.data.get('status', 'active') in ['active', 'paused']
+        )
+        || isCompetitionMember(competitionId);
+    }
+
+    match /competitions/{competitionId} {
+      allow read: if competitionReadable(competitionId);
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /joinCodes/{code} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdmin();
     }
 
     match /gameweeks/{gameweekId} {

@@ -8,13 +8,13 @@ import { RankingsTableScrollArea } from './RankingsTableScrollArea'
 interface RankingsTableProps {
   rankings: RankingEntry[]
   gameweekData: GameweekRankingData
-  latestCompletedGameweekId?: string | null
+  fillViewport?: boolean
 }
 
 export function RankingsTable({
   rankings,
   gameweekData,
-  latestCompletedGameweekId = null,
+  fillViewport = false,
 }: RankingsTableProps) {
   const t = useTranslations('rankings')
   const { fixtures } = gameweekData
@@ -37,21 +37,21 @@ export function RankingsTable({
   }
 
   return (
-    <RankingsTableScrollArea>
+    <RankingsTableScrollArea fillViewport={fillViewport}>
       <table className="w-full border-collapse min-w-full border-separate border-spacing-0">
         {/* Header */}
         <thead className="bg-midnight-violet">
-          <tr className="border-b-2 border-ivory/20 bg-midnight-violet">
+          <tr className="rankings-table-head-row border-b-2 border-ivory/20 bg-midnight-violet">
               {/* Rank Column */}
-              <th className="sticky left-0 z-[25] bg-midnight-violet px-2 py-2.5 text-left w-12">
+              <th className="rankings-table-head-cell rankings-table-head-cell--edge rankings-table-sticky-rank sticky left-0 bg-midnight-violet px-0 py-2.5 text-center w-9 min-w-9">
                 <span className="text-ivory/70 text-xs font-semibold uppercase tracking-wider">
                   {t('rank')}
                 </span>
               </th>
 
               {/* User Column */}
-              <th className="sticky left-12 z-[25] bg-midnight-violet px-2 py-2 text-left w-[96px] min-w-[96px] max-w-[96px] sm:w-auto sm:min-w-[140px] sm:max-w-none">
-                <span className="text-ivory/70 text-xs font-semibold uppercase tracking-wider">
+              <th className="rankings-table-head-cell rankings-table-head-cell--edge rankings-table-sticky-user rankings-table-head-user sticky z-10 bg-midnight-violet px-1 py-2 text-center w-[96px] min-w-[96px] max-w-[96px] sm:w-auto sm:min-w-[140px] sm:max-w-none sm:px-2">
+                <span className="block text-ivory/70 text-xs font-semibold uppercase tracking-wider">
                   {t('user')}
                 </span>
               </th>
@@ -60,7 +60,7 @@ export function RankingsTable({
               {displayedFixtures.map((fixture, index) => (
                 <th
                   key={fixture?.fixtureId || `empty-${index}`}
-                  className="px-2 py-3 text-center min-w-[60px] bg-midnight-violet"
+                  className="rankings-table-head-cell px-2 py-3 text-center min-w-[60px] bg-midnight-violet"
                 >
                   {fixture ? (
                     <div className="flex flex-col items-center gap-1">
@@ -108,8 +108,8 @@ export function RankingsTable({
               ))}
 
               {/* Points Column */}
-              <th className="sticky right-0 z-[25] px-2 py-2 text-right bg-midnight-violet w-11 sm:w-14">
-                <span className="text-ivory/70 text-xs font-semibold uppercase tracking-wider">
+              <th className="rankings-table-head-cell rankings-table-head-cell--edge rankings-table-sticky-pts sticky right-0 bg-midnight-violet px-0 py-2 text-center w-9 min-w-9 sm:w-11 sm:min-w-11">
+                <span className="text-ivory/70 text-[10px] sm:text-xs font-semibold uppercase tracking-wide">
                   {t('points')}
                 </span>
               </th>
@@ -118,33 +118,20 @@ export function RankingsTable({
 
           {/* Body */}
           <tbody>
-            {rankings.map((entry, rowIndex) => {
-              const showLastWeekBadge =
-                latestCompletedGameweekId &&
-                entry.lastCompletedGameweekId === latestCompletedGameweekId &&
-                (entry.lastWeekPlace === 1 || entry.lastWeekPlace === 2 || entry.lastWeekPlace === 3)
-              const lastWeekBadgeKey =
-                entry.lastWeekPlace === 1
-                  ? 'lastWeekChampion'
-                  : entry.lastWeekPlace === 2
-                    ? 'lastWeek2nd'
-                    : entry.lastWeekPlace === 3
-                      ? 'lastWeek3rd'
-                      : null
-              return (
+            {rankings.map((entry) => (
               <tr
                 key={entry.userId}
                 className="border-b border-ivory/10 [@media(hover:hover)]:hover:bg-ivory/5"
               >
                 {/* Rank */}
-                <td className="sticky left-0 z-10 bg-midnight-violet px-2 py-2 w-12">
-                  <span className="text-ivory font-bold text-sm">
+                <td className="rankings-table-sticky-rank sticky left-0 z-10 bg-midnight-violet px-0 py-2 text-center w-9 min-w-9">
+                  <span className="text-ivory font-bold text-sm tabular-nums">
                     {entry.rank}
                   </span>
                 </td>
 
                 {/* User */}
-                <td className="sticky left-12 z-10 bg-midnight-violet px-2 py-2 w-[96px] min-w-[96px] max-w-[96px] sm:w-auto sm:min-w-[140px] sm:max-w-none">
+                <td className="rankings-table-sticky-user sticky z-10 bg-midnight-violet pl-0 pr-2 py-2 w-[96px] min-w-[96px] max-w-[96px] sm:w-auto sm:min-w-[140px] sm:max-w-none sm:pl-1">
                   <div className="flex items-center gap-1.5 sm:gap-2">
                     <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-ivory/10 flex-shrink-0 overflow-hidden flex items-center justify-center">
                       {entry.photoURL ? (
@@ -171,16 +158,6 @@ export function RankingsTable({
                       >
                         {entry.displayName}
                       </span>
-                      {showLastWeekBadge && lastWeekBadgeKey && (
-                        <>
-                          <span className="text-[10px] sm:hidden font-medium text-amber-glow/90 leading-tight">
-                            {t(`${lastWeekBadgeKey}Short`)}
-                          </span>
-                          <span className="hidden sm:inline text-xs font-medium text-amber-glow/90">
-                            {t(lastWeekBadgeKey)}
-                          </span>
-                        </>
-                      )}
                     </div>
                   </div>
                 </td>
@@ -243,13 +220,13 @@ export function RankingsTable({
                 })}
 
                 {/* Points */}
-                <td className="sticky right-0 z-10 bg-midnight-violet px-2 py-2 text-right w-11 sm:w-14">
-                  <span className="text-lime-yellow font-bold text-sm">
+                <td className="rankings-table-sticky-pts sticky right-0 z-10 bg-midnight-violet px-0 py-2 text-center w-9 min-w-9 sm:w-11 sm:min-w-11">
+                  <span className="text-lime-yellow font-bold text-xs sm:text-sm tabular-nums">
                     {entry.weeklyPoints ?? entry.points}
                   </span>
                 </td>
               </tr>
-            )})}
+            ))}
           </tbody>
         </table>
     </RankingsTableScrollArea>

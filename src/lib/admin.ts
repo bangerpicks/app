@@ -42,6 +42,7 @@ export type DashboardFirestoreReadOptions = {
 import { isFlagshipGameweek } from './gameweek-constants'
 import { getActiveSeason } from './seasons'
 import { shouldAppendGameweekToSeason } from './season-standings.mjs'
+import { competitionIdForGameweek, DEFAULT_FLAGSHIP_ID } from './competition-catalog.mjs'
 import type { GameweekFixtureEditorial } from '@/types/admin'
 import type { MarketOddsSnapshot } from '@/types/dashboard'
 
@@ -173,6 +174,7 @@ export interface AdminGameweekData {
   endAt?: Timestamp
   podiumAwardedAt?: Timestamp
   seasonId?: string
+  competitionId?: string
 }
 
 /**
@@ -263,6 +265,7 @@ export interface CreateGameweekData {
   openAt?: Date
   lockAt?: Date
   endAt?: Date
+  competitionId?: string
 }
 
 /**
@@ -351,6 +354,9 @@ export async function createGameweek(data: CreateGameweekData): Promise<string> 
       }),
       ...(data.endAt !== undefined && { endAt: Timestamp.fromDate(data.endAt) }),
       ...(seasonId !== undefined && { seasonId }),
+      competitionId:
+        data.competitionId?.trim() ||
+        (isFlagshipGameweek(data) ? DEFAULT_FLAGSHIP_ID : undefined),
     }
 
     if (data.lockAt) {
@@ -363,6 +369,18 @@ export async function createGameweek(data: CreateGameweekData): Promise<string> 
     }
 
     await setDoc(doc(db, 'gameweeks', gameweekId), gameweekData)
+
+    if (data.status === 'active' && gameweekData.competitionId) {
+      const compRef = doc(db, 'competitions', gameweekData.competitionId)
+      const compSnap = await getDoc(compRef)
+      if (compSnap.exists()) {
+        await updateDoc(compRef, {
+          activeGameweekId: gameweekId,
+          updatedAt: Timestamp.now(),
+        })
+      }
+    }
+
     return gameweekId
   } catch (error) {
     console.error('Error creating gameweek:', error)
@@ -454,6 +472,10 @@ export async function updateGameweek(
       updateData.endAt = Timestamp.fromDate(updates.endAt)
     }
 
+    if (updates.competitionId !== undefined) {
+      updateData.competitionId = updates.competitionId.trim()
+    }
+
     const gwType = updates.type ?? gameweekDoc.data().type
 
     if (updates.status === 'active' && isFlagshipGameweek({ type: gwType })) {
@@ -461,6 +483,29 @@ export async function updateGameweek(
     }
 
     await updateDoc(gameweekRef, updateData)
+
+    const nextStatus = updates.status ?? gameweekDoc.data().status
+    if (nextStatus === 'active') {
+      const prior = gameweekDoc.data()
+      const competitionId =
+        (updateData.competitionId as string | undefined) ??
+        (prior.competitionId as string | undefined) ??
+        competitionIdForGameweek({
+          competitionId: prior.competitionId,
+          type: gwType,
+          gameweekId,
+        })
+      if (competitionId) {
+        const compRef = doc(db, 'competitions', competitionId)
+        const compSnap = await getDoc(compRef)
+        if (compSnap.exists()) {
+          await updateDoc(compRef, {
+            activeGameweekId: gameweekId,
+            updatedAt: Timestamp.now(),
+          })
+        }
+      }
+    }
   } catch (error) {
     console.error('Error updating gameweek:', error)
     throw error

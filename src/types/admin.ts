@@ -51,6 +51,8 @@ export interface AdminGameweekData {
   lockAt?: Timestamp
   endAt?: Timestamp
   podiumAwardedAt?: Timestamp
+  seasonId?: string
+  competitionId?: string
 }
 
 /**

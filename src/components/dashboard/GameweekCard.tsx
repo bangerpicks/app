@@ -1,6 +1,6 @@
 'use client'
 
-import { Users } from 'lucide-react'
+import { Globe, Medal, Trophy, Users } from 'lucide-react'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import { GameweekData, MatchCardData } from '@/types/dashboard'
@@ -17,6 +17,10 @@ import {
   useGameweekFixtures,
 } from '@/hooks/useGameweekFixtures'
 import { useGameweekHasPicks } from '@/hooks/useGameweekHasPicks'
+import {
+  resolveGameweekCardBranding,
+  type GameweekCardIcon,
+} from '@/lib/gameweek-card-branding'
 
 interface GameweekCardProps {
   gameweek: GameweekData
@@ -31,6 +35,15 @@ interface GameweekCardProps {
   showMatchPreviews?: boolean
   /** When set (picks page), phase + pills use this list instead of a second Firestore load. */
   fixtureMatches?: MatchCardData[]
+}
+
+const CARD_ICONS: Record<
+  GameweekCardIcon,
+  typeof Globe
+> = {
+  globe: Globe,
+  trophy: Trophy,
+  medal: Medal,
 }
 
 const PHASE_LABEL_KEY: Record<
@@ -287,6 +300,20 @@ export function GameweekCard({
     slate,
   ])
 
+  const branding = useMemo(
+    () =>
+      resolveGameweekCardBranding(gameweek, {
+        flagshipTitle: t('gameweekBrandFlagshipTitle'),
+        flagshipSubtitle: t('gameweekBrandFlagshipSubtitle'),
+        leagueSubtitle: t('gameweekBrandLeagueSubtitle'),
+        cupSubtitle: t('gameweekBrandCupSubtitle'),
+        edition: (week) => t('gameweekBrandEdition', { week }),
+      }),
+    [gameweek, t]
+  )
+
+  const HeaderIcon = CARD_ICONS[branding.icon]
+
   const isPickPhaseActive = phase === 'OPEN' || phase === 'CLOSING_SOON'
   const headerClass = isPickPhaseActive ? 'gameweek-card-header-glow' : 'gameweek-card-header-slot'
 
@@ -308,11 +335,29 @@ export function GameweekCard({
   return (
     <div className="w-full gameweek-card-slot">
       <div
-        className={`bg-lime-yellow rounded-t-[10px] px-4 py-3 flex items-center justify-center shadow-sm ${headerClass}`}
+        className={`bg-lime-yellow rounded-t-[10px] px-3 py-3 sm:px-4 sm:py-3.5 flex items-center gap-3 shadow-sm ${headerClass}`}
       >
-        <h2 className="text-2xl font-black italic tracking-widest text-midnight-violet text-center uppercase">
-          {gameweek.name}
-        </h2>
+        <div
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-midnight-violet/15 bg-midnight-violet/10"
+          aria-hidden
+        >
+          <HeaderIcon className="h-6 w-6 text-midnight-violet" strokeWidth={2.25} />
+        </div>
+        <div className="min-w-0 flex-1 text-left">
+          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+            <h2 className="text-base sm:text-lg font-black leading-tight text-midnight-violet">
+              {branding.title}
+            </h2>
+            {branding.edition ? (
+              <span className="text-[11px] font-bold uppercase tracking-wide text-midnight-violet/65">
+                {branding.edition}
+              </span>
+            ) : null}
+          </div>
+          <p className="mt-0.5 text-xs sm:text-sm font-medium leading-snug text-midnight-violet/80 line-clamp-2">
+            {branding.subtitle}
+          </p>
+        </div>
       </div>
 
       <div

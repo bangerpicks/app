@@ -184,6 +184,9 @@ export async function transformGameweekData(
     startDate: adminGameweek.startDate?.toDate(),
     endDate: adminGameweek.endDate?.toDate(),
     forceOpenForTesting: adminGameweek.forceOpenForTesting,
+    type: adminGameweek.type,
+    description: adminGameweek.description,
+    weekNumber: adminGameweek.weekNumber,
   }
 
   // Transform fixtures to match GameweekRankingData structure

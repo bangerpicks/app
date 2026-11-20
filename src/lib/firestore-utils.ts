@@ -32,7 +32,35 @@ export async function withTimeout<T>(
 
 export function isNonRetryableFirestoreError(error: unknown): boolean {
   const code = (error as { code?: string })?.code
-  return code === 'permission-denied' || code === 'not-found'
+  if (code === 'permission-denied' || code === 'not-found') {
+    return true
+  }
+  const message = error instanceof Error ? error.message : String(error)
+  return /insufficient permissions|permission.denied/i.test(message)
+}
+
+/** True when the Firestore rules block a competitions catalog read (undeployed rules or private doc). */
+export function isFirestoreCatalogPermissionError(error: unknown): boolean {
+  return isNonRetryableFirestoreError(error)
+}
+
+/** Catalog/index/rules not ready — safe to fall back to gameweek synthesis. */
+export function isFirestoreCatalogSkippableError(error: unknown): boolean {
+  const code = (error as { code?: string })?.code
+  if (
+    code === 'permission-denied' ||
+    code === 'not-found' ||
+    code === 'failed-precondition' ||
+    code === 'unavailable'
+  ) {
+    return true
+  }
+  const message = error instanceof Error ? error.message : String(error)
+  return (
+    /insufficient permissions|permission.denied/i.test(message) ||
+    /requires an index/i.test(message) ||
+    /index is currently building/i.test(message)
+  )
 }
 
 /**

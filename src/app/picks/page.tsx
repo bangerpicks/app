@@ -30,13 +30,8 @@ import {
 } from '@/lib/match-card-display'
 import { marketOddsFromFirestoreData } from '@/lib/market-odds-firestore'
 import type { Locale } from '@/i18n/config'
-import {
-  fetchCurrentGameweek,
-  mapAdminGameweekToDashboardStatus,
-  resolvePlayerCountFromGameweek,
-  getEffectiveDeadline,
-  LoadBudget,
-} from '@/lib/gameweek-selection'
+import { fetchCurrentGameweek, resolvePlayerCountFromGameweek, LoadBudget } from '@/lib/gameweek-selection'
+import { convertAdminGameweekToGameweekData } from '@/lib/convert-gameweek-data'
 import {
   readDashboardSessionCache,
   writeDashboardSessionCache,
@@ -46,20 +41,6 @@ import {
   shouldShowDashboardStaleBanner,
   staleBannerShowsRetry,
 } from '@/lib/dashboard-load-state'
-
-function convertGameweekData(adminGameweek: AdminGameweekData): GameweekData {
-  const lock = getEffectiveDeadline(adminGameweek)
-  return {
-    gameweekId: adminGameweek.gameweekId,
-    name: adminGameweek.name,
-    playerCount: resolvePlayerCountFromGameweek(adminGameweek) ?? 0,
-    status: mapAdminGameweekToDashboardStatus(adminGameweek),
-    deadline: lock?.toDate(),
-    startDate: adminGameweek.startDate?.toDate(),
-    endDate: adminGameweek.endDate?.toDate(),
-    forceOpenForTesting: adminGameweek.forceOpenForTesting,
-  }
-}
 
 function convertFormString(formString: string): FormResult[] {
   if (!formString) return []
@@ -242,7 +223,7 @@ function PicksPageContent() {
         if (abortController.signal.aborted) return
 
         if (fixtures.length === 0) {
-          setGameweek(convertGameweekData(targetGameweek))
+          setGameweek(convertAdminGameweekToGameweekData(targetGameweek))
           setGameweekId(targetGameweek.gameweekId)
           setEmptyReason('no-fixtures')
           return
@@ -271,7 +252,7 @@ function PicksPageContent() {
 
         if (abortController.signal.aborted) return
 
-        const dashboardGameweek = convertGameweekData(targetGameweek)
+        const dashboardGameweek = convertAdminGameweekToGameweekData(targetGameweek)
         setGameweekId(targetGameweek.gameweekId)
         setGameweek(dashboardGameweek)
         setInitialMatches(sortedMatches)

@@ -9,6 +9,8 @@ interface AppShellProps {
   username?: string
   userPhotoUrl?: string
   mainClassName?: string
+  /** Optional shell wrapper classes (e.g. lock viewport height on rankings). */
+  shellClassName?: string
   banner?: ReactNode
   containerRef?: Ref<HTMLDivElement>
   footer?: ReactNode
@@ -22,6 +24,7 @@ export function AppShell({
   username,
   userPhotoUrl,
   mainClassName,
+  shellClassName,
   banner,
   containerRef,
   footer,
@@ -29,7 +32,9 @@ export function AppShell({
   return (
     <div
       ref={containerRef}
-      className="min-h-[100dvh] min-h-screen bg-midnight-violet flex flex-col"
+      className={`min-h-[100dvh] min-h-screen bg-midnight-violet flex flex-col min-h-0 ${
+        shellClassName ?? ''
+      }`}
     >
       <Header username={username} userPhotoUrl={userPhotoUrl} />
       {banner}

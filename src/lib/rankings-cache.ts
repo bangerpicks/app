@@ -4,10 +4,11 @@
 
 import { GameweekRankingData, RankingEntry } from '@/types/dashboard'
 import { SeasonRankingEntry } from '@/lib/seasons'
+import type { CompetitionTrackId } from '@/lib/competition-tracks'
 
 export const RANKINGS_SESSION_CACHE_TTL_MS = 10 * 60 * 1000
-export const RANKINGS_SESSION_CACHE_KEY_PREFIX = 'banger-picks-rankings-cache:v1'
-const CACHE_VERSION = 1
+export const RANKINGS_SESSION_CACHE_KEY_PREFIX = 'banger-picks-rankings-cache:v2'
+const CACHE_VERSION = 2
 
 type SerializedGameweekRankingData = {
   gameweek: Omit<GameweekRankingData['gameweek'], 'deadline' | 'startDate' | 'endDate'> & {
@@ -24,6 +25,8 @@ export interface RankingsSessionCache {
   locale: string
   uid: string | null
   currentGameweekId: string | null
+  trackId?: CompetitionTrackId
+  competitionId?: string
   gameweekData?: SerializedGameweekRankingData
   weeklyRankings?: RankingEntry[]
   seasonTitle?: string

@@ -8,6 +8,7 @@ import { GameweekForm } from '@/components/admin/GameweekForm'
 import { ShopItemList } from '@/components/admin/ShopItemList'
 import { ShopItemForm } from '@/components/admin/ShopItemForm'
 import { Settings } from '@/components/admin/Settings'
+import { CompetitionList } from '@/components/admin/CompetitionList'
 import { ToastContainer, useToast } from '@/components/admin/Toast'
 import { Plus, Loader2, Shield, ShoppingBag } from 'lucide-react'
 
@@ -188,6 +189,8 @@ export default function AdminPage() {
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 py-8 space-y-12">
         <Settings />
+
+        <CompetitionList />
         
         {/* Gameweeks Section */}
         <div>
