@@ -2,12 +2,91 @@
  * User utility functions for Firestore operations
  */
 
-import { doc, getDoc, setDoc, updateDoc, serverTimestamp, Timestamp, collection, query, orderBy, limit, getDocs, where, writeBatch } from 'firebase/firestore'
+import {
+  doc,
+  getDoc,
+  getDocFromCache,
+  setDoc,
+  updateDoc,
+  serverTimestamp,
+  Timestamp,
+  collection,
+  query,
+  orderBy,
+  limit,
+  getDocs,
+  where,
+  writeBatch,
+} from 'firebase/firestore'
 import { shouldSkipEnsureUserProfileWrite } from './user-profile-save.mjs'
 import { User } from 'firebase/auth'
 import { db } from './firebase'
 import { RankingEntry } from '@/types/dashboard'
-import { withTimeout } from './firestore-utils'
+import { readWithTimeoutAndRetry, withTimeout } from './firestore-utils'
+
+const USER_PROFILE_READ_TIMEOUT_MS = 12_000
+const userDocInflight = new Map<string, Promise<UserDocument | null>>()
+
+function logUserProfileReadError(error: unknown): void {
+  const message = error instanceof Error ? error.message : String(error)
+  if (/timed out/i.test(message)) {
+    console.warn(
+      'User profile read timed out; using Auth fallbacks. Check network, ad blockers, or VPN if this persists.'
+    )
+    return
+  }
+  console.error('Error loading user profile:', error)
+}
+
+async function fetchUserDocumentData(uid: string): Promise<UserDocument | null> {
+  const userRef = doc(db, 'users', uid)
+  try {
+    const cached = await getDocFromCache(userRef)
+    if (cached.exists()) {
+      return cached.data() as UserDocument
+    }
+  } catch {
+    // not in local cache yet
+  }
+
+  const userDoc = await readWithTimeoutAndRetry(() => getDoc(userRef), {
+    timeoutMs: USER_PROFILE_READ_TIMEOUT_MS,
+    timeoutMessage: 'Failed to load user profile - request timed out',
+    maxRetries: 2,
+    baseDelayMs: 800,
+  })
+
+  return userDoc.exists() ? (userDoc.data() as UserDocument) : null
+}
+
+/**
+ * Single deduped users/{uid} read for header, onboarding, and display name.
+ */
+export async function loadUserDocument(
+  user: User | null | undefined
+): Promise<UserDocument | null> {
+  if (!user?.uid) {
+    return null
+  }
+
+  const { uid } = user
+  const pending = userDocInflight.get(uid)
+  if (pending) {
+    return pending
+  }
+
+  const request = fetchUserDocumentData(uid)
+    .catch((error) => {
+      logUserProfileReadError(error)
+      return null
+    })
+    .finally(() => {
+      userDocInflight.delete(uid)
+    })
+
+  userDocInflight.set(uid, request)
+  return request
+}
 
 /**
  * User document structure in Firestore
@@ -62,58 +141,28 @@ export interface UserDocument {
  * @returns Promise<string> - The user's display name
  */
 export async function getUserDisplayName(user: User): Promise<string> {
-  try {
-    if (!user || !user.uid) {
-      return user?.displayName || 'Player'
-    }
-
-    const userRef = doc(db, 'users', user.uid)
-    const userDoc = await withTimeout(
-      getDoc(userRef),
-      10000,
-      'Failed to load user display name - request timed out'
-    )
-
-    if (userDoc.exists()) {
-      const data = userDoc.data() as UserDocument
-      return data.displayName || user.displayName || 'Player'
-    }
-
-    // Fallback to Auth displayName or 'Player'
-    return user.displayName || 'Player'
-  } catch (error) {
-    console.error('Error fetching user display name:', error)
-    // Fallback to Auth displayName or 'Player'
-    return user.displayName || 'Player'
+  if (!user?.uid) {
+    return user?.displayName || 'Player'
   }
+
+  const data = await loadUserDocument(user)
+  return data?.displayName || user.displayName || 'Player'
 }
 
 /**
  * Profile image for header / avatar chrome (favorite player redemption photo wins).
  */
 export async function getUserHeaderPhotoURL(user: User): Promise<string | null> {
-  try {
-    if (!user?.uid) {
-      return user?.photoURL ?? null
-    }
-
-    const userRef = doc(db, 'users', user.uid)
-    const userDoc = await withTimeout(
-      getDoc(userRef),
-      10000,
-      'Failed to load user photo - request timed out'
-    )
-
-    if (userDoc.exists()) {
-      const data = userDoc.data() as UserDocument
-      return data.favoritePlayer?.photo || data.photoURL || user.photoURL || null
-    }
-
-    return user.photoURL ?? null
-  } catch (error) {
-    console.error('Error fetching user header photo:', error)
-    return user.photoURL ?? null
+  if (!user?.uid) {
+    return user?.photoURL ?? null
   }
+
+  const data = await loadUserDocument(user)
+  if (data) {
+    return data.favoritePlayer?.photo || data.photoURL || user.photoURL || null
+  }
+
+  return user.photoURL ?? null
 }
 
 /**
@@ -568,30 +617,12 @@ export async function markOnboardingIntroSeen(user: User): Promise<void> {
  * @returns Promise<boolean> - True if user has seen onboarding, false otherwise
  */
 export async function hasSeenOnboardingIntro(user: User): Promise<boolean> {
-  try {
-    if (!user || !user.uid) {
-      return false
-    }
-
-    const userRef = doc(db, 'users', user.uid)
-    const userDoc = await withTimeout(
-      getDoc(userRef),
-      10000,
-      'Failed to check onboarding status - request timed out'
-    )
-
-    if (userDoc.exists()) {
-      const data = userDoc.data() as UserDocument
-      return data.hasSeenOnboardingIntro === true
-    }
-
-    // Return false if document doesn't exist
-    return false
-  } catch (error) {
-    console.error('Error checking onboarding intro status:', error)
-    // Return false on error
+  if (!user?.uid) {
     return false
   }
+
+  const data = await loadUserDocument(user)
+  return data?.hasSeenOnboardingIntro === true
 }
 
 /**

@@ -306,12 +306,48 @@ td[class*="sticky"] {
     width: 0;
     height: 0;
   }
+
+  /* Weekly table: vertical touch only; horizontal via fixed custom track (avoids iOS 2D axis-lock / up-scroll stuck) */
+  .rankings-table-scroller.rankings-table-vert-scroll {
+    touch-action: pan-y;
+  }
 }
 
 .rankings-table-scroll-track-shell {
   touch-action: none;
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
+}
+
+/* Vertical scrubber gutter (weekly viewport, mobile) — beside table, not over PTS */
+.rankings-table-scroll-v-track-shell {
+  touch-action: none;
+  border-left: 1px solid rgba(253, 255, 240, 0.1);
+  background-color: rgba(36, 8, 48, 0.92);
+}
+
+.rankings-table-scroll-thumb--vertical {
+  background-image:
+    linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.28) 0%,
+      transparent 38%,
+      rgba(36, 8, 48, 0.14) 100%
+    ),
+    repeating-linear-gradient(
+      180deg,
+      rgba(36, 8, 48, 0.11) 0 1px,
+      transparent 1px 4px
+    );
+}
+
+.rankings-table-scroll-thumb-grip--vertical {
+  flex-direction: column;
+}
+
+.rankings-table-scroll-thumb-grip--vertical span {
+  width: 10px;
+  height: 3px;
 }
 
 .rankings-table-scroll-thumb {

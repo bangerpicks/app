@@ -364,8 +364,10 @@ export function RankingsClient({
 
       {isThisWeekView && (
         <div
-          className={`w-full max-w-2xl lg:max-w-4xl flex flex-col min-h-0 ${
-            lockWeeklyViewport ? 'flex-1' : ''
+          className={`flex w-full min-h-0 flex-col ${
+            lockWeeklyViewport
+              ? 'max-w-none flex-1 -mx-4 sm:-mx-5'
+              : 'max-w-2xl lg:max-w-4xl'
           }`}
         >
           {gameweekData && (
@@ -440,7 +442,7 @@ export function RankingsClient({
                 }`}
               >
                 {showWeeklyTable ? (
-                  <div className="rankings-table-bordered-host rankings-this-week-shell w-full min-h-0 flex-1 rounded-b-lg border-2 border-t-0 border-ivory/20 bg-midnight-violet">
+                  <div className="rankings-table-bordered-host rankings-this-week-shell w-full min-h-0 flex-1 border-2 border-t-0 border-ivory/20 bg-midnight-violet sm:rounded-b-lg">
                     <RankingsTable
                       rankings={weeklyRankings!}
                       gameweekData={gameweekData}

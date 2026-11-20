@@ -1,7 +1,31 @@
 const { spawn } = require('child_process');
+const fs = require('fs');
 const net = require('net');
 const path = require('path');
 const os = require('os');
+
+const projectRoot = path.join(__dirname, '..');
+const devLockFile = path.join(projectRoot, '.dev-server.lock');
+
+function writeDevLock(port) {
+  try {
+    fs.writeFileSync(
+      devLockFile,
+      `pid=${process.pid} port=${port}\n`,
+      'utf8'
+    );
+  } catch (error) {
+    console.warn('Could not write .dev-server.lock:', error.message);
+  }
+}
+
+function removeDevLock() {
+  try {
+    fs.unlinkSync(devLockFile);
+  } catch {
+    // already removed
+  }
+}
 
 const DEFAULT_PORT = 3000;
 const FALLBACK_PORTS = [3001, 3002, 3003, 3004, 3005];
@@ -71,8 +95,9 @@ async function main() {
   console.log('\x1b[33m%s\x1b[0m', `  Network:  http://${ip}:${port}`);
   console.log('\x1b[36m%s\x1b[0m', '═══════════════════════════════════════════════════\n');
 
+  writeDevLock(port);
+
   // Use the project's installed Next.js (avoid `npx next`, which can fetch a newer major)
-  const projectRoot = path.join(__dirname, '..');
   const nextCli = path.join(
     projectRoot,
     'node_modules',
@@ -97,8 +122,20 @@ async function main() {
     process.exit(1);
   });
 
-  nextDev.on('exit', (code) => {
+  const shutdown = (code) => {
+    removeDevLock();
     process.exit(code ?? 1);
+  };
+
+  nextDev.on('exit', (code) => {
+    shutdown(code);
+  });
+
+  process.on('SIGINT', () => {
+    nextDev.kill('SIGINT');
+  });
+  process.on('SIGTERM', () => {
+    nextDev.kill('SIGTERM');
   });
 }
 

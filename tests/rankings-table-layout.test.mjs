@@ -33,6 +33,8 @@ describe('RankingsTable mobile sticky geometry', () => {
     assert.match(scrollAreaSource, /fillViewport/)
     assert.match(scrollAreaSource, /rankings-table-vert-scroll/)
     assert.match(rankingsClient, /lockWeeklyViewport/)
+    assert.match(rankingsClient, /-mx-4 sm:-mx-5/)
+    assert.match(rankingsClient, /max-w-none flex-1/)
     assert.match(rankingsClient, /fillViewport/)
     assert.doesNotMatch(rankingsClient, /ReferralPopup/)
     const tabsIdx = rankingsClient.indexOf('rankings-view-tabs')
@@ -59,8 +61,23 @@ describe('RankingsTable mobile sticky geometry', () => {
     assert.match(scrollAreaSource, /scrollerTestId = 'rankings-table-scroller'/)
     assert.match(scrollAreaSource, /rankings-table-scroller/)
     assert.match(globals, /\.rankings-table-scroller[\s\S]*touch-action: pan-x pan-y/)
+    assert.match(
+      globals,
+      /@media \(max-width: 1023px\)[\s\S]*\.rankings-table-scroller\.rankings-table-vert-scroll[\s\S]*touch-action: pan-y/
+    )
     assert.match(globals, /overscroll-behavior-x: contain/)
     assert.match(globals, /-webkit-overflow-scrolling: touch/)
+  })
+
+  it('exposes a vertical side scrubber for weekly viewport on mobile', () => {
+    assert.match(scrollAreaSource, /rankings-table-vert-scrollbar/)
+    assert.match(scrollAreaSource, /aria-orientation="vertical"/)
+    assert.match(scrollAreaSource, /scrollFromVertTrackPointer/)
+    assert.doesNotMatch(
+      scrollAreaSource,
+      /rankings-table-scroll-v-track-shell[\s\S]*absolute inset-y-0 right-0/
+    )
+    assert.match(globals, /\.rankings-table-scroll-v-track-shell/)
   })
 
   it('limits row highlight to devices with hover', () => {

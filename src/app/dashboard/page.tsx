@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useTranslations } from 'next-intl'
 import { useAuth } from '@/lib/AuthProvider'
-import { getUserDisplayName, hasSeenOnboardingIntro } from '@/lib/users'
+import { loadUserDocument } from '@/lib/users'
 import { DashboardClient } from '@/components/dashboard/DashboardClient'
 import { OnboardingIntro } from '@/components/dashboard/OnboardingIntro'
 import { AppShell } from '@/components/dashboard/AppShell'
@@ -60,27 +60,23 @@ export default function DashboardPage() {
     const abortController = new AbortController()
 
     if (user) {
-      getUserDisplayName(user)
-        .then((displayName) => {
-          if (abortController.signal.aborted) return
-          setUsername(displayName)
-        })
-        .catch(() => {
-          if (abortController.signal.aborted) return
-          setUsername(user.displayName || undefined)
-        })
+      const needsDisplayName =
+        !user.displayName || user.displayName.trim() === 'Player'
 
-      const needsDisplayName = !user.displayName || user.displayName.trim() === 'Player'
-
-      hasSeenOnboardingIntro(user)
-        .then((hasSeen) => {
+      loadUserDocument(user)
+        .then((profile) => {
           if (abortController.signal.aborted) return
+          setUsername(
+            profile?.displayName || user.displayName || undefined
+          )
+          const hasSeen = profile?.hasSeenOnboardingIntro === true
           if (!hasSeen || needsDisplayName) {
             setShowOnboarding(true)
           }
         })
         .catch(() => {
           if (abortController.signal.aborted) return
+          setUsername(user.displayName || undefined)
           if (needsDisplayName) {
             setShowOnboarding(true)
           }
