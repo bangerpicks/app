@@ -8,6 +8,7 @@ import {
   logApiFootballRateLimitWarning,
 } from './api-football-client'
 import type { APIFootballFixture } from './api-football-types'
+import { determineMatchWinner, getRegulationScore } from './match-result'
 import {
   extractFixturePollContext,
   fixtureNeedsLiveApiPoll,
@@ -64,23 +65,6 @@ function resolveApiFootballKey(): string {
   throw new Error(
     'API_FOOTBALL_KEY not configured. Run: firebase functions:secrets:set API_FOOTBALL_KEY, then redeploy functions.'
   )
-}
-
-/**
- * Determine match winner from fixture results
- */
-function determineMatchWinner(fixture: APIFootballFixture): 'H' | 'D' | 'A' | null {
-  const status = fixture.fixture.status.short
-  if (status !== 'FT' && status !== 'AET' && status !== 'PEN') {
-    return null
-  }
-
-  const homeGoals = fixture.goals.home ?? 0
-  const awayGoals = fixture.goals.away ?? 0
-
-  if (homeGoals > awayGoals) return 'H'
-  if (homeGoals < awayGoals) return 'A'
-  return 'D'
 }
 
 async function fixtureHasUnawardedPredictions(db: admin.firestore.Firestore, fixtureId: number): Promise<boolean> {
@@ -369,10 +353,12 @@ export const autoScoring = functions
               continue
             }
 
+            // Scored on the 90-minute result; extra time and penalties don't count.
             const winner = determineMatchWinner(fixtureResult)
             if (!winner) {
               continue
             }
+            const regulationScore = getRegulationScore(fixtureResult)
 
             try {
               const predictionsRef = db.collection('predictions').doc(String(fixtureId)).collection('entries')
@@ -416,13 +402,13 @@ export const autoScoring = functions
                   points: points,
                   correct: isCorrect,
                   status: fixtureResult.fixture.status.short,
-                  result:
-                    fixtureResult.goals.home !== null && fixtureResult.goals.away !== null
-                      ? {
-                          homeGoals: fixtureResult.goals.home,
-                          awayGoals: fixtureResult.goals.away,
-                        }
-                      : null,
+                  // The 90-minute score the pick was scored on (not the AET/PEN final).
+                  result: regulationScore
+                    ? {
+                        homeGoals: regulationScore.home,
+                        awayGoals: regulationScore.away,
+                      }
+                    : null,
                 })
 
                 batchCount++
