@@ -39,3 +39,31 @@ test('league type is not selected as flagship current week', () => {
   const picked = pickCurrentFlagshipGameweek(active, [], active)
   assert.equal(picked, null)
 })
+
+function isGameweekPicksWindowOpen(gw) {
+  if (gw.status === 'UPCOMING' || gw.status === 'COMPLETED') return false
+  if (gw.forceOpenForTesting === true) return true
+  if (!gw.deadline) return false
+  return Date.now() < gw.deadline.getTime()
+}
+
+test('isGameweekPicksWindowOpen uses deadline not stale CLOSED status', () => {
+  const future = new Date(Date.now() + 60 * 60 * 1000)
+  assert.equal(
+    isGameweekPicksWindowOpen({
+      status: 'CLOSED',
+      deadline: future,
+    }),
+    true
+  )
+})
+
+test('isGameweekPicksWindowOpen respects force open', () => {
+  assert.equal(
+    isGameweekPicksWindowOpen({
+      status: 'CLOSED',
+      forceOpenForTesting: true,
+    }),
+    true
+  )
+})

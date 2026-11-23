@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { ShopItem, ShopItemFilters } from '@/types/shop'
 import { getAllShopItems, deleteShopItem, updateShopItem } from '@/lib/shop'
 import { ShopItemCard } from './ShopItemCard'
@@ -30,7 +30,7 @@ export function ShopItemList({ onEdit, onRefresh }: ShopItemListProps) {
     itemName: '',
   })
 
-  const loadItems = async () => {
+  const loadItems = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
@@ -42,11 +42,11 @@ export function ShopItemList({ onEdit, onRefresh }: ShopItemListProps) {
     } finally {
       setLoading(false)
     }
-  }
+  }, [filters])
 
   useEffect(() => {
-    loadItems()
-  }, [filters])
+    void loadItems()
+  }, [loadItems])
 
   const handleDelete = async () => {
     if (!deleteConfirm.itemId) return

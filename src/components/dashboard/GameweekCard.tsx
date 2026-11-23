@@ -21,6 +21,7 @@ import {
   resolveGameweekCardBranding,
   type GameweekCardIcon,
 } from '@/lib/gameweek-card-branding'
+import { isGameweekPicksWindowOpen } from '@/lib/gameweek-selection'
 
 interface GameweekCardProps {
   gameweek: GameweekData
@@ -255,7 +256,7 @@ export function GameweekCard({
   fixtureMatches,
 }: GameweekCardProps) {
   const t = useTranslations('dashboard')
-  const picksWindowOpen = gameweek.status === 'OPEN'
+  const picksWindowOpen = isGameweekPicksWindowOpen(gameweek)
 
   const loadFixturesFromHook = showMatchPreviews && fixtureMatches === undefined
   const hookFixtures = useGameweekFixtures(gameweek.gameweekId, loadFixturesFromHook)

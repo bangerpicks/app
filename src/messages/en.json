@@ -195,7 +195,11 @@
     "discoverSearchPlaceholder": "Search by name",
     "discoverSearchCta": "Search",
     "discoverLoading": "Loading…",
-    "discoverLoadMore": "Load more"
+    "discoverLoadMore": "Load more",
+    "comingSoonBadge": "Coming Soon",
+    "comingSoonOpensIn": "Opens in {countdown}",
+    "comingSoonOpeningSoon": "Opening soon",
+    "comingSoonOpensAt": "Opens {date}"
   },
   "rankings": {
     "title": "Rankings",

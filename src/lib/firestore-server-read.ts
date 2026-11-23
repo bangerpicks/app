@@ -6,6 +6,7 @@ import {
   getDoc,
   getDocFromServer,
   getDocs,
+  getDocsFromCache,
   getDocsFromServer,
   type DocumentReference,
   type DocumentSnapshot,
@@ -136,10 +137,23 @@ export async function getQuerySnapshotServerPreferring(
     budget: LoadBudget
     timeoutMessage: string
     maxRetries?: number
+    /** Render IndexedDB cache immediately, then refresh from server in the retry loop. */
+    staleWhileRevalidate?: boolean
   }
 ): Promise<ServerPreferringReadResult<QuerySnapshot>> {
   const maxRetries = options.maxRetries ?? FIRESTORE_SERVER_READ_MAX_RETRIES
   let lastError: Error | undefined
+
+  if (options.staleWhileRevalidate) {
+    try {
+      const cached = await getDocsFromCache(queryRef)
+      if (!cached.empty) {
+        return toQueryReadResult(cached, 'cache-fallback')
+      }
+    } catch {
+      // No cache yet — continue to server path.
+    }
+  }
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     options.budget.assertRemaining()

@@ -4,14 +4,16 @@ import { useMemo } from 'react'
 import { useTranslations } from 'next-intl'
 import { GameweekCard } from './GameweekCard'
 import { CompetitionCard } from './CompetitionCard'
+import { ComingSoonCompetitionCard } from './ComingSoonCompetitionCard'
 import { GameweekData } from '@/types/dashboard'
-import type { CompetitionPlayCard } from '@/types/competition'
+import type { CompetitionDocument, CompetitionPlayCard } from '@/types/competition'
 import { normalizeGameweekType } from '@/lib/gameweek-card-branding'
 
 interface CompetitionsSectionProps {
   gameweeks?: GameweekData[]
   competitionCards?: CompetitionPlayCard[]
   gameweeksById?: Map<string, GameweekData>
+  comingSoonCompetitions?: CompetitionDocument[]
   headingAs?: 'h1' | 'h2'
 }
 
@@ -30,6 +32,7 @@ export function CompetitionsSection({
   gameweeks = [],
   competitionCards,
   gameweeksById,
+  comingSoonCompetitions = [],
   headingAs: HeadingTag = 'h2',
 }: CompetitionsSectionProps) {
   const t = useTranslations('dashboard')
@@ -102,19 +105,26 @@ export function CompetitionsSection({
         <p className="text-sm text-ivory/70">{t('availableCompetitionsSubtitle')}</p>
       </div>
 
-      {cardRows && cardRows.length > 0 ? (
+      {(cardRows && cardRows.length > 0) || comingSoonCompetitions.length > 0 ? (
         <div
           className={`w-full grid gap-5 ${
-            cardRows.length > 1 ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1 max-w-xl mx-auto'
+            (cardRows?.length ?? 0) + comingSoonCompetitions.length > 1
+              ? 'grid-cols-1 md:grid-cols-2'
+              : 'grid-cols-1 max-w-xl mx-auto'
           }`}
         >
-          {cardRows.map((row) => (
+          {(cardRows ?? []).map((row) => (
             <div key={row.competition.competitionId} className="w-full flex flex-col">
               <CompetitionCard
                 competition={row.competition}
                 gameweek={row.gameweek}
                 playerCount={row.playerCount}
               />
+            </div>
+          ))}
+          {comingSoonCompetitions.map((comp) => (
+            <div key={comp.competitionId} className="w-full flex flex-col">
+              <ComingSoonCompetitionCard competition={comp} />
             </div>
           ))}
         </div>

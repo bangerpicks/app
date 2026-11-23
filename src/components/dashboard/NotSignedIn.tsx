@@ -3,7 +3,12 @@
 import { useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { AppShell } from './AppShell'
-import { SignInModal } from './SignInModal'
+import dynamic from 'next/dynamic'
+
+const SignInModal = dynamic(
+  () => import('./SignInModal').then((m) => ({ default: m.SignInModal })),
+  { ssr: false }
+)
 import { Lock } from 'lucide-react'
 
 interface NotSignedInProps {

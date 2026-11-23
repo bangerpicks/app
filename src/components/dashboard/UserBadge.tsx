@@ -6,7 +6,12 @@ import Link from 'next/link'
 import { User as UserIcon } from 'lucide-react'
 import { useAuth } from '@/lib/AuthProvider'
 import { getUserHeaderPhotoURL } from '@/lib/users'
-import { SignInModal } from './SignInModal'
+import dynamic from 'next/dynamic'
+
+const SignInModal = dynamic(
+  () => import('./SignInModal').then((m) => ({ default: m.SignInModal })),
+  { ssr: false }
+)
 
 interface UserBadgeProps {
   username?: string
@@ -65,7 +70,7 @@ export function UserBadge({ username, userPhotoUrl }: UserBadgeProps) {
     return (
       <Link
         href="/profile/"
-        className="flex h-8 max-w-[9.5rem] items-center gap-1.5 rounded-[10px] bg-lime-yellow py-0.5 pl-1 pr-2.5 text-midnight-violet hover:opacity-90 sm:max-w-[11rem]"
+        className="relative z-[101] flex h-8 max-w-[9.5rem] items-center gap-1.5 rounded-[10px] bg-lime-yellow py-0.5 pl-1 pr-2.5 text-midnight-violet hover:opacity-90 touch-manipulation sm:max-w-[11rem]"
       >
         {avatar}
         <span className="truncate text-sm font-bold leading-normal tracking-[0.28px]">

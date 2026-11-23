@@ -1,28 +1,38 @@
 'use client'
 
 import { NextIntlClientProvider } from 'next-intl'
-import { ReactNode, useMemo } from 'react'
+import { ReactNode, useEffect, useState } from 'react'
 import { useLanguage } from './LanguageProvider'
 import { timeZone, type Locale } from '@/i18n/config'
-import enMessages from '@/messages/en.json'
-import esMXMessages from '@/messages/es-MX.json'
 
 interface IntlProviderProps {
   children: ReactNode
 }
 
-const messages: Record<Locale, any> = {
-  'en': enMessages,
-  'es-MX': esMXMessages,
-}
-
 export function IntlProvider({ children }: IntlProviderProps) {
   const { locale } = useLanguage()
+  const [messages, setMessages] = useState<Record<string, unknown> | null>(null)
 
-  const currentMessages = useMemo(() => messages[locale] || messages['en'], [locale])
+  useEffect(() => {
+    let cancelled = false
+    const loader =
+      locale === 'es-MX'
+        ? import('@/messages/es-MX.json')
+        : import('@/messages/en.json')
+    void loader.then((mod) => {
+      if (!cancelled) setMessages(mod.default as Record<string, unknown>)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [locale])
+
+  if (!messages) {
+    return null
+  }
 
   return (
-    <NextIntlClientProvider locale={locale} messages={currentMessages} timeZone={timeZone}>
+    <NextIntlClientProvider locale={locale} messages={messages} timeZone={timeZone}>
       {children}
     </NextIntlClientProvider>
   )

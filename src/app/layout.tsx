@@ -1,12 +1,15 @@
 import type { Metadata, Viewport } from 'next'
-import Script from 'next/script'
+import { Inter } from 'next/font/google'
 import './globals.css'
-import { ViewportTracker } from '@/components/ViewportTracker'
 import { DynamicLang } from '@/components/DynamicLang'
 import { AuthProvider } from '@/lib/AuthProvider'
+import { UserProfileProvider } from '@/lib/UserProfileProvider'
 import { LanguageProvider } from '@/lib/LanguageProvider'
 import { IntlProvider } from '@/lib/IntlProvider'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
+import { QueryProvider } from '@/lib/QueryProvider'
+import { ServiceWorkerRegistration } from '@/components/ServiceWorkerRegistration'
+import { RouteChromeReset } from '@/components/dashboard/RouteChromeReset'
 
 export const metadata: Metadata = {
   title: 'Banger Picks - Football Predictions',
@@ -22,13 +25,19 @@ export const metadata: Metadata = {
   manifest: '/manifest.json',
 }
 
+const inter = Inter({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700', '900'],
+  display: 'swap',
+  variable: '--font-inter',
+})
+
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   maximumScale: 5,
   userScalable: true,
   viewportFit: 'cover',
-  interactiveWidget: 'resizes-content',
 }
 
 export default function RootLayout({
@@ -37,23 +46,23 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html suppressHydrationWarning>
-      <body>
-        <Script
-          type="module"
-          src="https://widgets.api-sports.io/3.1.0/widgets.js"
-          strategy="lazyOnload"
-        />
+    <html suppressHydrationWarning className={inter.variable}>
+      <body className={inter.className}>
         <AuthProvider>
+          <UserProfileProvider>
           <ErrorBoundary>
             <LanguageProvider>
               <DynamicLang />
-              <IntlProvider>
-                <ViewportTracker />
-                {children}
-              </IntlProvider>
+              <QueryProvider>
+                <IntlProvider>
+                  <RouteChromeReset />
+                  <ServiceWorkerRegistration />
+                  {children}
+                </IntlProvider>
+              </QueryProvider>
             </LanguageProvider>
           </ErrorBoundary>
+          </UserProfileProvider>
         </AuthProvider>
       </body>
     </html>

@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
 import { useAuth } from './AuthProvider'
+import { useUserProfile } from './UserProfileProvider'
 import { detectBrowserLanguage } from './browser-locale'
 import type { Locale } from '@/i18n/config'
 
@@ -11,6 +12,19 @@ interface LanguageContextType {
   loading: boolean
 }
 
+const LOCALE_STORAGE_KEY = 'banger.locale'
+
+function readStoredLocale(): Locale | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const stored = window.localStorage.getItem(LOCALE_STORAGE_KEY)
+    if (stored === 'en' || stored === 'es-MX') return stored
+  } catch {
+    // ignore
+  }
+  return null
+}
+
 const LanguageContext = createContext<LanguageContextType>({
   locale: 'en',
   setLocale: async () => {},
@@ -18,18 +32,21 @@ const LanguageContext = createContext<LanguageContextType>({
 })
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
-  const { user } = useAuth()
-  const [locale, setLocaleState] = useState<Locale>('en')
+  const { user, loading: authLoading } = useAuth()
+  const { profile } = useUserProfile()
+  const [locale, setLocaleState] = useState<Locale>(() => readStoredLocale() ?? 'en')
   const [loading, setLoading] = useState(true)
 
   // Load user's language preference
   useEffect(() => {
+    if (authLoading) return
     const loadLanguage = async () => {
       const { getUserLanguage, updateUserLanguage } = await import('./user-language')
       if (user) {
         try {
-          // If user is logged in, use their saved preference
-          const userLang = await getUserLanguage(user)
+          const fromProfile =
+            profile?.language === 'en' || profile?.language === 'es-MX' ? profile.language : null
+          const userLang = fromProfile ?? (await getUserLanguage(user))
           if (userLang) {
             setLocaleState(userLang)
           } else {
@@ -53,8 +70,8 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
       setLoading(false)
     }
 
-    loadLanguage()
-  }, [user])
+    void loadLanguage()
+  }, [user, authLoading, profile?.language])
 
   const setLocale = async (newLocale: Locale) => {
     if (user) {
@@ -68,6 +85,11 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
       }
     } else {
       setLocaleState(newLocale)
+      try {
+        window.localStorage.setItem(LOCALE_STORAGE_KEY, newLocale)
+      } catch {
+        // ignore
+      }
     }
   }
 

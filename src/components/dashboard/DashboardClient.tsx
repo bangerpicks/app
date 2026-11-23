@@ -2,18 +2,24 @@
 
 import { useTranslations } from 'next-intl'
 import { AppShell } from './AppShell'
-import { ReferralPopup } from './ReferralPopup'
+import dynamic from 'next/dynamic'
+
+const ReferralPopup = dynamic(
+  () => import('./ReferralPopup').then((m) => ({ default: m.ReferralPopup })),
+  { ssr: false }
+)
 import { IntroSection } from './IntroSection'
 import Link from 'next/link'
 import { CompetitionsSection } from './CompetitionsSection'
 import { JoinCompetitionInput } from './JoinCompetitionInput'
 import { GameweekData } from '@/types/dashboard'
-import type { CompetitionPlayCard } from '@/types/competition'
+import type { CompetitionDocument, CompetitionPlayCard } from '@/types/competition'
 
 interface DashboardClientProps {
   gameweeks?: GameweekData[]
   competitionCards?: CompetitionPlayCard[]
   gameweeksById?: Map<string, GameweekData>
+  comingSoonCompetitions?: CompetitionDocument[]
   username?: string
 }
 
@@ -21,6 +27,7 @@ export function DashboardClient({
   gameweeks = [],
   competitionCards,
   gameweeksById,
+  comingSoonCompetitions = [],
   username,
 }: DashboardClientProps) {
   const t = useTranslations('dashboard')
@@ -46,11 +53,14 @@ export function DashboardClient({
           </Link>
         </div>
 
-        {(competitionCards?.length ?? 0) > 0 || gameweeks.length > 0 ? (
+        {(competitionCards?.length ?? 0) > 0 ||
+        comingSoonCompetitions.length > 0 ||
+        gameweeks.length > 0 ? (
           <CompetitionsSection
             gameweeks={gameweeks}
             competitionCards={competitionCards}
             gameweeksById={gameweeksById}
+            comingSoonCompetitions={comingSoonCompetitions}
             headingAs="h2"
           />
         ) : (

@@ -37,6 +37,10 @@ export function OnboardingIntro({ isOpen, onClose, requiresDisplayName = false, 
   const router = useRouter()
   const pathname = usePathname()
 
+  const onDashboardHome =
+    pathname === '/dashboard' || pathname === '/dashboard/'
+  const showOnboardingLayer = isOpen && onDashboardHome
+
   // Handle mounting for portal
   useEffect(() => {
     setMounted(true)
@@ -62,7 +66,7 @@ export function OnboardingIntro({ isOpen, onClose, requiresDisplayName = false, 
   }, [isOpen, requiresDisplayName, referralMessage])
 
   useEffect(() => {
-    if (!isOpen) return
+    if (!showOnboardingLayer) return
 
     const html = document.documentElement
     const body = document.body
@@ -82,7 +86,7 @@ export function OnboardingIntro({ isOpen, onClose, requiresDisplayName = false, 
       body.style.overflow = prevBodyOverflow
       body.style.paddingRight = prevBodyPaddingRight
     }
-  }, [isOpen])
+  }, [showOnboardingLayer])
 
   const validateDisplayName = (name: string): string | null => {
     if (!name || name.trim().length === 0) {
@@ -209,7 +213,7 @@ export function OnboardingIntro({ isOpen, onClose, requiresDisplayName = false, 
   // Use step directly - the useEffect should handle setting it correctly
   const currentStep = step
 
-  const modalContent = isOpen ? (
+  const modalContent = showOnboardingLayer ? (
     <div
       className="fixed inset-0 z-[110] flex flex-col bg-midnight-violet overflow-y-auto overflow-x-hidden overscroll-contain"
       role="dialog"
@@ -425,5 +429,5 @@ export function OnboardingIntro({ isOpen, onClose, requiresDisplayName = false, 
     </div>
   ) : null
 
-  return <>{isOpen && createPortal(modalContent, document.body)}</>
+  return <>{showOnboardingLayer && mounted && createPortal(modalContent, document.body)}</>
 }

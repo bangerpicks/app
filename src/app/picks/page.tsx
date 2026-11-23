@@ -232,8 +232,12 @@ function PicksPageContent() {
         const teamPositions = new Map<number, number>()
         const teamForms = new Map<number, FormResult[]>()
 
-        if (targetGameweek.standings) {
-          Object.entries(targetGameweek.standings).forEach(([, standings]) => {
+        const { getGameweekStandings } = await import('@/lib/gameweek-standings')
+        const standingsMap =
+          (await getGameweekStandings(targetGameweek.gameweekId)) ?? targetGameweek.standings
+
+        if (standingsMap) {
+          Object.entries(standingsMap).forEach(([, standings]) => {
             if (!Array.isArray(standings)) return
             standings.forEach((team) => {
               if (team?.team && typeof team.team.id === 'number') {
@@ -391,6 +395,9 @@ function PicksPageContent() {
     [initialMatches, locale]
   )
   const liveMatches = useLiveMatches(gameweekId, baseMatches, locale)
+  const displayMatches = liveMatches.length > 0 ? liveMatches : baseMatches
+  const fixturesStillLoading =
+    liveMatches.length === 0 && baseMatches.length > 0 && emptyReason !== 'no-fixtures'
 
   // 1. Auth Loading Gate
   if (authLoading) {
@@ -473,8 +480,8 @@ function PicksPageContent() {
     )
   }
 
-  // 6. No Fixtures Pending
-  if (emptyReason === 'no-fixtures' || liveMatches.length === 0) {
+  // 6. Published week with no fixtures on record
+  if (emptyReason === 'no-fixtures') {
     return (
       <PicksClient
         gameweek={gameweek}
@@ -486,19 +493,31 @@ function PicksPageContent() {
     )
   }
 
+  if (displayMatches.length === 0) {
+    return (
+      <PicksClient
+        gameweek={gameweek}
+        playerCount={gameweek.playerCount}
+        matches={[]}
+        username={username}
+        fixturesPending={fixturesStillLoading}
+      />
+    )
+  }
+
   // 7. Full Picks Client
   return (
     <>
       {showStaleBanner && (
-        <div className="fixed top-0 left-0 right-0 z-50 px-4 py-2 bg-midnight-violet/95 border-b border-ivory/15 text-center text-sm">
-          <p className="text-ivory/80">
+        <div className="fixed top-0 left-0 right-0 z-[95] px-4 py-2 bg-midnight-violet/95 border-b border-ivory/15 text-center text-sm pointer-events-none">
+          <p className="text-ivory/80 pointer-events-auto">
             {showStaleRetry ? t('staleDataNotice') : t('refreshingGameweek')}
           </p>
           {showStaleRetry && (
             <button
               type="button"
               onClick={retryGameweekLoad}
-              className="mt-1 text-lime-yellow font-semibold underline underline-offset-2"
+              className="mt-1 text-lime-yellow font-semibold underline underline-offset-2 pointer-events-auto"
             >
               {t('loadErrorRetry')}
             </button>
@@ -508,8 +527,9 @@ function PicksPageContent() {
       <PicksClient
         gameweek={gameweek}
         playerCount={gameweek.playerCount}
-        matches={liveMatches}
+        matches={displayMatches}
         username={username}
+        fixturesPending={fixturesStillLoading}
       />
     </>
   )

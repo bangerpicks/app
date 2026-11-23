@@ -50,6 +50,7 @@ import type { GameweekData } from '@/types/dashboard'
 import {
   competitionIdForGameweek,
   listCompetitionIdsFromGameweeks,
+  isCompetitionComingSoon,
 } from './competition-catalog.mjs'
 
 export type CreateCompetitionInput = {
@@ -87,6 +88,9 @@ function mapCompetitionDoc(
     ownerUid: data.ownerUid as string | undefined,
     activeSeasonId: data.activeSeasonId as string | null | undefined,
     searchKeywords: data.searchKeywords as string[] | undefined,
+    opensAt: (data.opensAt as CompetitionDocument['opensAt']) ?? null,
+    tagline: data.tagline as string | undefined,
+    tagline_esMX: data.tagline_esMX as string | undefined,
     createdAt: data.createdAt as CompetitionDocument['createdAt'],
     updatedAt: data.updatedAt as CompetitionDocument['updatedAt'],
   }
@@ -127,6 +131,7 @@ async function queryCompetitions(
     const result = await getQuerySnapshotServerPreferring(q, {
       budget: opts.budget,
       timeoutMessage,
+      staleWhileRevalidate: opts.staleWhileRevalidate,
     })
     if (opts.servedFromCacheRef && result.servedFromCache) {
       opts.servedFromCacheRef.current = true
@@ -179,21 +184,23 @@ async function loadFeaturedCompetitions(
   }
 }
 
-export async function getMyCompetitions(uid: string): Promise<CompetitionDocument[]> {
+export async function getMyCompetitions(
+  uid: string,
+  _opts?: DashboardFirestoreReadOptions
+): Promise<CompetitionDocument[]> {
   try {
     const memSnap = await getDocs(collection(db, 'users', uid, 'competitions'))
-    const out: CompetitionDocument[] = []
-    for (const mem of memSnap.docs) {
-      try {
-        const comp = await getCompetitionById(mem.id)
-        if (comp && comp.status !== 'archived') {
-          out.push(comp)
+    const comps = await Promise.all(
+      memSnap.docs.map(async (mem) => {
+        try {
+          return await getCompetitionById(mem.id)
+        } catch (err) {
+          if (isNonRetryableFirestoreError(err)) return null
+          throw err
         }
-      } catch (err) {
-        if (!isNonRetryableFirestoreError(err)) throw err
-      }
-    }
-    return out
+      })
+    )
+    return comps.filter((c): c is CompetitionDocument => Boolean(c && c.status !== 'archived'))
   } catch (err) {
     if (isFirestoreCatalogSkippableError(err)) {
       return []
@@ -416,24 +423,21 @@ export async function syncCompetitionActiveGameweek(
 
 /**
  * Home row: featured + my competitions, deduped; falls back to active gameweeks when catalog empty.
+ * Competitions with no round yet but a scheduled `opensAt` come back in `comingSoon`.
  */
 export async function loadHomeCompetitionPlayCards(
   uid: string | null | undefined,
   opts?: DashboardFirestoreReadOptions
-): Promise<{ cards: CompetitionPlayCard[]; gameweeksById: Map<string, GameweekData> }> {
-  // Gameweeks first — catalog reads must never block Home (rules may lag deploy).
-  const rawGameweeks = await loadActiveGameweeksForHome(opts)
-
-  let featured: CompetitionDocument[] = []
-  let mine: CompetitionDocument[] = []
-  try {
-    ;[featured, mine] = await Promise.all([
-      getFeaturedCompetitions(12, opts),
-      uid ? getMyCompetitions(uid) : Promise.resolve([] as CompetitionDocument[]),
-    ])
-  } catch {
-    // Catalog optional until rules + indexes are live.
-  }
+): Promise<{
+  cards: CompetitionPlayCard[]
+  comingSoon: CompetitionDocument[]
+  gameweeksById: Map<string, GameweekData>
+}> {
+  const [rawGameweeks, featured, mine] = await Promise.all([
+    loadActiveGameweeksForHome(opts),
+    getFeaturedCompetitions(12, opts).catch(() => [] as CompetitionDocument[]),
+    uid ? getMyCompetitions(uid, opts).catch(() => [] as CompetitionDocument[]) : Promise.resolve([] as CompetitionDocument[]),
+  ])
 
   const merged = new Map<string, CompetitionDocument>()
   for (const c of featured) merged.set(c.competitionId, c)
@@ -451,6 +455,7 @@ export async function loadHomeCompetitionPlayCards(
   }
 
   const cards: CompetitionPlayCard[] = []
+  const comingSoon: CompetitionDocument[] = []
 
   for (const comp of competitions) {
     let gwId = comp.activeGameweekId || null
@@ -467,6 +472,7 @@ export async function loadHomeCompetitionPlayCards(
       gwId = match?.gameweekId ?? null
     }
     if (!gwId) {
+      if (isCompetitionComingSoon(comp)) comingSoon.push(comp)
       continue
     }
     if (!gameweeksById.has(gwId)) {
@@ -492,7 +498,7 @@ export async function loadHomeCompetitionPlayCards(
     })
   }
 
-  return { cards, gameweeksById }
+  return { cards, comingSoon, gameweeksById }
 }
 
 async function loadActiveGameweeksForHome(

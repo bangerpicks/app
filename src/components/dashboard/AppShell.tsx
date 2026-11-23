@@ -3,6 +3,7 @@
 import type { ReactNode, Ref } from 'react'
 import { Header } from './Header'
 import { BottomNavigation } from './BottomNavigation'
+import { usePageChromeScrollUnlock } from './usePageChromeScrollUnlock'
 
 interface AppShellProps {
   children: ReactNode
@@ -29,18 +30,22 @@ export function AppShell({
   containerRef,
   footer,
 }: AppShellProps) {
+  usePageChromeScrollUnlock()
+
   return (
     <div
       ref={containerRef}
-      className={`min-h-[100dvh] min-h-screen bg-midnight-violet flex flex-col min-h-0 ${
+      className={`relative min-h-[100dvh] min-h-screen bg-midnight-violet flex flex-col min-h-0 ${
         shellClassName ?? ''
       }`}
     >
       <Header username={username} userPhotoUrl={userPhotoUrl} />
       {banner}
-      <main className={mainClassName ?? defaultMainClassName}>{children}</main>
-      <BottomNavigation />
+      <main className={`relative z-0 ${mainClassName ?? defaultMainClassName}`}>
+        {children}
+      </main>
       {footer}
+      <BottomNavigation />
     </div>
   )
 }

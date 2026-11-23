@@ -72,6 +72,7 @@ export function RankingsTable({
                             alt={fixture.homeTeam.name}
                             width={24}
                             height={24}
+                            loading="lazy"
                             className="object-contain w-full h-full"
                             unoptimized
                           />
@@ -89,6 +90,7 @@ export function RankingsTable({
                             alt={fixture.awayTeam.name}
                             width={24}
                             height={24}
+                            loading="lazy"
                             className="object-contain w-full h-full"
                             unoptimized
                           />

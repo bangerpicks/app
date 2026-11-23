@@ -65,7 +65,7 @@ export function useCrowdPickStats(
     return () => {
       cancelled = true
     }
-  }, [enabled, fixtureKey, refreshToken])
+  }, [enabled, fixtureKey, fixtureIds, refreshToken])
 
   return { crowdPercentsByFixture, crowdStatsByFixture, playerCountByFixture }
 }

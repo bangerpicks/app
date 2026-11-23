@@ -10,6 +10,8 @@ import type { QueryDocumentSnapshot, DocumentData } from 'firebase/firestore'
 import { getGameweekById } from '@/lib/admin'
 import { convertAdminGameweekToGameweekData } from '@/lib/convert-gameweek-data'
 import { CompetitionCard } from '@/components/dashboard/CompetitionCard'
+import { ComingSoonCompetitionCard } from '@/components/dashboard/ComingSoonCompetitionCard'
+import { isCompetitionComingSoon } from '@/lib/competition-catalog'
 import type { GameweekData } from '@/types/dashboard'
 
 type DiscoverRow = {
@@ -25,6 +27,7 @@ export default function DiscoverPage() {
   const [loading, setLoading] = useState(true)
   const [cursor, setCursor] = useState<QueryDocumentSnapshot<DocumentData> | null>(null)
   const [rows, setRows] = useState<DiscoverRow[]>([])
+  const [comingSoon, setComingSoon] = useState<CompetitionDocument[]>([])
 
   const loadPage = useCallback(
     async (opts: { reset?: boolean; query?: string; after?: QueryDocumentSnapshot<DocumentData> | null } = {}) => {
@@ -51,24 +54,36 @@ export default function DiscoverPage() {
 
   useEffect(() => {
     async function hydrate() {
-      const next: DiscoverRow[] = []
-      for (const comp of items) {
+      const upcoming: CompetitionDocument[] = []
+      const withGw = items.filter((comp) => {
         const gwId = comp.activeGameweekId
-        if (!gwId) continue
-        try {
-          const gw = await getGameweekById(gwId)
-          if (!gw) continue
-          const data = convertAdminGameweekToGameweekData(gw)
-          next.push({
-            competition: comp,
-            gameweek: data,
-            playerCount: data.playerCount ?? 0,
-          })
-        } catch {
-          /* skip */
+        if (!gwId) {
+          if (isCompetitionComingSoon(comp)) upcoming.push(comp)
+          return false
         }
-      }
-      setRows(next)
+        return true
+      })
+
+      const settled = await Promise.all(
+        withGw.map(async (comp) => {
+          const gwId = comp.activeGameweekId!
+          try {
+            const gw = await getGameweekById(gwId)
+            if (!gw) return null
+            const data = convertAdminGameweekToGameweekData(gw)
+            return {
+              competition: comp,
+              gameweek: data,
+              playerCount: data.playerCount ?? 0,
+            } satisfies DiscoverRow
+          } catch {
+            return null
+          }
+        })
+      )
+
+      setRows(settled.filter((row): row is DiscoverRow => row !== null))
+      setComingSoon(upcoming)
     }
     void hydrate()
   }, [items])
@@ -113,6 +128,9 @@ export default function DiscoverPage() {
               gameweek={row.gameweek}
               playerCount={row.playerCount}
             />
+          ))}
+          {comingSoon.map((comp) => (
+            <ComingSoonCompetitionCard key={comp.competitionId} competition={comp} />
           ))}
         </div>
 

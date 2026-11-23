@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.2.9 — 2026-11-23
+
+### Ops & performance follow-ups
+
+- Admin callable `adminRunBackfills` and Settings panel (slim fixtures, displayNames, crowd counters, standings meta migration).
+- Shared fixtures listener pool, React Query provider, standings in `gameweeks/{id}/meta/standings`.
+- PWA: service worker, PNG icons, stricter lint (`--max-warnings 0`), dynamic auth/modal chunks.
+
+## 1.2.8 — 2026-11-23
+
+### Feature: Coming Soon competition card
+
+- Competition docs accept optional `opensAt`, `tagline`, and `tagline_esMX`.
+- Active public competitions with no `activeGameweekId` but an `opensAt` show a Coming Soon card on Home and Discover.
+
+### Fix: Score picks on the 90-minute result
+
+- Knockout matches (AET/PEN) use `score.fulltime` for H/D/A scoring; extra time and penalties no longer change the outcome.
+- Prediction entries store the 90-minute score as `result` when awarded.
+
 ## 1.2.6 — 2026-11-16
 
 ### Fix: Rankings QA hang hook respects LoadBudget

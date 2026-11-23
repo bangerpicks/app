@@ -1,10 +1,8 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
-import { getGameweekFixtures } from '@/lib/admin'
+import { useMemo } from 'react'
 import { useLiveMatches } from '@/lib/useLiveMatches'
 import { useLanguage } from '@/lib/LanguageProvider'
-import { convertGameweekFixtureToMatchCard } from '@/lib/convert-gameweek-fixture'
 import {
   pickNextMatchPreviews,
   summarizeFixtureSlate,
@@ -31,35 +29,8 @@ export function useGameweekFixtures(
   previewLimit = 3
 ): GameweekFixturesState {
   const { locale } = useLanguage()
-  const [initialMatches, setInitialMatches] = useState<MatchCardData[]>([])
 
-  useEffect(() => {
-    if (!enabled || !gameweekId) {
-      setInitialMatches([])
-      return
-    }
-
-    let cancelled = false
-    getGameweekFixtures(gameweekId)
-      .then((fixtures) => {
-        if (cancelled) return
-        setInitialMatches(
-          fixtures.map((f) => convertGameweekFixtureToMatchCard(f, locale))
-        )
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          console.error('Gameweek fixtures load failed:', err)
-          setInitialMatches([])
-        }
-      })
-
-    return () => {
-      cancelled = true
-    }
-  }, [gameweekId, enabled, locale])
-
-  const matches = useLiveMatches(enabled ? gameweekId : null, initialMatches, locale)
+  const matches = useLiveMatches(enabled ? gameweekId : null, [], locale)
 
   return useMemo(() => {
     const slate = summarizeFixtureSlate(matches) as FixtureSlateSummary

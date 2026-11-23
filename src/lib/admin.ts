@@ -9,11 +9,13 @@ import {
   getDocs,
   setDoc,
   updateDoc,
+  deleteField,
   deleteDoc,
   writeBatch,
   query,
   where,
   orderBy,
+  limit,
   Timestamp,
   QueryConstraint,
 } from 'firebase/firestore'
@@ -38,6 +40,8 @@ export type DashboardFirestoreReadOptions = {
   budget?: LoadBudget
   /** Set to true when any server-preferring read uses non-empty cache fallback */
   servedFromCacheRef?: { current: boolean }
+  /** Use persistent cache for first paint, then refresh from server */
+  staleWhileRevalidate?: boolean
 }
 import { isFlagshipGameweek } from './gameweek-constants'
 import { getActiveSeason } from './seasons'
@@ -554,6 +558,7 @@ export async function getAllGameweeks(
     status?: 'draft' | 'active' | 'completed' | 'archived'
     sortBy?: 'date' | 'name'
     sortOrder?: 'asc' | 'desc'
+    maxResults?: number
     // Admin lists pass true. Everyone else must exclude drafts: an unfiltered
     // query fails rules once any draft exists.
     includeDrafts?: boolean
@@ -577,6 +582,10 @@ export async function getAllGameweeks(
       // Default: sort by date descending
       constraints.push(orderBy('startDate', 'desc'))
     }
+
+    if (filters?.maxResults != null && filters.maxResults > 0) {
+      constraints.push(limit(filters.maxResults))
+    }
     
     const q = query(collection(db, 'gameweeks'), ...constraints)
     const timeoutMessage = 'Failed to load gameweeks - request timed out'
@@ -585,6 +594,7 @@ export async function getAllGameweeks(
       const result = await getQuerySnapshotServerPreferring(q, {
         budget: readOptions.budget,
         timeoutMessage,
+        staleWhileRevalidate: readOptions.staleWhileRevalidate,
       })
       markServedFromCacheRef(readOptions.servedFromCacheRef, result)
       snapshot = result.data
@@ -751,15 +761,18 @@ export async function fetchAndStoreStandings(
       })
     )
 
-    // Update gameweek document with standings data
-    const gameweekRef = doc(db, 'gameweeks', gameweekId)
-    const updateData: any = {
+    const fetchedAt = Timestamp.now()
+    const metaRef = doc(db, 'gameweeks', gameweekId, 'meta', 'standings')
+    await setDoc(metaRef, {
       standings: standingsData,
-      standingsFetchedAt: Timestamp.now(),
+      standingsFetchedAt: fetchedAt,
+    })
+    const gameweekRef = doc(db, 'gameweeks', gameweekId)
+    await updateDoc(gameweekRef, {
+      standings: deleteField(),
+      standingsFetchedAt: deleteField(),
       updatedAt: Timestamp.now(),
-    }
-
-    await updateDoc(gameweekRef, updateData)
+    })
   } catch (error) {
     console.error('[admin] Error fetching and storing standings:', error)
     // Don't throw - standings are optional, gameweek save should still succeed
@@ -877,6 +890,7 @@ export async function getGameweekFixtures(
       const result = await getQuerySnapshotServerPreferring(fixturesRef, {
         budget: readOptions.budget,
         timeoutMessage,
+        staleWhileRevalidate: readOptions.staleWhileRevalidate,
       })
       markServedFromCacheRef(readOptions.servedFromCacheRef, result)
       snapshot = result.data

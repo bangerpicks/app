@@ -3,6 +3,7 @@
  */
 
 import { GameweekData, MatchCardData } from '@/types/dashboard'
+import { refreshPicksStatusFromDeadline } from '@/lib/gameweek-selection'
 
 export const DASHBOARD_SESSION_CACHE_TTL_MS = 10 * 60 * 1000
 export const DASHBOARD_SESSION_CACHE_KEY_PREFIX = 'banger-picks-dashboard-cache:v1'
@@ -42,12 +43,12 @@ function serializeGameweek(gw: GameweekData): SerializedGameweekData {
 }
 
 function deserializeGameweek(raw: SerializedGameweekData): GameweekData {
-  return {
+  return refreshPicksStatusFromDeadline({
     ...raw,
     deadline: raw.deadline ? new Date(raw.deadline) : undefined,
     startDate: raw.startDate ? new Date(raw.startDate) : undefined,
     endDate: raw.endDate ? new Date(raw.endDate) : undefined,
-  }
+  })
 }
 
 function serializeMatch(match: MatchCardData): SerializedMatchCardData {

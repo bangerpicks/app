@@ -1,7 +1,9 @@
 'use client'
 
-import Link from 'next/link'
+import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { usePathname } from 'next/navigation'
+import { useVisualViewportBottomInset } from '@/hooks/useVisualViewportBottomInset'
 import { useTranslations } from 'next-intl'
 import { ChevronLeftIcon as ChevronLeftSolidIcon } from '@heroicons/react/24/solid'
 import {
@@ -15,13 +17,25 @@ export function BottomNavigation() {
   const t = useTranslations()
   const tPicks = useTranslations('picks')
   const onPicksPage = isPicksRoute(pathname)
+  const [mounted, setMounted] = useState(false)
+  const viewportBottomInset = useVisualViewportBottomInset()
 
-  return (
+  useEffect(() => {
+    setMounted(true)
+    return () => {
+      document.querySelectorAll('nav[data-bottom-nav]').forEach((node) => node.remove())
+    }
+  }, [])
+
+  const nav = (
     <nav
       data-bottom-nav
       aria-label="Main"
-      className="fixed bottom-0 left-0 right-0 z-30 h-[84px] bg-lime-yellow rounded-t-[10px] px-2 sm:px-5 py-2 flex items-center justify-between lg:hidden"
-      style={{ paddingBottom: 'calc(0.5rem + env(safe-area-inset-bottom, 0px))' }}
+      className="fixed bottom-0 left-0 right-0 z-[120] h-[84px] bg-lime-yellow rounded-t-[10px] px-2 sm:px-5 py-2 flex items-center justify-between lg:hidden pointer-events-auto"
+      style={{
+        bottom: viewportBottomInset,
+        paddingBottom: 'calc(0.5rem + env(safe-area-inset-bottom, 0px))',
+      }}
     >
       {dashboardNavItems.map((item) => {
         const dashboardAsBack =
@@ -39,10 +53,10 @@ export function BottomNavigation() {
         const emphasized = isActive || dashboardAsBack
 
         return (
-          <Link
+          <a
             key={item.href}
             href={item.href}
-            className="flex-1 min-w-0 flex flex-col items-center justify-center gap-1 sm:gap-1.5"
+            className="flex-1 min-w-0 flex flex-col items-center justify-center gap-1 sm:gap-1.5 touch-manipulation"
             aria-label={label}
             aria-current={isActive ? 'page' : undefined}
           >
@@ -59,9 +73,15 @@ export function BottomNavigation() {
             >
               {label}
             </span>
-          </Link>
+          </a>
         )
       })}
     </nav>
   )
+
+  if (!mounted) {
+    return null
+  }
+
+  return createPortal(nav, document.body)
 }

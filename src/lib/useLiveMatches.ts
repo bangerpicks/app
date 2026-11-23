@@ -1,8 +1,8 @@
 'use client'
 
 import { useEffect, useState, useRef } from 'react'
-import { collection, onSnapshot, query, Unsubscribe } from 'firebase/firestore'
-import { db } from './firebase'
+import type { Unsubscribe } from 'firebase/firestore'
+import { subscribeGameweekFixturesPool } from './gameweek-fixtures-pool'
 import { MatchCardData, Prediction } from '@/types/dashboard'
 import { GameweekFixtureData } from '@/lib/admin'
 import { FormResult } from '@/types/dashboard'
@@ -118,12 +118,8 @@ export function useLiveMatches(
   const pendingUpdateRef = useRef<MatchCardData[] | null>(null)
   const throttleTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const currentMatchesRef = useRef<MatchCardData[]>(initialMatches)
-  const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const retryCountRef = useRef(0)
-  const listenerErrorRef = useRef<Error | null>(null)
   const localeRef = useRef(locale)
-  const MAX_RETRIES = 3
-
   useEffect(() => {
     localeRef.current = locale
   }, [locale])
@@ -287,13 +283,14 @@ export function useLiveMatches(
     setMatches(initialMatchesRef.current)
 
     try {
-      // Set up listener on fixtures subcollection
-      const fixturesRef = collection(db, 'gameweeks', gameweekId, 'fixtures')
-      const fixturesQuery = query(fixturesRef)
+      const unsubscribe = subscribeGameweekFixturesPool(gameweekId, (updatedFixtures) => {
+          if (
+            updatedFixtures.length === 0 &&
+            initialMatchesRef.current.length > 0
+          ) {
+            return
+          }
 
-      const unsubscribe = onSnapshot(
-        fixturesQuery,
-        (snapshot) => {
           // Always sync refs from initialMatches at the start of each callback
           // This ensures we have the latest position/form data even if initialMatches
           // was updated after the listener was set up
@@ -325,14 +322,6 @@ export function useLiveMatches(
           teamFormsRef.current = forms
           userPredictionsRef.current = predictions
           
-          const updatedFixtures: GameweekFixtureData[] = []
-          
-          snapshot.forEach((doc) => {
-            const data = doc.data()
-            updatedFixtures.push(data as GameweekFixtureData)
-          })
-
-          // Convert to MatchCardData format, preserving team positions and forms
           const convertedMatches = updatedFixtures.map((fixtureData) => {
             const homeId = fixtureData.teams.home.id
             const awayId = fixtureData.teams.away.id
@@ -376,6 +365,8 @@ export function useLiveMatches(
           pendingUpdateRef.current = sortedMatches
           
           // Check if matches actually changed before updating
+          retryCountRef.current = 0
+
           if (!matchesChanged(currentMatchesRef.current, sortedMatches)) {
             // No changes, skip update
             pendingUpdateRef.current = null
@@ -401,37 +392,7 @@ export function useLiveMatches(
               throttleTimeoutRef.current = null
             }, THROTTLE_MS - timeSinceLastUpdate)
           }
-        },
-        (error) => {
-          console.error('Error listening to fixtures:', error)
-          
-          // Reset retry count on successful listener setup
-          retryCountRef.current = 0
-          listenerErrorRef.current = null
-          
-          // Keep showing initial matches on error
-          currentMatchesRef.current = initialMatchesRef.current
-          setMatches(initialMatchesRef.current)
-          
-          // Retry logic with exponential backoff
-          if (retryCountRef.current < MAX_RETRIES) {
-            retryCountRef.current++
-            listenerErrorRef.current = new Error(`Connection issue (retry ${retryCountRef.current}/${MAX_RETRIES})`)
-            
-            retryTimeoutRef.current = setTimeout(() => {
-              // Retry listener setup by cleaning up and letting useEffect re-run
-              if (unsubscribeRef.current) {
-                unsubscribeRef.current()
-                unsubscribeRef.current = null
-              }
-              // Trigger re-subscription by updating a ref or state
-              // The listener will be recreated on next render
-            }, 2000 * retryCountRef.current) // Exponential backoff
-          } else {
-            listenerErrorRef.current = new Error('Failed to connect to live updates after multiple retries')
-          }
-        }
-      )
+      })
 
       unsubscribeRef.current = unsubscribe
     } catch (error) {
@@ -453,13 +414,9 @@ export function useLiveMatches(
         throttleTimeoutRef.current = null
       }
       // Clear retry timeout
-      if (retryTimeoutRef.current) {
-        clearTimeout(retryTimeoutRef.current)
-        retryTimeoutRef.current = null
-      }
       pendingUpdateRef.current = null
     }
-  }, [gameweekId]) // Removed initialMatches from dependencies to prevent re-subscriptions
+  }, [gameweekId])
 
   return matches
 }

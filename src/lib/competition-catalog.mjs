@@ -76,7 +76,8 @@ function startMs(ts) {
   if (!ts) return 0
   if (typeof ts.toDate === 'function') return ts.toDate().getTime()
   if (ts instanceof Date) return ts.getTime()
-  if (typeof ts === 'string') return new Date(ts).getTime()
+  if (typeof ts === 'string') return new Date(ts).getTime() || 0
+  if (typeof ts === 'object' && typeof ts.seconds === 'number') return ts.seconds * 1000
   return 0
 }
 
@@ -105,6 +106,51 @@ export function pickDefaultCompetitionId(ids) {
   if (ids.length === 0) return null
   if (ids.includes(DEFAULT_FLAGSHIP_ID)) return DEFAULT_FLAGSHIP_ID
   return ids[0]
+}
+
+/**
+ * Public, active competition with no live round yet but a scheduled opensAt.
+ * @param {{ status?: string, visibility?: string, activeGameweekId?: string | null, opensAt?: unknown }} comp
+ */
+export function isCompetitionComingSoon(comp) {
+  if (!comp) return false
+  if (comp.status !== 'active' || comp.visibility !== 'public') return false
+  if (comp.activeGameweekId) return false
+  return startMs(comp.opensAt) > 0
+}
+
+/**
+ * Countdown to opensAt, rounded up to the minute. Returns null once opensAt has passed.
+ * @param {number} opensAtMs
+ * @param {number} nowMs
+ * @returns {{ days: number, hours: number, minutes: number } | null}
+ */
+export function comingSoonCountdown(opensAtMs, nowMs) {
+  const diff = opensAtMs - nowMs
+  if (!Number.isFinite(diff) || diff <= 0) return null
+  const totalMinutes = Math.ceil(diff / 60000)
+  return {
+    days: Math.floor(totalMinutes / 1440),
+    hours: Math.floor((totalMinutes % 1440) / 60),
+    minutes: totalMinutes % 60,
+  }
+}
+
+/**
+ * Compact "2d 4h 12m" label (same units in en and es-MX).
+ * @param {{ days: number, hours: number, minutes: number }} parts
+ */
+export function formatComingSoonCountdown(parts) {
+  const out = []
+  if (parts.days > 0) out.push(`${parts.days}d`)
+  if (parts.days > 0 || parts.hours > 0) out.push(`${parts.hours}h`)
+  out.push(`${parts.minutes}m`)
+  return out.join(' ')
+}
+
+/** @param {unknown} ts */
+export function timestampToMs(ts) {
+  return startMs(ts)
 }
 
 export { DEFAULT_FLAGSHIP_ID }

@@ -5,12 +5,17 @@ import { useTranslations } from 'next-intl'
 import { useAuth } from '@/lib/AuthProvider'
 import { loadUserDocument } from '@/lib/users'
 import { DashboardClient } from '@/components/dashboard/DashboardClient'
-import { OnboardingIntro } from '@/components/dashboard/OnboardingIntro'
+import dynamic from 'next/dynamic'
+
+const OnboardingIntro = dynamic(
+  () => import('@/components/dashboard/OnboardingIntro').then((m) => ({ default: m.OnboardingIntro })),
+  { ssr: false }
+)
 import { AppShell } from '@/components/dashboard/AppShell'
 import { GameweekData } from '@/types/dashboard'
 import { LoadBudget } from '@/lib/gameweek-selection'
 import { loadHomeCompetitionPlayCards } from '@/lib/competitions'
-import type { CompetitionPlayCard } from '@/types/competition'
+import type { CompetitionDocument, CompetitionPlayCard } from '@/types/competition'
 import { FirestoreServedFromCacheError } from '@/lib/firestore-server-read'
 import {
   shouldShowDashboardStaleBanner,
@@ -40,6 +45,7 @@ export default function DashboardPage() {
   const [username, setUsername] = useState<string | undefined>(undefined)
   const [gameweeks, setGameweeks] = useState<GameweekData[]>([])
   const [competitionCards, setCompetitionCards] = useState<CompetitionPlayCard[]>([])
+  const [comingSoonCompetitions, setComingSoonCompetitions] = useState<CompetitionDocument[]>([])
   const [gameweeksById, setGameweeksById] = useState<Map<string, GameweekData>>(new Map())
   const [loadingGameweeks, setLoadingGameweeks] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -99,16 +105,18 @@ export default function DashboardPage() {
       serverPreferring: true as const,
       budget: loadBudget,
       servedFromCacheRef,
+      staleWhileRevalidate: true as const,
     }
 
     async function fetchAvailableGameweeks() {
+      if (authLoading) return
       try {
         setLoadingGameweeks(true)
         setError(null)
         setRefreshFailed(false)
         setServedFromFirestoreCache(false)
 
-        const { cards, gameweeksById: byId } = await loadHomeCompetitionPlayCards(
+        const { cards, comingSoon, gameweeksById: byId } = await loadHomeCompetitionPlayCards(
           user?.uid ?? null,
           readOpts
         )
@@ -116,6 +124,7 @@ export default function DashboardPage() {
         if (abortController.signal.aborted) return
 
         setCompetitionCards(cards)
+        setComingSoonCompetitions(comingSoon)
         setGameweeksById(byId)
         setGameweeks([...byId.values()])
         const staleLoad = servedFromCacheRef.current
@@ -141,7 +150,7 @@ export default function DashboardPage() {
     return () => {
       abortController.abort()
     }
-  }, [loadGeneration, user?.uid])
+  }, [loadGeneration, user?.uid, authLoading])
 
   const retryGameweekLoad = () => {
     setError(null)
@@ -236,6 +245,7 @@ export default function DashboardPage() {
         gameweeks={gameweeks}
         competitionCards={competitionCards}
         gameweeksById={gameweeksById}
+        comingSoonCompetitions={comingSoonCompetitions}
         username={username}
       />
       {onboardingLayer}

@@ -12,7 +12,7 @@ interface HeaderProps {
 export function Header({ logoUrl = '/logo.svg', username, userPhotoUrl }: HeaderProps) {
   return (
     <header 
-      className="sticky top-0 z-[100] min-h-16 bg-midnight-violet px-4 sm:px-5 py-2 flex items-center gap-3"
+      className="sticky top-0 z-[120] min-h-16 bg-midnight-violet px-4 sm:px-5 py-2 flex items-center gap-3 pointer-events-auto"
       style={{
         minHeight: 'calc(var(--header-height) + env(safe-area-inset-top, 0px))',
         paddingTop: 'calc(0.5rem + env(safe-area-inset-top, 0px))',

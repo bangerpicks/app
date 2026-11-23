@@ -9,7 +9,12 @@ import { savePredictions, PARTIAL_PREDICTIONS_SAVE_ERROR } from '@/lib/predictio
 import { AppShell } from './AppShell'
 import { GameweekCard } from './GameweekCard'
 import { MatchCard } from './MatchCard'
-import { SignInModal } from './SignInModal'
+import dynamic from 'next/dynamic'
+
+const SignInModal = dynamic(
+  () => import('./SignInModal').then((m) => ({ default: m.SignInModal })),
+  { ssr: false }
+)
 import { GameweekData, MatchCardData, Prediction } from '@/types/dashboard'
 import { GafferDisplayPrefsProvider } from '@/lib/gaffer-display-prefs'
 import { useCrowdPickStats } from '@/hooks/useCrowdPickStats'
@@ -18,6 +23,7 @@ import { patchDashboardSessionGameweekPlayerCount } from '@/lib/dashboard-cache'
 import { playerCountAfterFirstJoinSave } from '@/lib/player-count-display.mjs'
 import { PicksBackNav } from './PicksBackNav'
 import { StickySaveBar } from './StickySaveBar'
+import { isGameweekPicksWindowOpen } from '@/lib/gameweek-selection'
 
 interface PicksClientProps {
   gameweek: GameweekData
@@ -74,7 +80,7 @@ export function PicksClient({
     setSavedPredictions(saved)
   }, [matches])
 
-  const isDisabled = gameweek.status !== 'OPEN'
+  const isDisabled = !isGameweekPicksWindowOpen(gameweek)
 
   const handlePredictionSelect = (fixtureId: number, prediction: Prediction) => {
     if (isDisabled || isSaving) return

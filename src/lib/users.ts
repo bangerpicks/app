@@ -180,34 +180,23 @@ export async function isDisplayNameAvailable(displayName: string, excludeUserId?
     }
 
     const normalizedName = displayName.trim().toLowerCase()
-    
-    // Query all users to check for case-insensitive matches
-    // Note: Firestore doesn't support case-insensitive queries, so we fetch and filter
-    const usersRef = collection(db, 'users')
-    const querySnapshot = await withTimeout(
-      getDocs(usersRef),
-      10000,
+    const claimRef = doc(db, 'displayNames', normalizedName)
+    const claimSnap = await withTimeout(
+      getDoc(claimRef),
+      8000,
       'Failed to check display name availability - request timed out'
     )
-    
-    // Check each user's displayName (case-insensitive)
-    for (const docSnapshot of querySnapshot.docs) {
-      // Skip the current user if excludeUserId is provided
-      if (excludeUserId && docSnapshot.id === excludeUserId) {
-        continue
-      }
-      
-      const userData = docSnapshot.data() as UserDocument
-      const existingDisplayName = userData.displayName || ''
-      const normalizedExisting = existingDisplayName.trim().toLowerCase()
-      
-      // Case-insensitive comparison
-      if (normalizedName === normalizedExisting) {
-        return false // Display name is already taken
-      }
+
+    if (!claimSnap.exists()) {
+      return true
     }
-    
-    return true // Display name is available
+
+    const ownerUid = claimSnap.data()?.uid as string | undefined
+    if (excludeUserId && ownerUid === excludeUserId) {
+      return true
+    }
+
+    return false
   } catch (error) {
     console.error('Error checking display name availability:', error)
     // On error, return false to be safe (prevent duplicates)
@@ -510,6 +499,10 @@ export async function ensureUserDocument(user: User, displayName: string, referr
       }
 
       await setDoc(userRef, userData)
+      const normalized = (displayName || 'Player').trim().toLowerCase()
+      if (normalized) {
+        await setDoc(doc(db, 'displayNames', normalized), { uid: user.uid }, { merge: true })
+      }
       return { isNewUser: true }
     } else {
       const currentData = userDoc.data()
@@ -522,6 +515,10 @@ export async function ensureUserDocument(user: User, displayName: string, referr
       const resolvedDisplayName = displayName || currentData.displayName || 'Player'
       if (resolvedDisplayName !== (currentData.displayName || 'Player')) {
         updates.displayName = resolvedDisplayName
+        const normalized = resolvedDisplayName.trim().toLowerCase()
+        if (normalized) {
+          await setDoc(doc(db, 'displayNames', normalized), { uid: user.uid }, { merge: true })
+        }
       }
 
       if (user.photoURL !== currentData.photoURL) {

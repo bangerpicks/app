@@ -17,6 +17,7 @@ function TeamLogo({ src, alt }: { src: string; alt: string }) {
           alt={alt}
           width={16}
           height={16}
+          loading="lazy"
           className="object-contain w-full h-full"
         />
       ) : (

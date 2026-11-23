@@ -1,4 +1,4 @@
-import { collection, getDocs } from 'firebase/firestore'
+import { collection, doc, getDoc, getDocs } from 'firebase/firestore'
 import { db } from './firebase'
 import type { GafferWinProbabilities } from './match-card-display'
 import type { Prediction } from '@/types/dashboard'
@@ -30,6 +30,20 @@ export function crowdStatsToPercents(
 export async function getCrowdPickStatsForFixture(
   fixtureId: number
 ): Promise<CrowdPickStats> {
+  const parentRef = doc(db, 'predictions', String(fixtureId))
+  const parentSnap = await getDoc(parentRef)
+  const cached = parentSnap.data()?.crowdPickCounts as
+    | { H?: number; D?: number; A?: number; total?: number }
+    | undefined
+  if (cached && typeof cached.total === 'number') {
+    return {
+      home: cached.H ?? 0,
+      draw: cached.D ?? 0,
+      away: cached.A ?? 0,
+      total: cached.total,
+    }
+  }
+
   const entriesRef = collection(db, 'predictions', String(fixtureId), 'entries')
   const snapshot = await withTimeout(
     getDocs(entriesRef),

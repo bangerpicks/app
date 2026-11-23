@@ -151,6 +151,8 @@ export function rankingsSimulateHungRead(label, options = {}) {
  * @returns {Promise<void>}
  */
 export async function rankingsHungReadGate(label, options = {}) {
+  const nodeEnv = (options.env ? options.env.NODE_ENV : process.env.NODE_ENV) ?? 'production'
+  if (nodeEnv === 'production') return
   if (!rankingsSimulateHungRead(label, options)) return
 
   const budgetRemainingMs = options.budgetRemainingMs ?? 0

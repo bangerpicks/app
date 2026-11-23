@@ -1,6 +1,6 @@
 {
   "name": "banger-picks",
-  "version": "1.2.6",
+  "version": "1.2.9",
   "private": true,
   "scripts": {
     "dev": "node scripts/dev-with-ip.js",
@@ -8,7 +8,10 @@
     "build": "next build",
     "build:safe": "npm run prebuild && npm run build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "next lint --max-warnings 0",
+    "ops:backfill": "node scripts/run-all-ops-backfills.mjs",
+    "ops:backfill:execute": "node scripts/run-all-ops-backfills.mjs --execute",
+    "ops:generate-pwa-icons": "node scripts/generate-pwa-icons.mjs",
     "type-check": "tsc --noEmit",
     "format": "prettier --write .",
     "setup": "npm install && npm run type-check",
@@ -43,6 +46,7 @@
     "firebase-tools": "^14.25.0",
     "postcss": "^8.4.0",
     "prettier": "^3.2.0",
+    "sharp": "^0.35.5",
     "tailwindcss": "^3.4.0",
     "typescript": "5.9.3"
   }

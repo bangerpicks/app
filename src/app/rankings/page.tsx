@@ -28,10 +28,8 @@ import {
 import { useLocale, useTranslations } from 'next-intl'
 import { mergeWeeklyRankingsWithStandings } from '@/lib/weekly-rankings-merge.mjs'
 import { LoadBudget } from '@/lib/gameweek-selection'
-import {
-  type CompetitionTrackId,
-  COMPETITION_TRACK_ORDER,
-} from '@/lib/competition-tracks'
+import type { CompetitionTrackId } from '@/lib/competition-tracks'
+import { PAST_GAMEWEEKS_LIMIT, parseTrackParam } from './rankings-url'
 import {
   DEFAULT_FLAGSHIP_ID,
   defaultCompetitionIdForLegacyTrack,
@@ -61,18 +59,9 @@ import {
 } from '@/lib/rankings-load-state.mjs'
 import { staleBannerShowsRetry, shouldShowDashboardStaleBanner } from '@/lib/dashboard-load-state'
 
-const PAST_GAMEWEEKS_LIMIT = 10
-
 type WeeklyBoardStatus = 'idle' | 'loading' | 'ready' | 'no-week' | 'error'
 type WeeklySliceStatus = 'idle' | 'loading' | 'loaded' | 'empty' | 'error'
 type SeasonBoardStatus = 'idle' | 'loading' | 'ready' | 'empty' | 'error'
-
-function parseTrackParam(value: string | null): CompetitionTrackId | null {
-  if (!value) return null
-  return COMPETITION_TRACK_ORDER.includes(value as CompetitionTrackId)
-    ? (value as CompetitionTrackId)
-    : null
-}
 
 function RankingsPageContent() {
   const { user, loading: authLoading } = useAuth()
@@ -370,7 +359,7 @@ function RankingsPageContent() {
       try {
         const [rankingsResult, allGameweeksList] = await Promise.all([
           getAllTimeRankings(user, 100),
-          getAllGameweeks({ sortBy: 'date', sortOrder: 'desc' }),
+          getAllGameweeks({ sortBy: 'date', sortOrder: 'desc', maxResults: 48 }),
         ])
 
         if (abortController.signal.aborted) return
@@ -532,7 +521,7 @@ function RankingsPageContent() {
     }
 
     return () => abortController.abort()
-  }, [user, locale, reloadKey, cacheUid, searchParams, selectedTrackId])
+  }, [user, locale, reloadKey, cacheUid, searchParams, selectedTrackId, selectedCompetitionId])
 
   useEffect(() => {
     const onResume = () => {

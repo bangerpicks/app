@@ -135,7 +135,7 @@ export function GafferDisplayPrefsProvider({ children }: { children: ReactNode }
     return () => {
       cancelled = true
     }
-  }, [user?.uid])
+  }, [user])
 
   return (
     <GafferDisplayPrefsContext.Provider value={{ prefs, ready }}>

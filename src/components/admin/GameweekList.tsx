@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { AdminGameweekData, GameweekFilters } from '@/types/admin'
 import { getAllGameweeks, deleteGameweek, updateGameweek, getGameweekById, getGameweekFixtures } from '@/lib/admin'
 import { GameweekCard } from './GameweekCard'
@@ -30,7 +30,7 @@ export function GameweekList({ onEdit, onRefresh }: GameweekListProps) {
     gameweekName: '',
   })
 
-  const loadGameweeks = async () => {
+  const loadGameweeks = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
@@ -42,11 +42,11 @@ export function GameweekList({ onEdit, onRefresh }: GameweekListProps) {
     } finally {
       setLoading(false)
     }
-  }
+  }, [filters])
 
   useEffect(() => {
-    loadGameweeks()
-  }, [filters])
+    void loadGameweeks()
+  }, [loadGameweeks])
 
   const handleDelete = async () => {
     if (!deleteConfirm.gameweekId) return

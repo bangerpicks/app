@@ -195,7 +195,11 @@
     "discoverSearchPlaceholder": "Buscar por nombre",
     "discoverSearchCta": "Buscar",
     "discoverLoading": "Cargando…",
-    "discoverLoadMore": "Cargar más"
+    "discoverLoadMore": "Cargar más",
+    "comingSoonBadge": "Próximamente",
+    "comingSoonOpensIn": "Abre en {countdown}",
+    "comingSoonOpeningSoon": "Abre muy pronto",
+    "comingSoonOpensAt": "Abre {date}"
   },
   "rankings": {
     "title": "Clasificaciones",

@@ -21,6 +21,10 @@ export interface CompetitionDocument {
   ownerUid?: string
   activeSeasonId?: string | null
   searchKeywords?: string[]
+  /** When set (and no active round yet), Home/Discover show a Coming Soon card. */
+  opensAt?: Timestamp | null
+  tagline?: string
+  tagline_esMX?: string
   createdAt?: Timestamp
   updatedAt?: Timestamp
 }

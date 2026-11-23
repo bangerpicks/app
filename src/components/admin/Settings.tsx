@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { getAppSettings, updateAppSettings, getActiveGameweek, forceOpenActiveGameweek } from '@/lib/admin'
 import { Save, Loader2, AlertTriangle } from 'lucide-react'
+import { OpsBackfillPanel } from './OpsBackfillPanel'
 
 interface SettingsProps {
   onUpdate?: () => void
@@ -206,6 +207,8 @@ export function Settings({ onUpdate }: SettingsProps) {
             )}
           </div>
         </div>
+
+        <OpsBackfillPanel />
 
         <div className="flex justify-end pt-4 border-t border-gray-700">
           <button

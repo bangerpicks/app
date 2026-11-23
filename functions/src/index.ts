@@ -9,11 +9,11 @@ import {
 } from './api-football-client'
 import type { APIFootballFixture } from './api-football-types'
 import { determineMatchWinner, getRegulationScore } from './match-result'
+import { slimApiFootballFixture, fixtureLiveFieldsSig } from './slim-fixture'
 import {
   extractFixturePollContext,
   fixtureNeedsLiveApiPoll,
   fixtureNeedsScoringApiPoll,
-  isMatchFinished,
 } from './fixture-window'
 import { isUserAdmin } from './admin-auth'
 import { adminGetStandings, adminSearchFixtures, adminSearchPlayers } from './admin-api-football-handlers'
@@ -187,20 +187,18 @@ export const updateLiveFixtures = functions
               continue
             }
 
-            const status = updatedFixture.fixture.status.short
-            const finished = isMatchFinished(status)
-
+            const slim = slimApiFootballFixture(updatedFixture)
             const currentFixture = fixtureData.fixture as APIFootballFixture | undefined
-            const currentStatus = currentFixture?.fixture?.status?.short
-
-            if (finished && currentStatus === status) {
+            const nextSig = fixtureLiveFieldsSig(slim)
+            const prevSig = currentFixture ? fixtureLiveFieldsSig(currentFixture) : ''
+            if (nextSig === prevSig) {
               continue
             }
 
             const fixtureRef = db.collection('gameweeks').doc(gameweekId).collection('fixtures').doc(fixtureDoc.id)
 
             batch.update(fixtureRef, {
-              fixture: updatedFixture,
+              fixture: slim,
             })
 
             updateCount++
@@ -702,6 +700,9 @@ type AdminApiFootballRequest =
 /**
  * Admin-only proxy for API-Football (keeps API key server-side).
  */
+export { syncCrowdPickCounters } from './crowd-counters'
+export { adminRunBackfills } from './ops-backfill'
+
 export const adminApiFootball = functions
   .runWith(scheduledOpts)
   .https.onCall(async (data: AdminApiFootballRequest, context) => {

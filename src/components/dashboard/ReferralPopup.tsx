@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useTranslations } from 'next-intl'
 import { useAuth } from '@/lib/AuthProvider'
 import { getUserReferralCode } from '@/lib/users'
@@ -18,13 +18,7 @@ export function ReferralPopup({ className }: ReferralPopupProps) {
   const [isLoading, setIsLoading] = useState(false)
   const [copied, setCopied] = useState(false)
 
-  useEffect(() => {
-    if (user) {
-      loadReferralCode()
-    }
-  }, [user])
-
-  const loadReferralCode = async () => {
+  const loadReferralCode = useCallback(async () => {
     if (!user) return
     setIsLoading(true)
     try {
@@ -35,7 +29,11 @@ export function ReferralPopup({ className }: ReferralPopupProps) {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [user])
+
+  useEffect(() => {
+    if (user) void loadReferralCode()
+  }, [user, loadReferralCode])
 
   const getReferralLink = () => {
     if (!referralCode) return ''

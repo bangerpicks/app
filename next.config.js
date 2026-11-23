@@ -41,7 +41,7 @@ const nextConfig = {
     NEXT_PUBLIC_GIT_SHA: resolveGitSha(),
     NEXT_PUBLIC_BUILD_DATE: resolveBuildDate(),
   },
-  productionBrowserSourceMaps: true,
+  productionBrowserSourceMaps: false,
   output: 'export',
   trailingSlash: true,
   images: {
@@ -58,9 +58,9 @@ const nextConfig = {
     // Fix for Windows symlink issues - disable symlink resolution
     config.resolve.symlinks = false
     
-    // Disable filesystem cache completely to avoid EISDIR errors on Windows
-    // This is a workaround for webpack's PackFileCacheStrategy readlink issue on Windows
-    config.cache = false
+    if (process.platform === 'win32') {
+      config.cache = false
+    }
     
     return config
   },
