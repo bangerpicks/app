@@ -1,19 +1,25 @@
 import * as functions from 'firebase-functions'
 import * as admin from 'firebase-admin'
-// Keep in sync with src/lib/save-gameweek-picks-server.mjs
+import type { APIFootballFixture } from './api-football-types'
 import {
-  fixturesNeedingWriteServer,
-  firstNewEntryFixtureId,
-} from './save-gameweek-picks-server.mjs'
+  planSaveGameweekPicks,
+  type PlanExistingEntry,
+  type PlanFixture,
+} from './save-gameweek-picks-plan'
 
 type Pick = 'H' | 'D' | 'A'
 
+/**
+ * Legacy client match metadata. v1.2.11: still accepted so older clients keep
+ * working, but IGNORED. The server reads the gameweek's own fixtures for the slate,
+ * statuses, kickoffs and the denormalized team/league fields.
+ */
 export type SaveGameweekPicksMatchInput = {
   fixtureId: number
-  homeTeam: { id: number; name: string; logo: string }
-  awayTeam: { id: number; name: string; logo: string }
-  league: { id: number; name: string; logo?: string }
-  fixtureDateMs: number
+  homeTeam?: { id: number; name: string; logo: string }
+  awayTeam?: { id: number; name: string; logo: string }
+  league?: { id: number; name: string; logo?: string }
+  fixtureDateMs?: number
   matchStatus?: string
   score?: { home: number; away: number } | null
 }
@@ -21,206 +27,209 @@ export type SaveGameweekPicksMatchInput = {
 export type SaveGameweekPicksRequest = {
   gameweekId: string
   picks: Array<{ fixtureId: number; pick: Pick }>
-  matches: SaveGameweekPicksMatchInput[]
+  matches?: SaveGameweekPicksMatchInput[]
 }
 
-function effectiveLock(
-  gw: FirebaseFirestore.DocumentData
-): admin.firestore.Timestamp | undefined {
-  const lockAt = gw.lockAt as admin.firestore.Timestamp | undefined
-  const deadline = gw.deadline as admin.firestore.Timestamp | undefined
-  return lockAt ?? deadline
+type ServerFixture = PlanFixture & { api: APIFootballFixture | undefined }
+
+function toMillis(value: unknown): number | null {
+  if (value && typeof (value as admin.firestore.Timestamp).toMillis === 'function') {
+    return (value as admin.firestore.Timestamp).toMillis()
+  }
+  return null
 }
 
-function picksWindowOpen(
-  gw: FirebaseFirestore.DocumentData,
-  fixtureStatus: string
-): boolean {
-  if (gw.status !== 'active') return false
-  if (gw.forceOpenForTesting === true) return true
-  const lock = effectiveLock(gw)
-  if (!lock) return false
-  if (admin.firestore.Timestamp.now().toMillis() >= lock.toMillis()) return false
-  const short = fixtureStatus || 'NS'
-  return short === 'NS' || short === 'TBD'
+function readServerFixture(
+  doc: FirebaseFirestore.QueryDocumentSnapshot
+): ServerFixture | null {
+  const data = doc.data()
+  const fixtureId =
+    typeof data.fixtureId === 'number' ? data.fixtureId : Number.parseInt(doc.id, 10)
+  if (!Number.isInteger(fixtureId) || fixtureId <= 0) return null
+  const api = data.fixture as APIFootballFixture | undefined
+  const statusShort = api?.fixture?.status?.short || 'NS'
+  const ts = api?.fixture?.timestamp
+  const kickoffMs = typeof ts === 'number' && ts > 0 ? ts * 1000 : null
+  return { fixtureId, statusShort, kickoffMs, api }
 }
 
 export async function executeSaveGameweekPicks(
   db: admin.firestore.Firestore,
   uid: string,
-  data: SaveGameweekPicksRequest
+  data: SaveGameweekPicksRequest,
+  nowMs: number = Date.now()
 ): Promise<{ joinedGameweek: boolean }> {
-  const gameweekId = typeof data.gameweekId === 'string' ? data.gameweekId.trim() : ''
+  const gameweekId = typeof data?.gameweekId === 'string' ? data.gameweekId.trim() : ''
   if (!gameweekId || !/^[A-Za-z0-9_-]{1,80}$/.test(gameweekId)) {
     throw new functions.https.HttpsError('invalid-argument', 'Invalid gameweekId')
-  }
-
-  if (!Array.isArray(data.matches) || data.matches.length === 0) {
-    throw new functions.https.HttpsError('invalid-argument', 'matches are required')
   }
   if (!Array.isArray(data.picks) || data.picks.length === 0) {
     throw new functions.https.HttpsError('invalid-argument', 'picks are required')
   }
-
-  const settingsSnap = await db.doc('settings/app').get()
-  if (settingsSnap.exists && settingsSnap.data()?.maintenanceMode === true) {
-    throw new functions.https.HttpsError('failed-precondition', 'App is in maintenance mode')
+  if (data.picks.length > 100) {
+    throw new functions.https.HttpsError('invalid-argument', 'Too many picks')
   }
 
-  const gwSnap = await db.collection('gameweeks').doc(gameweekId).get()
-  if (!gwSnap.exists) {
-    throw new functions.https.HttpsError('not-found', 'Gameweek not found')
-  }
-  const gw = gwSnap.data()!
-
-  const matchByFixture = new Map<number, SaveGameweekPicksMatchInput>()
-  for (const m of data.matches) {
-    if (typeof m.fixtureId !== 'number') continue
-    matchByFixture.set(m.fixtureId, m)
-  }
-
-  const predictionMap = new Map<number, Pick>()
-  for (const p of data.picks) {
-    if (typeof p.fixtureId !== 'number' || (p.pick !== 'H' && p.pick !== 'D' && p.pick !== 'A')) {
-      throw new functions.https.HttpsError('invalid-argument', 'Invalid pick payload')
-    }
-    predictionMap.set(p.fixtureId, p.pick)
-  }
-
-  const expectedFixtureIds = [...matchByFixture.keys()].sort((a, b) => a - b)
-  if (expectedFixtureIds.length === 0) {
-    throw new functions.https.HttpsError('invalid-argument', 'No fixtures in slate')
-  }
-
-  for (const fixtureId of expectedFixtureIds) {
-    if (!predictionMap.has(fixtureId)) {
-      throw new functions.https.HttpsError(
-        'invalid-argument',
-        `All ${expectedFixtureIds.length} matches must have a pick`
-      )
-    }
-    const match = matchByFixture.get(fixtureId)!
-    const status = match.matchStatus || 'NS'
-    if (!picksWindowOpen(gw, status)) {
-      throw new functions.https.HttpsError('failed-precondition', 'Picks are closed for this gameweek')
-    }
-  }
-
+  const gameweekRef = db.collection('gameweeks').doc(gameweekId)
   const cacheRef = db.collection('users').doc(uid).collection('gameweek_predictions').doc(gameweekId)
-  const cacheSnap = await cacheRef.get()
-  const creatingCache = !cacheSnap.exists
-  const existingPredictions: Record<string, Pick> = cacheSnap.exists
-    ? (cacheSnap.data()?.predictions as Record<string, Pick>) || {}
-    : {}
+  const userRef = db.collection('users').doc(uid)
+  const standingsRef = db.collection('weeklyStandings').doc(gameweekId)
 
-  const mergedPredictions: Record<string, Pick> = { ...existingPredictions }
-  for (const [fixtureId, pick] of predictionMap.entries()) {
-    mergedPredictions[String(fixtureId)] = pick
-  }
+  // Transaction: the awarded / lock / slate checks and the writes see the same data,
+  // so autoScoring can't award an entry between our read and our write.
+  const result = await db.runTransaction(async (tx) => {
+    const [settingsSnap, gwSnap, fixturesSnap, cacheSnap, userSnap] = await Promise.all([
+      tx.get(db.doc('settings/app')),
+      tx.get(gameweekRef),
+      tx.get(gameweekRef.collection('fixtures')),
+      tx.get(cacheRef),
+      tx.get(userRef),
+    ])
 
-  const fixtureIdsToWrite = fixturesNeedingWriteServer({
-    creatingCache,
-    existingPredictions,
-    predictions: predictionMap,
-  })
+    const settings = settingsSnap.exists ? settingsSnap.data() || {} : {}
+    if (settings.maintenanceMode === true || settings.maintenance === true) {
+      throw new functions.https.HttpsError('failed-precondition', 'App is in maintenance mode')
+    }
+    // Invite gate: only accounts that passed registration (users/{uid} exists) can play.
+    if (!userSnap.exists) {
+      throw new functions.https.HttpsError('permission-denied', 'REGISTRATION_CLOSED')
+    }
+    if (!gwSnap.exists) {
+      throw new functions.https.HttpsError('not-found', 'Gameweek not found')
+    }
+    const gw = gwSnap.data()!
 
-  if (fixtureIdsToWrite.length === 0) {
-    return { joinedGameweek: false }
-  }
+    const fixtures: ServerFixture[] = []
+    for (const doc of fixturesSnap.docs) {
+      const f = readServerFixture(doc)
+      if (f) fixtures.push(f)
+    }
 
-  const entrySnaps = await Promise.all(
-    fixtureIdsToWrite.map(async (fixtureId) => {
-      const ref = db.collection('predictions').doc(String(fixtureId)).collection('entries').doc(uid)
-      return { fixtureId, snap: await ref.get() }
+    // Authoritative existing picks: the user's entry for every fixture in the round.
+    const entryRefs = fixtures.map((f) =>
+      db.collection('predictions').doc(String(f.fixtureId)).collection('entries').doc(uid)
+    )
+    const entrySnaps = await Promise.all(entryRefs.map((ref) => tx.get(ref)))
+    const existingEntries = new Map<number, PlanExistingEntry>()
+    entrySnaps.forEach((snap, i) => {
+      if (!snap.exists) return
+      const d = snap.data() || {}
+      existingEntries.set(fixtures[i].fixtureId, {
+        pick: typeof d.pick === 'string' ? d.pick : undefined,
+        awarded: d.awarded === true,
+        gameweekId: typeof d.gameweekId === 'string' ? d.gameweekId : undefined,
+      })
     })
-  )
-  const entryExistsMap = new Map(entrySnaps.map((e) => [e.fixtureId, e.snap.exists]))
 
-  const firstNewFixtureId =
-    creatingCache
-      ? firstNewEntryFixtureId(fixtureIdsToWrite, (id) => entryExistsMap.get(id) === true)
+    const plan = planSaveGameweekPicks({
+      gameweekId,
+      gameweek: {
+        status: gw.status,
+        lockAtMs: toMillis(gw.lockAt) ?? toMillis(gw.deadline),
+        forceOpenForTesting: gw.forceOpenForTesting === true,
+      },
+      fixtures,
+      picks: data.picks,
+      existingEntries,
+      nowMs,
+    })
+
+    if (!plan.ok) {
+      throw new functions.https.HttpsError(plan.code, plan.message)
+    }
+    if (plan.writes.length === 0) {
+      return { joinedGameweek: false, wrote: false }
+    }
+
+    const creatingCache = !cacheSnap.exists
+    const firstNewFixtureId = creatingCache
+      ? plan.writes.find((w) => w.isNew)?.fixtureId ?? null
       : null
 
-  const now = admin.firestore.FieldValue.serverTimestamp()
-  const batch = db.batch()
+    const now = admin.firestore.FieldValue.serverTimestamp()
+    const fixtureById = new Map(fixtures.map((f) => [f.fixtureId, f]))
 
-  for (const fixtureId of fixtureIdsToWrite) {
-    const pick = predictionMap.get(fixtureId)!
-    const match = matchByFixture.get(fixtureId)
-    if (!match) {
-      throw new functions.https.HttpsError('invalid-argument', `Missing match data for fixture ${fixtureId}`)
-    }
+    for (const write of plan.writes) {
+      const parentRef = db.collection('predictions').doc(String(write.fixtureId))
+      const entryRef = parentRef.collection('entries').doc(uid)
 
-    const parentRef = db.collection('predictions').doc(String(fixtureId))
-    const entryRef = parentRef.collection('entries').doc(uid)
-    const hadEntry = entryExistsMap.get(fixtureId) === true
+      if (!write.isNew) {
+        // Pick change only. Never touch awarded / points / correct / result.
+        tx.set(parentRef, { exists: true }, { merge: true })
+        tx.update(entryRef, { pick: write.pick })
+        continue
+      }
 
-    if (hadEntry) {
-      batch.set(parentRef, { exists: true }, { merge: true })
-    } else {
-      batch.set(
+      tx.set(
         parentRef,
         { exists: true, playerCount: admin.firestore.FieldValue.increment(1) },
         { merge: true }
       )
+
+      const server = fixtureById.get(write.fixtureId)
+      const api = server?.api
+      tx.set(entryRef, {
+        uid,
+        fixtureId: write.fixtureId,
+        gameweekId,
+        pick: write.pick,
+        createdAt: now,
+        awarded: false,
+        points: 0,
+        correct: null,
+        homeTeam: {
+          id: api?.teams?.home?.id ?? 0,
+          name: api?.teams?.home?.name ?? '',
+          logo: api?.teams?.home?.logo ?? '',
+        },
+        awayTeam: {
+          id: api?.teams?.away?.id ?? 0,
+          name: api?.teams?.away?.name ?? '',
+          logo: api?.teams?.away?.logo ?? '',
+        },
+        league: {
+          id: api?.league?.id ?? 0,
+          name: api?.league?.name ?? '',
+          country: api?.league?.country ?? '',
+          logo: api?.league?.logo ?? '',
+        },
+        fixtureDate: admin.firestore.Timestamp.fromMillis(server?.kickoffMs ?? nowMs),
+        status: server?.statusShort ?? 'NS',
+        result: null,
+      })
     }
 
-    const entryData = {
-      uid,
-      fixtureId,
-      gameweekId,
-      pick,
-      createdAt: now,
-      awarded: false,
-      points: 0,
-      correct: null,
-      homeTeam: {
-        id: match.homeTeam.id,
-        name: match.homeTeam.name,
-        logo: match.homeTeam.logo,
-      },
-      awayTeam: {
-        id: match.awayTeam.id,
-        name: match.awayTeam.name,
-        logo: match.awayTeam.logo,
-      },
-      league: {
-        id: match.league.id,
-        name: match.league.name,
-        country: '',
-        logo: match.league.logo || '',
-      },
-      fixtureDate: admin.firestore.Timestamp.fromMillis(match.fixtureDateMs),
-      status: match.matchStatus || 'NS',
-      result: match.score
-        ? { homeGoals: match.score.home, awayGoals: match.score.away }
-        : null,
+    const prevJoined = cacheSnap.exists ? cacheSnap.data()?.joinedFixtureId : undefined
+    if (creatingCache && firstNewFixtureId != null) {
+      tx.set(cacheRef, {
+        predictions: plan.mergedPredictions,
+        updatedAt: now,
+        joinedFixtureId: String(firstNewFixtureId),
+      })
+      tx.set(gameweekRef, { playerCount: admin.firestore.FieldValue.increment(1) }, { merge: true })
+    } else {
+      tx.set(cacheRef, {
+        predictions: plan.mergedPredictions,
+        updatedAt: now,
+        ...(prevJoined ? { joinedFixtureId: prevJoined } : {}),
+      })
     }
 
-    batch.set(entryRef, entryData, { merge: true })
+    return { joinedGameweek: creatingCache && firstNewFixtureId != null, wrote: true }
+  })
+
+  if (result.wrote) {
+    // Outside the transaction (hot doc): tell the standings refresher this board is stale.
+    try {
+      await standingsRef.set(
+        { gameweekId, dirtyAt: admin.firestore.FieldValue.serverTimestamp() },
+        { merge: true }
+      )
+    } catch (error) {
+      console.warn('[saveGameweekPicks] weeklyStandings dirty flag failed', error)
+    }
   }
-
-  if (creatingCache && firstNewFixtureId != null) {
-    batch.set(cacheRef, {
-      predictions: mergedPredictions,
-      updatedAt: now,
-      joinedFixtureId: String(firstNewFixtureId),
-    })
-    batch.set(
-      db.collection('gameweeks').doc(gameweekId),
-      { playerCount: admin.firestore.FieldValue.increment(1) },
-      { merge: true }
-    )
-  } else {
-    batch.set(cacheRef, {
-      predictions: mergedPredictions,
-      updatedAt: now,
-    })
-  }
-
-  await batch.commit()
-
-  return { joinedGameweek: creatingCache }
+  return { joinedGameweek: result.joinedGameweek }
 }
 
 export const saveGameweekPicksHandler = async (
@@ -238,9 +247,6 @@ export const saveGameweekPicksHandler = async (
       throw error
     }
     console.error('[saveGameweekPicks] Error:', error)
-    throw new functions.https.HttpsError(
-      'internal',
-      error instanceof Error ? error.message : 'Failed to save picks'
-    )
+    throw new functions.https.HttpsError('internal', 'Failed to save picks')
   }
 }

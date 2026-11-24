@@ -54,6 +54,7 @@ function mapWeeklyStandingsToRankingEntries(
     weeklyPoints: entry.points,
     rank: entry.rank,
     isCurrentUser: currentUserId ? entry.uid === currentUserId : false,
+    standingsPicks: entry.picks ?? null,
   }))
 }
 

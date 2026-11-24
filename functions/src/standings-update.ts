@@ -16,6 +16,8 @@ export interface WeeklyStandingsEntry {
   correct: number
   rank: number
   isBot?: boolean
+  /** Only present once picks are public (after lock, D3): fixtureId -> { p: pick, c: correct } */
+  picks?: Record<string, { p: string; c: boolean | null }>
 }
 
 export interface SeasonStandingsEntry {
@@ -70,10 +72,12 @@ function userIsBot(uid: string, data: FirebaseFirestore.DocumentData | undefined
 export async function buildWeeklyStandingsEntries(
   db: admin.firestore.Firestore,
   gameweekId: string,
-  fixtureIds: number[]
+  fixtureIds: number[],
+  options: { includePicks?: boolean } = {}
 ): Promise<WeeklyStandingsEntry[]> {
   const entryGroups: Array<Array<{ uid: string; awarded?: boolean; points?: number; correct?: boolean }>> = []
   const correctByUid = new Map<string, number>()
+  const picksByUid = new Map<string, Record<string, { p: string; c: boolean | null }>>()
 
   for (const fixtureId of fixtureIds) {
     const entriesSnapshot = await db
@@ -94,6 +98,14 @@ export async function buildWeeklyStandingsEntries(
       })
       if (data.awarded === true && data.correct === true) {
         correctByUid.set(uid, (correctByUid.get(uid) || 0) + 1)
+      }
+      if (options.includePicks && (data.pick === 'H' || data.pick === 'D' || data.pick === 'A')) {
+        const picks = picksByUid.get(uid) || {}
+        picks[String(fixtureId)] = {
+          p: data.pick,
+          c: data.awarded === true && typeof data.correct === 'boolean' ? data.correct : null,
+        }
+        picksByUid.set(uid, picks)
       }
     })
     entryGroups.push(group)
@@ -149,40 +161,124 @@ export async function buildWeeklyStandingsEntries(
     correct: row.weeklyCorrect,
     rank: row.rank ?? 0,
     isBot: row.isBot,
+    ...(options.includePicks ? { picks: picksByUid.get(row.uid) || {} } : {}),
   }))
 }
 
 export async function writeWeeklyStandings(
   db: admin.firestore.Firestore,
   gameweekId: string,
-  entries: WeeklyStandingsEntry[]
+  entries: WeeklyStandingsEntry[],
+  meta: { picksVisible?: boolean } = {}
 ): Promise<void> {
   const ref = db.collection('weeklyStandings').doc(gameweekId)
   await ref.set(
     {
       gameweekId,
       entries,
+      picksVisible: meta.picksVisible === true,
+      builtAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     },
     { merge: true }
   )
 }
 
+function timestampMs(value: unknown): number | null {
+  if (value && typeof (value as admin.firestore.Timestamp).toMillis === 'function') {
+    return (value as admin.firestore.Timestamp).toMillis()
+  }
+  return null
+}
+
+/**
+ * Picks become public once the round locks (D3), or when it is finished.
+ * forceOpenForTesting rounds keep picks private while they can still change.
+ */
+export function weeklyPicksVisible(
+  gameweek: { status?: string; lockAt?: unknown; deadline?: unknown; forceOpenForTesting?: boolean },
+  nowMs: number
+): boolean {
+  if (gameweek.status === 'completed' || gameweek.status === 'archived') return true
+  if (gameweek.forceOpenForTesting === true) return false
+  const lockMs = timestampMs(gameweek.lockAt) ?? timestampMs(gameweek.deadline)
+  return lockMs != null && nowMs >= lockMs
+}
+
+/**
+ * Whether the scheduled pass should rebuild weeklyStandings/{gw}.
+ * Rebuild when missing, when a save marked it dirty after the last build, or when
+ * the round just locked (so picks become visible).
+ */
+export function weeklyStandingsNeedsRefresh(params: {
+  exists: boolean
+  builtAtMs: number | null
+  dirtyAtMs: number | null
+  picksVisibleNow: boolean
+  docPicksVisible: boolean
+}): boolean {
+  if (!params.exists || params.builtAtMs == null) return true
+  if (params.picksVisibleNow && !params.docPicksVisible) return true
+  if (params.dirtyAtMs != null && params.dirtyAtMs > params.builtAtMs) return true
+  return false
+}
+
 export async function refreshWeeklyStandingsForGameweek(
   db: admin.firestore.Firestore,
-  gameweekId: string
+  gameweekId: string,
+  nowMs: number = Date.now()
 ): Promise<WeeklyStandingsEntry[]> {
   const gameweekSnap = await db.collection('gameweeks').doc(gameweekId).get()
   if (!gameweekSnap.exists) {
     return []
   }
-  const fixtureIds: number[] = gameweekSnap.data()?.fixtureIds || []
+  const gw = gameweekSnap.data() || {}
+  const fixtureIds: number[] = gw.fixtureIds || []
   if (fixtureIds.length === 0) {
     return []
   }
-  const entries = await buildWeeklyStandingsEntries(db, gameweekId, fixtureIds)
-  await writeWeeklyStandings(db, gameweekId, entries)
+  const picksVisible = weeklyPicksVisible(gw, nowMs)
+  const entries = await buildWeeklyStandingsEntries(db, gameweekId, fixtureIds, {
+    includePicks: picksVisible,
+  })
+  await writeWeeklyStandings(db, gameweekId, entries, { picksVisible })
   return entries
+}
+
+/**
+ * v1.2.11: keep weeklyStandings current for every active round, so Rankings reads one
+ * doc instead of listing entries (entry lists are denied by the rules).
+ * Returns the ids it rebuilt.
+ */
+export async function refreshStaleActiveWeeklyStandings(
+  db: admin.firestore.Firestore,
+  gameweekDocs: Array<{ id: string; data: () => FirebaseFirestore.DocumentData }>,
+  nowMs: number = Date.now()
+): Promise<string[]> {
+  if (gameweekDocs.length === 0) return []
+  const refs = gameweekDocs.map((g) => db.collection('weeklyStandings').doc(g.id))
+  const snaps = await db.getAll(...refs)
+  const rebuilt: string[] = []
+  for (let i = 0; i < gameweekDocs.length; i++) {
+    const gwDoc = gameweekDocs[i]
+    const snap = snaps[i]
+    const data = snap.exists ? snap.data() || {} : {}
+    const needs = weeklyStandingsNeedsRefresh({
+      exists: snap.exists && Array.isArray(data.entries),
+      builtAtMs: timestampMs(data.builtAt) ?? timestampMs(data.updatedAt),
+      dirtyAtMs: timestampMs(data.dirtyAt),
+      picksVisibleNow: weeklyPicksVisible(gwDoc.data(), nowMs),
+      docPicksVisible: data.picksVisible === true,
+    })
+    if (!needs) continue
+    try {
+      await refreshWeeklyStandingsForGameweek(db, gwDoc.id, nowMs)
+      rebuilt.push(gwDoc.id)
+    } catch (error) {
+      console.error(`[weeklyStandings] refresh failed for ${gwDoc.id}:`, error)
+    }
+  }
+  return rebuilt
 }
 
 export async function recomputeSeasonStandings(

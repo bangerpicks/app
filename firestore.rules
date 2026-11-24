@@ -68,7 +68,11 @@ service cloud.firestore {
     }
 
     function maintenanceOn() {
-      return settingsExist() && settingsData().get('maintenance', false) == true;
+      // Admin UI writes `maintenanceMode` (src/lib/admin.ts); legacy docs used `maintenance`.
+      return settingsExist() && (
+        settingsData().get('maintenanceMode', false) == true
+        || settingsData().get('maintenance', false) == true
+      );
     }
 
     function isPublicGameweekStatus(status) {

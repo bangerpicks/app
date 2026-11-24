@@ -440,7 +440,9 @@ describe('predictions', () => {
     await assertSucceeds(savePick(dbAs(OTHER), OTHER, 'D'))
     await assertSucceeds(savePick(dbAs(USER), USER, 'A', {}, FIXTURE_ID, GAMEWEEK_ID, false))
     await assertDenied(getDocs(collection(dbAnon(), 'predictions', String(FIXTURE_ID), 'entries')))
-    await assertSucceeds(getDocs(collection(dbAs(USER), 'predictions', String(FIXTURE_ID), 'entries')))
+    // v1.2.11: entry *lists* are denied for players (picks are private before lock and
+    // rankings now read server-written weeklyStandings instead of listing entries).
+    await assertDenied(getDocs(collection(dbAs(USER), 'predictions', String(FIXTURE_ID), 'entries')))
     await assertDenied(getDoc(doc(dbAs(OTHER), 'predictions', String(FIXTURE_ID), 'entries', USER)))
     await assertSucceeds(getDoc(doc(dbAs(USER), 'predictions', String(FIXTURE_ID), 'entries', USER)))
   })
@@ -554,6 +556,14 @@ describe('predictions', () => {
     await assertDenied(inflate.commit())
     const afterInflate = await getDoc(doc(dbAnon(), 'gameweeks', GAMEWEEK_ID))
     assert.equal(afterInflate.data().playerCount, 1)
+  })
+
+  it('denies picks while maintenanceMode (the key the admin UI writes) is on', async () => {
+    await seedPlayableFixture()
+    await seed(async (db) => {
+      await setDoc(doc(db, 'settings', 'app'), { maintenanceMode: true }, { merge: true })
+    })
+    await assertDenied(savePick(dbAs(USER), USER, 'H'))
   })
 
   it('denies picks and redemptions while maintenance is on', async () => {
@@ -877,7 +887,7 @@ describe('shop items and redemptions', () => {
       optionsById[String(i)] = {
         playerId: i,
         name: `Player ${i}`,
-        photo: `p${i}.png`,
+        photo: `https://media.api-sports.io/football/players/${i}.png`,
         pointsCost: 10 + i,
       }
     }
@@ -1062,7 +1072,7 @@ describe('shop items and redemptions', () => {
     await seedShop()
     await assertDenied(
       updateDoc(doc(dbAs(USER), 'users', USER), {
-        favoritePlayer: { id: 30, name: 'Player 30', photo: 'p30.png' },
+        favoritePlayer: { id: 30, name: 'Player 30', photo: 'https://media.api-sports.io/football/players/30.png' },
         lastUpdated: serverTimestamp(),
       })
     )

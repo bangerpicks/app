@@ -1,5 +1,35 @@
 # Changelog
 
+## 1.2.11 — 2026-11-25 (deploy before Wed Nov 25, 6:00 PM CT)
+
+### Security: `saveGameweekPicks` trusts only server data (P0, audit #2)
+
+- The callable reads the round's own fixtures and requires an exact slate (one pick per fixture in the round, nothing else).
+- Status, kickoff and lock come from Firestore, never from the client; a pick can't change once the round locks or the match kicks off.
+- Runs in a transaction; an already-scored entry is never touched, and a pick change only writes `pick` (no `awarded`/`points` reset).
+- Requires `users/{uid}` to exist (closes the invite-gate bypass). Honors `maintenanceMode`.
+- Save errors are shown in English and Spanish (es-MX).
+
+### Fix: weekly rankings for active rounds (P1, audit #2)
+
+- Functions build `weeklyStandings/{gw}` for every active round (missing, changed since last build, or just locked) on the 5-minute autoScoring run; after lock it includes each player's picks (D3).
+- Rankings reads that one doc and never lists prediction entries (the rules deny entry lists).
+
+### Rules
+
+- Maintenance checks honor `maintenanceMode` (what the admin UI writes) as well as legacy `maintenance`.
+
+### Speed
+
+- Picks page loads gameweek, fixtures, your picks and standings in parallel (no serial waterfall).
+- Optimistic picks: taps are never blocked by an in-flight save; no extra profile round trip on save.
+- Shorter server waits before falling back to cached data (4 s per attempt, 16 s budget).
+- Live scores poll every minute (was 2).
+
+### Tooling
+
+- `package-lock.json` regenerated; `npm ci` passes. Rules test fixtures use allowlisted photo URLs.
+
 ## 1.2.10 — 2026-11-24
 
 ### Fix: Home shows new rounds without navigating

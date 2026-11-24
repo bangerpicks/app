@@ -31,6 +31,7 @@ import { syncPreMatchOddsForActiveGameweeks } from './prematch-odds-sync'
 import {
   assignGameweekToActiveSeason,
   refreshStandingsAfterGameweekActivity,
+  refreshStaleActiveWeeklyStandings,
 } from './standings-update'
 import { saveGameweekPicksHandler } from './save-gameweek-picks'
 
@@ -102,11 +103,13 @@ async function fixtureHasUnawardedPredictions(db: admin.firestore.Firestore, fix
 }
 
 /**
- * Update live fixtures for all active gameweeks (every 2 minutes).
+ * Update live fixtures for all active gameweeks (every minute since v1.2.11; was 2 min).
+ * API-Football: 1 call per active gameweek with a fixture in its live window per run
+ * (ids= batches of 20), so roughly 2x the previous live-window calls; well under Pro 7,500/day.
  */
 export const updateLiveFixtures = functions
   .runWith(scheduledOpts)
-  .pubsub.schedule('every 2 minutes')
+  .pubsub.schedule('every 1 minutes')
   .onRun(async () => {
     resetApiFootballRateLimitWarning()
     const db = admin.firestore()
@@ -489,6 +492,20 @@ export const autoScoring = functions
         } catch (standingsError: unknown) {
           console.error(`[autoScoring] standings refresh failed for ${gameweekId}:`, standingsError)
         }
+      }
+
+      // v1.2.11: build/refresh weeklyStandings for active rounds that are missing, dirty
+      // (a save since the last build) or just locked, so Rankings never lists entries.
+      try {
+        const stale = gameweeksSnapshot.docs.filter(
+          (d) => !gameweeksToRefreshStandings.has(d.id)
+        )
+        const rebuilt = await refreshStaleActiveWeeklyStandings(db, stale)
+        if (rebuilt.length > 0) {
+          console.log(`[autoScoring] weeklyStandings rebuilt: ${rebuilt.join(', ')}`)
+        }
+      } catch (weeklyError: unknown) {
+        console.error('[autoScoring] weeklyStandings pass failed:', weeklyError)
       }
 
       return null

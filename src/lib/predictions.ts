@@ -151,17 +151,13 @@ export async function savePredictions(
     const code = (error as { code?: string })?.code
     const message = error instanceof Error ? error.message : String(error)
 
-    if (code === 'functions/unauthenticated' || code === 'unauthenticated') {
-      throw new Error('User not authenticated. Please log in again.')
+    // v1.2.11: keep the callable's `code` so PicksClient can show a translated
+    // (en / es-MX) message via savePicksErrorKey().
+    const wrapped = error instanceof Error ? error : new Error(message || 'Failed to save predictions')
+    if (code && !(wrapped as { code?: string }).code) {
+      ;(wrapped as { code?: string }).code = code
     }
-    if (code === 'functions/permission-denied' || code === 'permission-denied') {
-      throw new Error('Permission denied. Please check your authentication status.')
-    }
-    if (code === 'functions/failed-precondition' && /closed|maintenance/i.test(message)) {
-      throw new Error(message)
-    }
-
-    throw error instanceof Error ? error : new Error(message || 'Failed to save predictions')
+    throw wrapped
   }
 }
 

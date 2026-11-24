@@ -203,7 +203,13 @@
     "comingSoonBadge": "Coming Soon",
     "comingSoonOpensIn": "Opens in {countdown}",
     "comingSoonOpeningSoon": "Opening soon",
-    "comingSoonOpensAt": "Opens {date}"
+    "comingSoonOpensAt": "Opens {date}",
+    "saveErrorMatchStarted": "A match on your card has already kicked off, so that pick can't change. Refresh to see the latest card.",
+    "saveErrorCardOutdated": "Your card is out of date. Refresh the page and try again.",
+    "saveErrorMaintenance": "Banger Picks is under maintenance. Try again in a few minutes.",
+    "saveErrorSignIn": "Your session expired. Sign in again to save your picks.",
+    "saveErrorGeneric": "We couldn't save your picks. Check your connection and tap “Try saving again”.",
+    "saveErrorInviteOnly": "Banger Picks is invite-only right now. Ask a friend for an invite to start playing."
   },
   "rankings": {
     "title": "Rankings",

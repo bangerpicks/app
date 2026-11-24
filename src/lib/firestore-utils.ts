@@ -2,8 +2,8 @@
  * Utility functions for Firestore operations with timeout and retry support
  */
 
-export const FIRESTORE_READ_TIMEOUT_MS = 15_000
-export const FIRESTORE_FIXTURES_READ_TIMEOUT_MS = 22_000
+export const FIRESTORE_READ_TIMEOUT_MS = 8_000
+export const FIRESTORE_FIXTURES_READ_TIMEOUT_MS = 10_000
 export const FIRESTORE_READ_MAX_RETRIES = 3
 export const FIRESTORE_READ_RETRY_BASE_MS = 1_000
 

@@ -3,7 +3,7 @@
  * Handles fetching and calculating weekly rankings for gameweeks
  */
 
-import { collection, doc, Timestamp, type QuerySnapshot } from 'firebase/firestore'
+import { collection, doc, type QuerySnapshot } from 'firebase/firestore'
 import { db } from './firebase'
 import { getGameweekById, AdminGameweekData, GameweekFixtureData } from './admin'
 import { getGameweekPlayerCount } from './predictions'
@@ -24,6 +24,7 @@ import {
   normalizeProfilePhotoUrl,
 } from './profile-photo.mjs'
 import { mergeWeeklyRankingsWithStandings } from './weekly-rankings-merge.mjs'
+import { matchPredictionsFromStandingsPicks } from './weekly-standings-picks.mjs'
 import { mapWithConcurrency } from './rankings-concurrency'
 import { rankingsHungReadGate } from './rankings-load-state.mjs'
 
@@ -53,7 +54,6 @@ import {
   MatchPrediction,
   TeamInfo,
 } from '@/types/dashboard'
-import { PredictionEntry } from './predictions'
 
 /** @deprecated Import fetchCurrentGameweek from gameweek-selection (same behavior). */
 export async function getCurrentGameweek(): Promise<AdminGameweekData | null> {
@@ -208,61 +208,6 @@ export async function transformGameweekData(
   }
 }
 
-/**
- * Get all predictions for a specific fixture
- * 
- * @param fixtureId - Fixture ID
- * @returns Promise<Map<userId, PredictionEntry>>
- */
-async function getPredictionsForFixture(
-  fixtureId: number,
-  readOptions: RankingsFirestoreReadOptions
-): Promise<Map<string, PredictionEntry>> {
-  await rankingsHungReadGate('entries', {
-    budgetRemainingMs: readOptions.budget.remaining(),
-  })
-  const entriesRef = collection(db, 'predictions', String(fixtureId), 'entries')
-  const timeoutMessage = `Failed to load prediction entries for fixture ${fixtureId}`
-  const result = await getQuerySnapshotServerPreferring(entriesRef, {
-    budget: readOptions.budget,
-    timeoutMessage,
-  })
-  markServedFromCacheRef(readOptions.servedFromCacheRef, result)
-  const entriesSnapshot = result.data
-
-  const predictions = new Map<string, PredictionEntry>()
-
-  entriesSnapshot.forEach((doc) => {
-      const data = doc.data()
-      const userId = doc.id
-
-      // Only process entries with valid predictions
-      if (!data.pick || (data.pick !== 'H' && data.pick !== 'D' && data.pick !== 'A')) {
-        return // Skip entries without valid predictions
-      }
-
-      // Transform to PredictionEntry format
-      const entry: PredictionEntry = {
-        uid: userId,
-        fixtureId,
-        pick: data.pick as 'H' | 'D' | 'A',
-        createdAt: data.createdAt || data.ts || Timestamp.now(),
-        awarded: data.awarded || false,
-        points: data.points || 0,
-        correct: data.correct ?? null,
-        homeTeam: data.homeTeam || { id: 0, name: '', logo: '' },
-        awayTeam: data.awayTeam || { id: 0, name: '', logo: '' },
-        league: data.league || { id: 0, name: '', country: '', logo: '' },
-        fixtureDate: data.fixtureDate || Timestamp.now(),
-        status: data.status || 'NS',
-        result: data.result || null,
-      }
-
-      predictions.set(userId, entry)
-    })
-
-  return predictions
-}
 
 interface BatchUserData {
   displayName: string
@@ -362,26 +307,6 @@ function buildUserDataFromStandings(
   return map
 }
 
-/**
- * Get weekly rankings for a gameweek
- * 
- * @param gameweekId - Gameweek ID
- * @param currentUserId - Optional current user ID to mark in results
- * @returns Promise<RankingEntry[]>
- */
-function isActiveGameweekPicksWindowOpen(gw: AdminGameweekData): boolean {
-  if (gw.status !== 'active') {
-    return false
-  }
-  if (gw.forceOpenForTesting === true) {
-    return true
-  }
-  const lock = getEffectiveDeadline(gw)
-  if (!lock) {
-    return false
-  }
-  return Date.now() < lock.toMillis()
-}
 
 function buildWeeklyRankingsFromPrecomputedStandings(
   standingsRows: RankingEntry[],
@@ -426,53 +351,36 @@ export async function getWeeklyRankings(
   }
 
   const standingsRows = context?.precomputedStandings
-  const isCompleted = gameweek.status === 'completed' || gameweek.status === 'archived'
-  const picksWindowOpen = isActiveGameweekPicksWindowOpen(gameweek)
-
-  if (standingsRows && standingsRows.length > 0 && !isCompleted && picksWindowOpen) {
-    const standingsUserData = buildUserDataFromStandings(standingsRows)
-    const userIds = standingsRows.map((r) => r.userId)
-    const photoOverlay = await batchFetchUsers(userIds, readOptions)
-    for (const uid of userIds) {
-      const row = standingsUserData.get(uid)
-      const fresh = photoOverlay.get(uid)
-      if (!row || !fresh) continue
-      const photo = coalesceProfilePhotoUrl(fresh.photoURL, row.photoURL)
-      if (photo) row.photoURL = photo
-    }
-    return buildWeeklyRankingsFromPrecomputedStandings(
-      standingsRows,
-      standingsUserData,
-      currentUserId
-    )
+  // v1.2.11: Rankings never lists predictions entries (the rules deny entry lists).
+  // weeklyStandings/{gw} is written by Functions for every active and finished round;
+  // until the first build lands, the board is simply empty.
+  if (!standingsRows || standingsRows.length === 0) {
+    return []
   }
 
-  const predictionResults = await mapWithConcurrency(
-    fixtureIds,
-    RANKINGS_ENTRIES_CONCURRENCY,
-    (fixtureId) => getPredictionsForFixture(fixtureId, readOptions)
+  const standingsUserData = buildUserDataFromStandings(standingsRows)
+  const userIds = standingsRows.map((r) => r.userId)
+  const photoOverlay = await batchFetchUsers(userIds, readOptions)
+  for (const uid of userIds) {
+    const row = standingsUserData.get(uid)
+    const fresh = photoOverlay.get(uid)
+    if (!row || !fresh) continue
+    const photo = coalesceProfilePhotoUrl(fresh.photoURL, row.photoURL)
+    if (photo) row.photoURL = photo
+  }
+  const entries = buildWeeklyRankingsFromPrecomputedStandings(
+    standingsRows,
+    standingsUserData,
+    currentUserId
   )
 
-    // Build a map of userId -> { fixtureId -> prediction }
-    const userPredictionsMap = new Map<
-      string,
-      Map<number, PredictionEntry>
-    >()
-
-    // Process each fixture's predictions
-    predictionResults.forEach((predictions, index) => {
-      const fixtureId = fixtureIds[index]
-      predictions.forEach((entry, userId) => {
-        if (!userPredictionsMap.has(userId)) {
-          userPredictionsMap.set(userId, new Map())
-        }
-        userPredictionsMap.get(userId)!.set(fixtureId, entry)
-      })
-    })
+  const anyPicks = standingsRows.some((r) => r.standingsPicks)
+  if (!anyPicks) {
+    return entries
+  }
 
   const fixtureDetails =
     context?.fixtures ?? (await getGameweekFixtureDetails(gameweekId, readOptions))
-
   const fixtureDetailsMap = new Map<number, { homeTeam: TeamInfo; awayTeam: TeamInfo }>()
   fixtureDetails.forEach((fixture) => {
     fixtureDetailsMap.set(fixture.fixtureId, {
@@ -480,148 +388,15 @@ export async function getWeeklyRankings(
       awayTeam: fixture.awayTeam,
     })
   })
-
-  const userIds = Array.from(userPredictionsMap.keys())
-  const standingsUserData = buildUserDataFromStandings(standingsRows)
-  const canUseStandingsForUsers =
-    isCompleted &&
-    standingsRows &&
-    standingsRows.length > 0 &&
-    userIds.every((uid) => standingsUserData.has(uid))
-
-  let userDataMap: Map<string, BatchUserData>
-  if (canUseStandingsForUsers) {
-    userDataMap = standingsUserData
-    const photoOverlay = await batchFetchUsers(userIds, readOptions)
-    for (const uid of userIds) {
-      const row = userDataMap.get(uid)
-      const fresh = photoOverlay.get(uid)
-      if (!row || !fresh) continue
-      const photo = coalesceProfilePhotoUrl(fresh.photoURL, row.photoURL)
-      if (photo) row.photoURL = photo
-    }
-  } else {
-    userDataMap = await batchFetchUsers(userIds, readOptions)
-  }
-
-    // Build ranking entries
-    const rankingEntries: RankingEntry[] = []
-
-    // Process each user's predictions
-    for (const [userId, predictions] of userPredictionsMap.entries()) {
-      // Calculate weekly points (sum of points from all predictions)
-      let weeklyPoints = 0
-      const matchPredictions: MatchPrediction[] = []
-
-      // Process each fixture
-      fixtureIds.forEach((fixtureId) => {
-        const prediction = predictions.get(fixtureId)
-        const fixtureDetail = fixtureDetailsMap.get(fixtureId)
-
-        if (prediction) {
-          // Add points if awarded
-          if (prediction.awarded && prediction.points) {
-            weeklyPoints += prediction.points
-          }
-
-          // Build match prediction with correctness info
-          if (fixtureDetail) {
-            matchPredictions.push({
-              fixtureId,
-              prediction: prediction.pick,
-              homeTeam: fixtureDetail.homeTeam,
-              awayTeam: fixtureDetail.awayTeam,
-              correct: prediction.correct ?? null,
-            })
-          } else {
-            // Fallback: use data from prediction entry
-            matchPredictions.push({
-              fixtureId,
-              prediction: prediction.pick,
-              homeTeam: prediction.homeTeam as TeamInfo,
-              awayTeam: prediction.awayTeam as TeamInfo,
-              correct: prediction.correct ?? null,
-            })
-          }
-        } else if (fixtureDetail) {
-          // User didn't make a prediction for this fixture
-          matchPredictions.push({
-            fixtureId,
-            prediction: null,
-            homeTeam: fixtureDetail.homeTeam,
-            awayTeam: fixtureDetail.awayTeam,
-            correct: null,
-          })
-        }
-      })
-
-      // Only include users who made at least one prediction
-      if (matchPredictions.some((mp) => mp.prediction !== null)) {
-        const userData = userDataMap.get(userId) || {
-          displayName: 'Player',
-          points: 0,
-          photoURL: null,
-          lastWeekPlace: null,
-          lastCompletedGameweekId: null,
-        }
-
-        rankingEntries.push({
-          userId,
-          displayName: userData.displayName,
-          points: userData.points,
-          rank: 0,
-          weeklyPoints,
-          matchPredictions,
-          photoURL: userData.photoURL ?? null,
-          isCurrentUser: currentUserId ? userId === currentUserId : false,
-          lastWeekPlace: userData.lastWeekPlace ?? null,
-          lastCompletedGameweekId: userData.lastCompletedGameweekId ?? null,
-        })
-      }
-    }
-
-    // Sort by weekly points descending, then by number of predictions
-    rankingEntries.sort((a, b) => {
-      const pointsDiff = (b.weeklyPoints || 0) - (a.weeklyPoints || 0)
-      if (pointsDiff !== 0) {
-        return pointsDiff
-      }
-      // If points are equal, sort by number of predictions (more predictions first)
-      const aPredictions = a.matchPredictions?.filter(
-        (mp) => mp.prediction !== null
-      ).length || 0
-      const bPredictions = b.matchPredictions?.filter(
-        (mp) => mp.prediction !== null
-      ).length || 0
-      return bPredictions - aPredictions
-    })
-
-    // Calculate ranks with tie handling
-    let currentRank = 1
-    let previousPoints: number | null = null
-    let usersAtCurrentRank = 0
-
-    rankingEntries.forEach((entry) => {
-      const points = entry.weeklyPoints || 0
-
-      if (previousPoints === null) {
-        // First entry
-        currentRank = 1
-        usersAtCurrentRank = 1
-      } else if (points < previousPoints) {
-        // Points decreased, move to new rank tier
-        currentRank += usersAtCurrentRank
-        usersAtCurrentRank = 1
-      } else if (points === previousPoints) {
-        // Same points, same rank
-        usersAtCurrentRank++
-      }
-
-      entry.rank = currentRank
-      previousPoints = points
-    })
-
-  return rankingEntries
+  const picksByUid = new Map(standingsRows.map((r) => [r.userId, r.standingsPicks ?? null]))
+  return entries.map((entry) => ({
+    ...entry,
+    matchPredictions: matchPredictionsFromStandingsPicks(
+      fixtureIds,
+      fixtureDetailsMap,
+      picksByUid.get(entry.userId)
+    ) as MatchPrediction[],
+  }))
 }
 
 /**

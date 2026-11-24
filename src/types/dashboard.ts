@@ -114,6 +114,8 @@ export interface RankingEntry {
   // Weekly rankings fields
   matchPredictions?: MatchPrediction[]
   weeklyPoints?: number
+  /** v1.2.11: picks from weeklyStandings (only after lock): fixtureId -> { p, c } */
+  standingsPicks?: Record<string, { p: string; c: boolean | null }> | null
 }
 
 export interface GameweekRankingData {

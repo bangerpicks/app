@@ -19,8 +19,9 @@ import {
   FIRESTORE_READ_RETRY_BASE_MS,
 } from './firestore-utils'
 
-export const DASHBOARD_LOAD_BUDGET_MS = 32_000
-export const FIRESTORE_SERVER_READ_ATTEMPT_MS = 8_000
+// v1.2.11: shorter server waits; on failure the reads fall back to the IndexedDB cache sooner.
+export const DASHBOARD_LOAD_BUDGET_MS = 16_000
+export const FIRESTORE_SERVER_READ_ATTEMPT_MS = 4_000
 export const FIRESTORE_SERVER_READ_MAX_RETRIES = 2
 
 export type PreferringReadSource = 'server' | 'cache-fallback'

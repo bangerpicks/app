@@ -212,13 +212,20 @@ function PicksPageContent() {
 
         servedFromCacheRef.current = false
 
-        let targetGameweek: AdminGameweekData | null = null
+        // v1.2.11: no serial waterfall. Gameweek and fixtures load together when the id is
+        // known; the user's picks and standings start as soon as the gameweek is known; the
+        // competition header never blocks the card.
+        const gameweekPromise: Promise<AdminGameweekData | null> = requestedGameweekId
+          ? getGameweekById(requestedGameweekId)
+          : fetchCurrentGameweek(loadBudget, servedFromCacheRef)
+        const fixturesPromise = requestedGameweekId
+          ? getGameweekFixtures(requestedGameweekId, fixtureReadOpts)
+          : gameweekPromise.then((gw) =>
+              gw ? getGameweekFixtures(gw.gameweekId, fixtureReadOpts) : []
+            )
+        fixturesPromise.catch(() => {})
 
-        if (requestedGameweekId) {
-          targetGameweek = await getGameweekById(requestedGameweekId)
-        } else {
-          targetGameweek = await fetchCurrentGameweek(loadBudget, servedFromCacheRef)
-        }
+        const targetGameweek = await gameweekPromise
 
         if (abortController.signal.aborted) return
 
@@ -230,34 +237,70 @@ function PicksPageContent() {
           return
         }
 
-        const linkedCompetition = await resolveCompetitionForAdminGameweek(targetGameweek)
-        if (abortController.signal.aborted) return
-        setCompetition(linkedCompetition)
-
-        const fixtures = await getGameweekFixtures(
-          targetGameweek.gameweekId,
-          fixtureReadOpts
+        const gwId = targetGameweek.gameweekId
+        const competitionPromise = resolveCompetitionForAdminGameweek(targetGameweek).catch(
+          () => undefined
         )
+        void competitionPromise.then((linked) => {
+          if (!abortController.signal.aborted) setCompetition(linked)
+        })
+        const standingsPromise = import('@/lib/gameweek-standings')
+          .then((m) => m.getGameweekStandings(gwId))
+          .catch(() => null)
+        const knownFixtureIds = targetGameweek.fixtureIds ?? []
+        const predictionsPromise =
+          user && knownFixtureIds.length > 0
+            ? getUserPredictionsForGameweek(user.uid, gwId, knownFixtureIds).catch(() => null)
+            : Promise.resolve(null)
+        if (user) setLoadingPredictions(true)
+
+        const fixtures = await fixturesPromise
 
         if (abortController.signal.aborted) return
 
         if (fixtures.length === 0) {
           setGameweek(convertAdminGameweekToGameweekData(targetGameweek))
-          setGameweekId(targetGameweek.gameweekId)
+          setGameweekId(gwId)
           setEmptyReason('no-fixtures')
+          setLoadingPredictions(false)
           return
         }
 
         const dashboardGameweek = convertAdminGameweekToGameweekData(targetGameweek)
-        const sortedMatchesBare = fixtures
-          .map((fixture) => convertFixtureToMatchCard(fixture, new Map(), new Map(), locale))
-          .sort((a, b) => a.date.getTime() - b.date.getTime())
+        const teamPositions = new Map<number, number>()
+        const teamForms = new Map<number, FormResult[]>()
+        let predictionMap: Map<number, MatchCardData['userPrediction']> | null = null
 
+        const compose = (): MatchCardData[] =>
+          fixtures
+            .map((fixture) => {
+              const card = convertFixtureToMatchCard(fixture, teamPositions, teamForms, locale)
+              return predictionMap
+                ? { ...card, userPrediction: predictionMap.get(card.fixtureId) || null }
+                : card
+            })
+            .sort((a, b) => a.date.getTime() - b.date.getTime())
+
+        // First paint waits only for fixtures + the user's picks (fetched in parallel).
+        let predictionRead = await predictionsPromise
         if (abortController.signal.aborted) return
+        if (!predictionRead && user && knownFixtureIds.length === 0) {
+          predictionRead = await getUserPredictionsForGameweek(
+            user.uid,
+            gwId,
+            fixtures.map((f) => f.fixtureId)
+          ).catch(() => null)
+          if (abortController.signal.aborted) return
+        }
+        if (predictionRead) {
+          predictionMap = predictionRead.predictions
+          if (predictionRead.servedFromCache) servedFromCacheRef.current = true
+        }
+        setLoadingPredictions(false)
 
-        setGameweekId(targetGameweek.gameweekId)
+        setGameweekId(gwId)
         setGameweek(dashboardGameweek)
-        setInitialMatches(sortedMatchesBare)
+        setInitialMatches(compose())
         const staleFirestoreLoad = servedFromCacheRef.current
         setUsingSessionCache(false)
         setRefreshFailed(staleFirestoreLoad)
@@ -267,52 +310,12 @@ function PicksPageContent() {
         setEmptyReason(null)
         setLoadingGameweek(false)
 
-        const teamPositions = new Map<number, number>()
-        const teamForms = new Map<number, FormResult[]>()
-
-        const { getGameweekStandings } = await import('@/lib/gameweek-standings')
-        const standingsMap =
-          (await getGameweekStandings(targetGameweek.gameweekId)) ?? targetGameweek.standings
-
-        if (standingsMap) {
-          Object.entries(standingsMap).forEach(([, standings]) => {
-            if (!Array.isArray(standings)) return
-            standings.forEach((team) => {
-              if (team?.team && typeof team.team.id === 'number') {
-                teamPositions.set(team.team.id, team.rank)
-                teamForms.set(team.team.id, convertFormString(team.form || ''))
-              }
-            })
-          })
-        }
-
-        const sortedMatches =
-          teamPositions.size > 0 || teamForms.size > 0
-            ? fixtures
-                .map((fixture) =>
-                  convertFixtureToMatchCard(fixture, teamPositions, teamForms, locale)
-                )
-                .sort((a, b) => a.date.getTime() - b.date.getTime())
-            : sortedMatchesBare
-
-        if (abortController.signal.aborted) return
-
-        setInitialMatches(sortedMatches)
-
-        writeDashboardSessionCache(cacheUid, locale, {
-          gameweekId: targetGameweek.gameweekId,
-          gameweek: dashboardGameweek,
-          matches: sortedMatches,
-          competition: linkedCompetition,
-        })
-
         const storedCount = resolvePlayerCountFromGameweek(targetGameweek)
         if (
           !shouldSkipGameweekPlayerCountRefetch(storedCount) &&
-          targetGameweek.fixtureIds &&
-          targetGameweek.fixtureIds.length > 0
+          knownFixtureIds.length > 0
         ) {
-          readGameweekPlayerCount(targetGameweek.fixtureIds, targetGameweek.gameweekId)
+          readGameweekPlayerCount(knownFixtureIds, gwId)
             .then(({ count, servedFromCache }) => {
               if (abortController.signal.aborted) return
               setGameweek((prev) =>
@@ -331,38 +334,36 @@ function PicksPageContent() {
             .catch(() => {})
         }
 
-        if (user) {
-          setLoadingPredictions(true)
-          try {
-            const fixtureIds = sortedMatches.map((match) => match.fixtureId)
-            const predictionRead = await getUserPredictionsForGameweek(
-              user.uid,
-              targetGameweek.gameweekId,
-              fixtureIds
-            )
-
-            if (abortController.signal.aborted) return
-
-            if (predictionRead.servedFromCache) {
-              servedFromCacheRef.current = true
-              setServedFromFirestoreCache(true)
-              setRefreshFailed(true)
-            }
-
-            setInitialMatches((prevMatches) =>
-              prevMatches.map((match) => ({
-                ...match,
-                userPrediction: predictionRead.predictions.get(match.fixtureId) || null,
-              }))
-            )
-          } catch {
-            // predictions optional
-          } finally {
-            if (!abortController.signal.aborted) {
-              setLoadingPredictions(false)
-            }
+        // Standings (table position + form) enrich the cards when they arrive.
+        const standingsMap = (await standingsPromise) ?? targetGameweek.standings
+        if (abortController.signal.aborted) return
+        if (standingsMap) {
+          Object.entries(standingsMap).forEach(([, standings]) => {
+            if (!Array.isArray(standings)) return
+            standings.forEach((team) => {
+              if (team?.team && typeof team.team.id === 'number') {
+                teamPositions.set(team.team.id, team.rank)
+                teamForms.set(team.team.id, convertFormString(team.form || ''))
+              }
+            })
+          })
+          if (teamPositions.size > 0 || teamForms.size > 0) {
+            setInitialMatches(compose())
           }
         }
+
+        const linkedCompetition = await competitionPromise
+        if (abortController.signal.aborted) return
+        // Session cache stays pick-free (picks always come from Firestore).
+        const cachedMatches = fixtures
+          .map((fixture) => convertFixtureToMatchCard(fixture, teamPositions, teamForms, locale))
+          .sort((a, b) => a.date.getTime() - b.date.getTime())
+        writeDashboardSessionCache(cacheUid, locale, {
+          gameweekId: gwId,
+          gameweek: dashboardGameweek,
+          matches: cachedMatches,
+          competition: linkedCompetition,
+        })
       } catch (err: unknown) {
         if (abortController.signal.aborted) return
         console.error('Error fetching gameweek fixtures:', err)

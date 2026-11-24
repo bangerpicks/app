@@ -6,6 +6,12 @@ import { useTranslations } from 'next-intl'
 import type { User } from 'firebase/auth'
 import { useAuth } from '@/lib/AuthProvider'
 import { ensureUserDocument } from '@/lib/users'
+import { useUserProfile } from '@/lib/UserProfileProvider'
+import {
+  mergeSavedPredictions,
+  reconcilePendingAfterSave,
+  savePicksErrorKey,
+} from '@/lib/picks-save-optimistic.mjs'
 import { savePredictions, PARTIAL_PREDICTIONS_SAVE_ERROR } from '@/lib/predictions'
 import { AppShell } from './AppShell'
 import { MatchCard } from './MatchCard'
@@ -55,6 +61,7 @@ export function PicksClient({
 }: PicksClientProps) {
   const router = useRouter()
   const { user } = useAuth()
+  const { profile } = useUserProfile()
   const { locale } = useLanguage()
   const t = useTranslations('dashboard')
   const tPicks = useTranslations('picks')
@@ -70,6 +77,11 @@ export function PicksClient({
   const [activeFixtureId, setActiveFixtureId] = useState<number | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const isSavingRef = useRef(false)
+  /** Picks the server confirmed this session (survives live `matches` refreshes). */
+  const confirmedPicksRef = useRef<{ gameweekId: string; picks: Map<number, Prediction> }>({
+    gameweekId: gameweek.gameweekId,
+    picks: new Map(),
+  })
   const [autoSaveNonce, setAutoSaveNonce] = useState(0)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [saveSuccess, setSaveSuccess] = useState(false)
@@ -96,14 +108,13 @@ export function PicksClient({
     )
 
   useEffect(() => {
-    const saved = new Map<number, Prediction>()
-    matches.forEach((match) => {
-      if (match.userPrediction) {
-        saved.set(match.fixtureId, match.userPrediction)
-      }
-    })
-    setSavedPredictions(saved)
-  }, [matches])
+    if (confirmedPicksRef.current.gameweekId !== gameweek.gameweekId) {
+      confirmedPicksRef.current = { gameweekId: gameweek.gameweekId, picks: new Map() }
+    }
+    setSavedPredictions(
+      mergeSavedPredictions(matches, confirmedPicksRef.current.picks) as Map<number, Prediction>
+    )
+  }, [matches, gameweek.gameweekId])
 
   useEffect(() => {
     if (matches.length === 0) {
@@ -176,12 +187,16 @@ export function PicksClient({
       setSaveSuccess(false)
 
       try {
-        await ensureUserDocument(
-          authUser,
-          username || authUser.displayName || 'Player',
-          undefined,
-          { allowRename: false }
-        )
+        // v1.2.11: skip the extra profile round trip when the profile is already loaded.
+        // ensureUserDocument only matters for a brand-new account (no users/{uid} yet).
+        if (!profile) {
+          await ensureUserDocument(
+            authUser,
+            username || authUser.displayName || 'Player',
+            undefined,
+            { allowRename: false }
+          )
+        }
         const saveResult = await savePredictions(
           authUser.uid,
           completePredictions,
@@ -202,6 +217,9 @@ export function PicksClient({
           })
         }
 
+        completePredictions.forEach((prediction, fixtureId) => {
+          confirmedPicksRef.current.picks.set(fixtureId, prediction)
+        })
         setSavedPredictions((prev) => {
           const next = new Map(prev)
           completePredictions.forEach((prediction, fixtureId) => {
@@ -210,7 +228,8 @@ export function PicksClient({
           return next
         })
 
-        setPendingPredictions(new Map())
+        // Optimistic: keep any taps made while this save was in flight; they auto-save next.
+        setPendingPredictions((prev) => reconcilePendingAfterSave(prev, completePredictions))
         setCrowdStatsRefreshToken((n) => n + 1)
 
         if (firstJoinConfirmActiveRef.current && saveResult.joinedGameweek) {
@@ -243,7 +262,7 @@ export function PicksClient({
         if (message === PARTIAL_PREDICTIONS_SAVE_ERROR) {
           setSaveError(t('partialPredictionsSave'))
         } else {
-          setSaveError(message || 'Failed to save predictions. Please try again.')
+          setSaveError(t(savePicksErrorKey(error as { code?: string; message?: string; name?: string })))
         }
       } finally {
         isSavingRef.current = false
@@ -256,6 +275,7 @@ export function PicksClient({
       isDisabled,
       locale,
       matches,
+      profile,
       router,
       t,
       username,
@@ -281,6 +301,7 @@ export function PicksClient({
     void performSave(user, buildCompletePredictions())
   }, [
     autoSaveNonce,
+    isSaving,
     saveError,
     user,
     isDisabled,
@@ -291,7 +312,8 @@ export function PicksClient({
   ])
 
   const handlePredictionSelect = (fixtureId: number, prediction: Prediction) => {
-    if (isDisabled || isSaving || firstJoinConfirmActive) return
+    // Optimistic: taps are never blocked by an in-flight save (v1.2.11).
+    if (isDisabled || firstJoinConfirmActive) return
 
     const wasFullySavedBefore = matches.every((m) => savedPredictions.has(m.fixtureId))
 
@@ -450,7 +472,7 @@ export function PicksClient({
               setActiveFixtureId(fixtureId)
             }
           }}
-          disabled={isSaving || firstJoinConfirmActive}
+          disabled={firstJoinConfirmActive}
         />
 
         {fixturesPending && (
@@ -472,7 +494,7 @@ export function PicksClient({
                 match={activeMatch}
                 userPrediction={getDisplayPrediction(activeMatch.fixtureId)}
                 onPredictionSelect={handlePredictionSelect}
-                disabled={isDisabled || isSaving}
+                disabled={isDisabled}
                 crowdPickStats={crowdStatsByFixture.get(activeMatch.fixtureId)}
                 crowdPickPercents={crowdPercentsByFixture.get(activeMatch.fixtureId)}
                 crowdPickCount={playerCountByFixture.get(activeMatch.fixtureId) ?? 0}

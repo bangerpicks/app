@@ -40,7 +40,9 @@ export interface WeeklyStandingsDoc {
     correct: number
     rank: number
     isBot?: boolean
+    picks?: Record<string, { p: string; c: boolean | null }>
   }>
+  picksVisible?: boolean
 }
 
 export async function getActiveSeason(): Promise<SeasonDocument | null> {
@@ -113,6 +115,7 @@ function mapWeeklyStandingsToRankingEntries(
     weeklyPoints: entry.points,
     rank: entry.rank,
     isCurrentUser: currentUserId ? entry.uid === currentUserId : false,
+    standingsPicks: entry.picks ?? null,
   }))
 }
 

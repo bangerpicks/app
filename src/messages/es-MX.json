@@ -203,7 +203,13 @@
     "comingSoonBadge": "Próximamente",
     "comingSoonOpensIn": "Abre en {countdown}",
     "comingSoonOpeningSoon": "Abre muy pronto",
-    "comingSoonOpensAt": "Abre {date}"
+    "comingSoonOpensAt": "Abre {date}",
+    "saveErrorMatchStarted": "Un partido de tu tarjeta ya empezó, así que ese pick ya no se puede cambiar. Actualiza para ver la tarjeta más reciente.",
+    "saveErrorCardOutdated": "Tu tarjeta está desactualizada. Actualiza la página e inténtalo de nuevo.",
+    "saveErrorMaintenance": "Banger Picks está en mantenimiento. Inténtalo de nuevo en unos minutos.",
+    "saveErrorSignIn": "Tu sesión expiró. Vuelve a iniciar sesión para guardar tus picks.",
+    "saveErrorGeneric": "No pudimos guardar tus picks. Revisa tu conexión y toca “Intentar guardar de nuevo”.",
+    "saveErrorInviteOnly": "Por ahora Banger Picks es solo por invitación. Pídele una invitación a un amigo para empezar a jugar."
   },
   "rankings": {
     "title": "Clasificaciones",
