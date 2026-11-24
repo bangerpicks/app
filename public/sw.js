@@ -1,4 +1,4 @@
-const CACHE = 'banger-picks-shell-v1'
+const CACHE = 'banger-picks-shell-v2'
 const PRECACHE = ['/', '/dashboard/', '/manifest.json']
 
 self.addEventListener('install', (event) => {

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
+import Link from 'next/link'
 import Image from 'next/image'
 import { HeaderActions } from './HeaderActions'
 import { DesktopHeaderNav } from './DesktopHeaderNav'
@@ -36,7 +37,7 @@ export function HeaderChrome({
         paddingTop: 'calc(0.5rem + env(safe-area-inset-top, 0px))',
       }}
     >
-      <a href="/dashboard/" className="flex items-center flex-shrink-0 touch-manipulation">
+      <Link href="/dashboard/" className="flex items-center flex-shrink-0 touch-manipulation">
         <Image
           src={logoUrl}
           alt="Banger Picks Logo"
@@ -45,7 +46,7 @@ export function HeaderChrome({
           priority
           className="object-contain w-[108px] h-[27.7px] sm:w-[140px] sm:h-[36px]"
         />
-      </a>
+      </Link>
       <DesktopHeaderNav />
       <HeaderActions username={username} userPhotoUrl={userPhotoUrl} />
     </header>

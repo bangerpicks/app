@@ -9,6 +9,7 @@ import {
   signUpWithEmailPassword,
 } from '@/lib/auth-email'
 import { completeSignInAfterAuth } from '@/lib/auth-post-sign-in'
+import { isRegistrationClosedError } from '@/lib/users'
 
 interface EmailPasswordFormProps {
   referralCode: string | null
@@ -66,6 +67,10 @@ export function EmailPasswordForm({
       }
       onDone(referralMessage)
     } catch (err: unknown) {
+      if (isRegistrationClosedError(err)) {
+        onError(t('registrationClosed'))
+        return
+      }
       const code = (err as { code?: string }).code
       onError(mapError(code))
     } finally {

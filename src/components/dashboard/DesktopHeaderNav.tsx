@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { ChevronLeftIcon } from '@heroicons/react/24/solid'
@@ -31,7 +32,7 @@ export function DesktopHeaderNav() {
           : t(item.labelKey)
 
         return (
-          <a
+          <Link
             key={item.href}
             href={item.href}
             className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold tracking-wide transition-colors min-h-[44px] touch-manipulation ${
@@ -45,7 +46,7 @@ export function DesktopHeaderNav() {
           >
             <Icon className="w-5 h-5 shrink-0" aria-hidden="true" />
             <span className="truncate">{label}</span>
-          </a>
+          </Link>
         )
       })}
     </nav>

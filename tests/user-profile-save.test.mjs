@@ -20,4 +20,16 @@ describe('shouldSkipEnsureUserProfileWrite', () => {
       false
     )
   })
+
+  it('skips rename churn when allowRename is false', () => {
+    assert.equal(
+      shouldSkipEnsureUserProfileWrite(
+        { displayName: 'Real Name', photoURL: null, referralCode: 'ABC123' },
+        'Player',
+        null,
+        { allowRename: false }
+      ),
+      true
+    )
+  })
 })

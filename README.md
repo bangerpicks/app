@@ -100,15 +100,20 @@ Edit `.env.local` with your configuration:
 ```env
 # Firebase Configuration
 NEXT_PUBLIC_FIREBASE_API_KEY=your-api-key
-NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=banger-picks.firebaseapp.com
 NEXT_PUBLIC_FIREBASE_PROJECT_ID=your-project-id
 NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your-project.appspot.com
 NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your-sender-id
 NEXT_PUBLIC_FIREBASE_APP_ID=your-app-id
 
+# Canonical production URL (optional locally; default is https://bangerpicks.com)
+NEXT_PUBLIC_SITE_URL=https://bangerpicks.com
+
 # Environment
 NEXT_PUBLIC_APP_ENV=development
 ```
+
+**Production:** [https://bangerpicks.com](https://bangerpicks.com)
 
 ### 5. Firebase Configuration
 

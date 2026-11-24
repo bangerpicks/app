@@ -1,11 +1,12 @@
+import { isAllowedProfilePhotoUrl } from './profile-photo-allowlist.mjs'
+
 /**
  * @param {unknown} url
  * @returns {string | null}
  */
 export function normalizeProfilePhotoUrl(url) {
-  if (typeof url !== 'string') return null
-  const trimmed = url.trim()
-  return trimmed.length > 0 ? trimmed : null
+  if (!isAllowedProfilePhotoUrl(url)) return null
+  return String(url).trim()
 }
 
 /**

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
+import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useVisualViewportBottomInset } from '@/hooks/useVisualViewportBottomInset'
 import { useTranslations } from 'next-intl'
@@ -53,7 +54,7 @@ export function BottomNavigation() {
         const emphasized = isActive || dashboardAsBack
 
         return (
-          <a
+          <Link
             key={item.href}
             href={item.href}
             className="flex-1 min-w-0 flex flex-col items-center justify-center gap-1 sm:gap-1.5 touch-manipulation"
@@ -73,7 +74,7 @@ export function BottomNavigation() {
             >
               {label}
             </span>
-          </a>
+          </Link>
         )
       })}
     </nav>

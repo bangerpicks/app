@@ -9,6 +9,7 @@ import { getGameweekById, AdminGameweekData, GameweekFixtureData } from './admin
 import { getGameweekPlayerCount } from './predictions'
 import {
   fetchCurrentGameweek,
+  getEffectiveDeadline,
   mapAdminGameweekToDashboardStatus,
   resolvePlayerCountFromGameweek,
   LoadBudget,
@@ -368,6 +369,43 @@ function buildUserDataFromStandings(
  * @param currentUserId - Optional current user ID to mark in results
  * @returns Promise<RankingEntry[]>
  */
+function isActiveGameweekPicksWindowOpen(gw: AdminGameweekData): boolean {
+  if (gw.status !== 'active') {
+    return false
+  }
+  if (gw.forceOpenForTesting === true) {
+    return true
+  }
+  const lock = getEffectiveDeadline(gw)
+  if (!lock) {
+    return false
+  }
+  return Date.now() < lock.toMillis()
+}
+
+function buildWeeklyRankingsFromPrecomputedStandings(
+  standingsRows: RankingEntry[],
+  userDataMap: Map<string, BatchUserData>,
+  currentUserId?: string | null
+): RankingEntry[] {
+  return standingsRows.map((row) => {
+    const userData = userDataMap.get(row.userId)
+    return {
+      userId: row.userId,
+      displayName: userData?.displayName ?? row.displayName ?? 'Player',
+      points: userData?.points ?? row.points ?? 0,
+      rank: row.rank ?? 0,
+      weeklyPoints: row.weeklyPoints ?? row.points ?? 0,
+      matchPredictions: [],
+      photoURL: userData?.photoURL ?? row.photoURL ?? null,
+      isCurrentUser: currentUserId ? row.userId === currentUserId : false,
+      lastWeekPlace: userData?.lastWeekPlace ?? row.lastWeekPlace ?? null,
+      lastCompletedGameweekId:
+        userData?.lastCompletedGameweekId ?? row.lastCompletedGameweekId ?? null,
+    }
+  })
+}
+
 export async function getWeeklyRankings(
   gameweekId: string,
   currentUserId?: string | null,
@@ -385,6 +423,28 @@ export async function getWeeklyRankings(
   const fixtureIds = gameweek.fixtureIds || []
   if (fixtureIds.length === 0) {
     return []
+  }
+
+  const standingsRows = context?.precomputedStandings
+  const isCompleted = gameweek.status === 'completed' || gameweek.status === 'archived'
+  const picksWindowOpen = isActiveGameweekPicksWindowOpen(gameweek)
+
+  if (standingsRows && standingsRows.length > 0 && !isCompleted && picksWindowOpen) {
+    const standingsUserData = buildUserDataFromStandings(standingsRows)
+    const userIds = standingsRows.map((r) => r.userId)
+    const photoOverlay = await batchFetchUsers(userIds, readOptions)
+    for (const uid of userIds) {
+      const row = standingsUserData.get(uid)
+      const fresh = photoOverlay.get(uid)
+      if (!row || !fresh) continue
+      const photo = coalesceProfilePhotoUrl(fresh.photoURL, row.photoURL)
+      if (photo) row.photoURL = photo
+    }
+    return buildWeeklyRankingsFromPrecomputedStandings(
+      standingsRows,
+      standingsUserData,
+      currentUserId
+    )
   }
 
   const predictionResults = await mapWithConcurrency(
@@ -422,9 +482,6 @@ export async function getWeeklyRankings(
   })
 
   const userIds = Array.from(userPredictionsMap.keys())
-  const isCompleted =
-    gameweek.status === 'completed' || gameweek.status === 'archived'
-  const standingsRows = context?.precomputedStandings
   const standingsUserData = buildUserDataFromStandings(standingsRows)
   const canUseStandingsForUsers =
     isCompleted &&

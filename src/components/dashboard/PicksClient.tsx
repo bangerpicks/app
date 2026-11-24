@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import type { User } from 'firebase/auth'
 import { useAuth } from '@/lib/AuthProvider'
@@ -23,6 +24,7 @@ import { patchDashboardSessionGameweekPlayerCount } from '@/lib/dashboard-cache'
 import { playerCountAfterFirstJoinSave } from '@/lib/player-count-display.mjs'
 import { PicksBackNav } from './PicksBackNav'
 import { PicksFixtureRail } from './PicksFixtureRail'
+import { PicksFirstJoinConfirm } from './PicksFirstJoinConfirm'
 import { StickySaveBar } from './StickySaveBar'
 import { isGameweekPicksWindowOpen } from '@/lib/gameweek-selection'
 import { resolveCompetitionDisplayName } from '@/lib/competition-display'
@@ -51,6 +53,7 @@ export function PicksClient({
   username,
   fixturesPending = false,
 }: PicksClientProps) {
+  const router = useRouter()
   const { user } = useAuth()
   const { locale } = useLanguage()
   const t = useTranslations('dashboard')
@@ -72,6 +75,14 @@ export function PicksClient({
   const [saveSuccess, setSaveSuccess] = useState(false)
   const [crowdStatsRefreshToken, setCrowdStatsRefreshToken] = useState(0)
   const [isSignInOpen, setIsSignInOpen] = useState(false)
+  const [firstJoinConfirmActive, setFirstJoinConfirmActive] = useState(false)
+  const [firstJoinSaveSucceeded, setFirstJoinSaveSucceeded] = useState(false)
+  const expectFirstJoinFlowRef = useRef(false)
+  const firstJoinConfirmActiveRef = useRef(false)
+
+  useEffect(() => {
+    firstJoinConfirmActiveRef.current = firstJoinConfirmActive
+  }, [firstJoinConfirmActive])
 
   const fixtureIds = useMemo(
     () => matches.map((m) => m.fixtureId),
@@ -165,7 +176,12 @@ export function PicksClient({
       setSaveSuccess(false)
 
       try {
-        await ensureUserDocument(authUser, username || authUser.displayName || 'Player')
+        await ensureUserDocument(
+          authUser,
+          username || authUser.displayName || 'Player',
+          undefined,
+          { allowRename: false }
+        )
         const saveResult = await savePredictions(
           authUser.uid,
           completePredictions,
@@ -195,15 +211,33 @@ export function PicksClient({
         })
 
         setPendingPredictions(new Map())
-        setSaveSuccess(true)
-        pickSuccess()
         setCrowdStatsRefreshToken((n) => n + 1)
 
-        setTimeout(() => {
-          setSaveSuccess(false)
-        }, 3000)
+        if (firstJoinConfirmActiveRef.current && saveResult.joinedGameweek) {
+          setFirstJoinSaveSucceeded(true)
+          expectFirstJoinFlowRef.current = false
+          window.setTimeout(() => {
+            router.push('/dashboard/')
+          }, 1000)
+        } else if (firstJoinConfirmActiveRef.current) {
+          setFirstJoinConfirmActive(false)
+          setFirstJoinSaveSucceeded(false)
+          expectFirstJoinFlowRef.current = false
+          setSaveSuccess(true)
+          pickSuccess()
+          window.setTimeout(() => setSaveSuccess(false), 3000)
+        } else {
+          setSaveSuccess(true)
+          pickSuccess()
+          window.setTimeout(() => setSaveSuccess(false), 3000)
+        }
       } catch (error: unknown) {
         console.error('Error saving predictions:', error)
+        if (firstJoinConfirmActiveRef.current) {
+          setFirstJoinConfirmActive(false)
+          setFirstJoinSaveSucceeded(false)
+          expectFirstJoinFlowRef.current = false
+        }
         pickError()
         const message = error instanceof Error ? error.message : null
         if (message === PARTIAL_PREDICTIONS_SAVE_ERROR) {
@@ -222,10 +256,23 @@ export function PicksClient({
       isDisabled,
       locale,
       matches,
+      router,
       t,
       username,
     ]
   )
+
+  useEffect(() => {
+    if (
+      expectFirstJoinFlowRef.current &&
+      user &&
+      allPicksMade &&
+      !firstJoinConfirmActive &&
+      pendingPredictions.size > 0
+    ) {
+      setFirstJoinConfirmActive(true)
+    }
+  }, [user, allPicksMade, firstJoinConfirmActive, pendingPredictions.size])
 
   useEffect(() => {
     if (saveError) return
@@ -244,7 +291,9 @@ export function PicksClient({
   ])
 
   const handlePredictionSelect = (fixtureId: number, prediction: Prediction) => {
-    if (isDisabled || isSaving) return
+    if (isDisabled || isSaving || firstJoinConfirmActive) return
+
+    const wasFullySavedBefore = matches.every((m) => savedPredictions.has(m.fixtureId))
 
     const nextPending = new Map(pendingPredictions)
     nextPending.set(fixtureId, prediction)
@@ -255,20 +304,33 @@ export function PicksClient({
     }
 
     const allMadeAfter = matches.every((m) => getPredAfterPick(m.fixtureId) != null)
+    const isFirstCompletionTap = allMadeAfter && !wasFullySavedBefore
 
     setPendingPredictions(nextPending)
     setSaveError(null)
     setSaveSuccess(false)
-    pickLight()
+    setFirstJoinSaveSucceeded(false)
 
-    const nextFixtureId = resolveNextFixtureId(matches, getPredAfterPick, fixtureId)
-    if (nextFixtureId != null) {
-      setActiveFixtureId(nextFixtureId)
+    if (isFirstCompletionTap) {
+      expectFirstJoinFlowRef.current = true
+      pickSuccess()
+    } else {
+      pickLight()
+    }
+
+    if (!allMadeAfter) {
+      const nextFixtureId = resolveNextFixtureId(matches, getPredAfterPick, fixtureId)
+      if (nextFixtureId != null) {
+        setActiveFixtureId(nextFixtureId)
+      }
     }
 
     if (allMadeAfter && !user) {
       setIsSignInOpen(true)
     } else if (allMadeAfter && user) {
+      if (isFirstCompletionTap) {
+        setFirstJoinConfirmActive(true)
+      }
       setAutoSaveNonce((n) => n + 1)
     }
   }
@@ -291,15 +353,21 @@ export function PicksClient({
     [matches, activeFixtureId]
   )
 
-  const stepIndex = activeFixtureId != null ? resolveActiveStepIndex(matches, activeFixtureId) : 1
+  const stepIndex = firstJoinConfirmActive
+    ? matches.length
+    : activeFixtureId != null
+      ? resolveActiveStepIndex(matches, activeFixtureId)
+      : 1
 
   const headerTitle =
     competition != null
       ? resolveCompetitionDisplayName(competition, locale)
       : gameweek.name
 
+  const showInlineSaveStatus = !firstJoinConfirmActive
+
   const statusFooter =
-    isSaving || saveError || saveSuccess ? (
+    showInlineSaveStatus && (isSaving || saveError || saveSuccess) ? (
       <div className="w-full flex flex-col gap-2 max-w-md mx-auto">
         {isSaving && (
           <p className="text-center text-sm text-ivory/85">{tPicks('autoSaving')}</p>
@@ -355,7 +423,7 @@ export function PicksClient({
         <header className="w-full min-w-0 leading-none">
           <div className="flex items-center justify-between gap-2">
             <h1 className="text-sm font-bold text-ivory truncate min-w-0">{headerTitle}</h1>
-            {matches.length > 0 && activeMatch ? (
+            {matches.length > 0 && (activeMatch || firstJoinConfirmActive) ? (
               <span
                 className="text-[10px] font-bold text-lime-yellow tabular-nums shrink-0"
                 aria-label={tPicks('stepProgress', { current: stepIndex, total: matches.length })}
@@ -382,7 +450,7 @@ export function PicksClient({
               setActiveFixtureId(fixtureId)
             }
           }}
-          disabled={isSaving}
+          disabled={isSaving || firstJoinConfirmActive}
         />
 
         {fixturesPending && (
@@ -390,7 +458,12 @@ export function PicksClient({
         )}
 
         <GafferDisplayPrefsProvider>
-          {activeMatch ? (
+          {firstJoinConfirmActive ? (
+            <PicksFirstJoinConfirm
+              isSaving={isSaving}
+              saveSucceeded={firstJoinSaveSucceeded}
+            />
+          ) : activeMatch ? (
             <div
               key={activeMatch.fixtureId}
               className="w-full animate-[picksCardIn_220ms_ease-out]"

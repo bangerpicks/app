@@ -33,6 +33,11 @@ function resolveBuildDate() {
   }
 }
 
+function resolveSiteUrl() {
+  const raw = process.env.NEXT_PUBLIC_SITE_URL || 'https://bangerpicks.com'
+  return String(raw).trim().replace(/\/+$/, '')
+}
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
@@ -40,6 +45,7 @@ const nextConfig = {
     NEXT_PUBLIC_APP_VERSION: resolveAppVersion(),
     NEXT_PUBLIC_GIT_SHA: resolveGitSha(),
     NEXT_PUBLIC_BUILD_DATE: resolveBuildDate(),
+    NEXT_PUBLIC_SITE_URL: resolveSiteUrl(),
   },
   productionBrowserSourceMaps: false,
   output: 'export',

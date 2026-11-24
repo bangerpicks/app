@@ -12,6 +12,7 @@ import {
   DisplayNameTakenError,
   ensureUserDocument,
   isDisplayNameAvailable,
+  isRegistrationClosedError,
   markOnboardingIntroSeen,
 } from '@/lib/users'
 import { trackReferralSignup } from '@/lib/referrals'
@@ -29,6 +30,7 @@ interface OnboardingIntroProps {
 
 export function OnboardingIntro({ isOpen, onClose, requiresDisplayName = false, referralCode = null, referralMessage = null, previewOnly = false }: OnboardingIntroProps) {
   const t = useTranslations('onboarding')
+  const tAuth = useTranslations('auth')
   const tCommon = useTranslations('common')
   const tSettings = useTranslations('settings')
   const [mounted, setMounted] = useState(false)
@@ -156,10 +158,13 @@ export function OnboardingIntro({ isOpen, onClose, requiresDisplayName = false, 
       await updateProfile(user, { displayName: trimmedDisplayName })
 
       // Save to Firestore (with referral code if present)
-      await ensureUserDocument(user, trimmedDisplayName, referralCode || undefined)
+      const { isNewUser } = await ensureUserDocument(
+        user,
+        trimmedDisplayName,
+        referralCode || undefined
+      )
 
-      // Process referral if code was provided
-      if (referralCode) {
+      if (referralCode && isNewUser) {
         try {
           await trackReferralSignup(user.uid, referralCode)
           setReferralStatus('Referral applied! Your friend earned 5 points.')
@@ -174,6 +179,8 @@ export function OnboardingIntro({ isOpen, onClose, requiresDisplayName = false, 
     } catch (err: unknown) {
       if (err instanceof DisplayNameTakenError) {
         setError(t('displayNameTaken'))
+      } else if (isRegistrationClosedError(err)) {
+        setError(tAuth('registrationClosed'))
       } else {
         const message = err instanceof Error ? err.message : t('failedToUpdate')
         setError(message)

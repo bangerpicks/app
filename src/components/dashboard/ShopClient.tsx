@@ -83,7 +83,7 @@ export function ShopClient({ items, userPoints, username }: ShopClientProps) {
 
     const item = items.find((i) => i.itemId === showConfirmation.itemId)
     if (!item) {
-      setError('Item not found')
+      setError(t('itemNotFound'))
       setShowConfirmation(null)
       return
     }
@@ -121,7 +121,7 @@ export function ShopClient({ items, userPoints, username }: ShopClientProps) {
       }
     } catch (err: any) {
       console.error('Error redeeming item:', err)
-      setError(err.message || 'Failed to redeem item. Please try again.')
+      setError(err.message || t('redeemFailed'))
     } finally {
       setLoading(false)
     }
@@ -274,7 +274,7 @@ export function ShopClient({ items, userPoints, username }: ShopClientProps) {
                 {loading ? (
                   <>
                     <span className="animate-spin">⏳</span>
-                    Processing...
+                    {t('processing')}
                   </>
                 ) : (
                   tCommon('confirm')

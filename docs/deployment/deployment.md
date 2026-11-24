@@ -323,14 +323,13 @@ Create the settings document with admin UIDs:
 2. Navigate to API Key settings
 3. Enable domain restrictions
 4. Add your production domain(s):
-   - `your-project.firebaseapp.com`
-   - `your-project.web.app`
-   - Your custom domain (if configured)
+   - `bangerpicks.com` (primary)
+   - `banger-picks.firebaseapp.com` and `banger-picks.web.app` (until fully redirected)
    - `localhost` (for development, if supported)
 
 ### 3. Verify Deployment
 
-1. **Hosting**: Visit `https://your-project.web.app`
+1. **Hosting**: Visit `https://bangerpicks.com/dashboard/`
 2. **Functions**: Check Firebase Console > Functions for active functions
 3. **Firestore**: Check Firebase Console > Firestore Database
 4. **Storage**: Check Firebase Console > Storage
@@ -345,22 +344,45 @@ firebase functions:log
 
 Or view in Firebase Console > Functions > Logs.
 
-## Custom Domain Setup
+## Custom domain (`bangerpicks.com`)
 
-### 1. Add Custom Domain in Firebase
+**Production URL:** `https://bangerpicks.com` (apex). The app ships `NEXT_PUBLIC_SITE_URL` defaulting to that origin (see `src/lib/site-url.mjs`, `.env.local`, and `public/manifest.json`).
 
-1. Go to Firebase Console > Hosting
-2. Click "Add custom domain"
-3. Enter your domain (e.g., `bangerpicks.com`)
-4. Follow the DNS configuration instructions
+### 1. Add custom domain in Firebase Hosting
 
-### 2. Configure DNS
+1. Firebase Console → **Hosting** → **Add custom domain**
+2. Add **`bangerpicks.com`** and set it as **primary**
+3. Add **`www.bangerpicks.com`** and choose **Redirect** to `bangerpicks.com` (301)
 
-Add the required DNS records (A or CNAME) to your domain registrar.
+### 2. Redirect legacy Firebase URLs (301)
 
-### 3. SSL Certificate
+Same Hosting site: connect default domains and redirect to the custom domain when prompted:
 
-Firebase automatically provisions SSL certificates via Let's Encrypt. This may take a few hours.
+| Host | Action |
+|------|--------|
+| `banger-picks.web.app` | Redirect → `https://bangerpicks.com` |
+| `banger-picks.firebaseapp.com` | Redirect → `https://bangerpicks.com` |
+| `www.bangerpicks.com` | Redirect → `https://bangerpicks.com` |
+
+Verify after deploy:
+
+```bash
+curl -sI https://banger-picks.web.app/dashboard/ | findstr /i location
+curl -sI https://www.bangerpicks.com/ | findstr /i location
+```
+
+Both should show `Location: https://bangerpicks.com/...`.
+
+`firebase.json` keeps the in-app rule `/` → `/dashboard/` (301). Cross-host redirects are configured in the Console, not in `firebase.json`.
+
+### 3. DNS and SSL
+
+Add Firebase-provided DNS records at your registrar. SSL certificates are provisioned automatically (may take a few hours).
+
+### 4. Search indexing
+
+- `public/robots.txt` and `public/sitemap.xml` reference `https://bangerpicks.com`
+- After go-live, add the property in [Google Search Console](https://search.google.com/search-console) and submit the sitemap URL
 
 ## Environment-Specific Deployments
 

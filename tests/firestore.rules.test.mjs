@@ -308,7 +308,7 @@ describe('users', () => {
         doc(userDb, 'users', USER),
         {
           displayName: 'New Name',
-          photoURL: 'https://example.com/p.png',
+          photoURL: 'https://lh3.googleusercontent.com/a/photo',
           lastUpdated: serverTimestamp(),
         },
         { merge: true }
@@ -350,6 +350,9 @@ describe('users', () => {
     await assertDenied(updateDoc(ref, { displayName: 'A'.repeat(31) }))
     await assertSucceeds(updateDoc(ref, { displayName: 'José', lastUpdated: serverTimestamp() }))
     await assertDenied(updateDoc(ref, { photoURL: { url: 'https://example.com/p.png' } }))
+    await assertDenied(
+      updateDoc(ref, { photoURL: 'https://evil.example/phish.png', lastUpdated: serverTimestamp() })
+    )
     await assertDenied(updateDoc(ref, { photoURL: 'x'.repeat(2049) }))
     await assertDenied(updateDoc(ref, { hasSeenOnboardingIntro: 'true' }))
     await assertDenied(updateDoc(ref, { language: 'fr', lastUpdated: serverTimestamp() }))
@@ -438,6 +441,8 @@ describe('predictions', () => {
     await assertSucceeds(savePick(dbAs(USER), USER, 'A', {}, FIXTURE_ID, GAMEWEEK_ID, false))
     await assertDenied(getDocs(collection(dbAnon(), 'predictions', String(FIXTURE_ID), 'entries')))
     await assertSucceeds(getDocs(collection(dbAs(USER), 'predictions', String(FIXTURE_ID), 'entries')))
+    await assertDenied(getDoc(doc(dbAs(OTHER), 'predictions', String(FIXTURE_ID), 'entries', USER)))
+    await assertSucceeds(getDoc(doc(dbAs(USER), 'predictions', String(FIXTURE_ID), 'entries', USER)))
   })
 
   it('allows a pick after the deadline when forceOpenForTesting is set and the fixture is still NS', async () => {

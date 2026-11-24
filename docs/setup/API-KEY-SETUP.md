@@ -149,6 +149,9 @@ NEXT_PUBLIC_FIREBASE_APP_ID=1:724898846036:web:f002fb3c714dfe865ee4c1
 # API-Football Configuration
 NEXT_PUBLIC_API_FOOTBALL_KEY=your-api-key-here
 
+# Public site URL (SEO, PWA manifest id; production default)
+NEXT_PUBLIC_SITE_URL=https://bangerpicks.com
+
 # Environment
 NEXT_PUBLIC_APP_ENV=development
 ```

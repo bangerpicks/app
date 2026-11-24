@@ -285,7 +285,31 @@
     "exclusiveItems": "Exclusive Items",
     "pointRewards": "Point Rewards",
     "finishingTouches": "We're putting the finishing touches on an incredible shop experience. Get ready to redeem your points for exclusive rewards, badges, and more!",
-    "stayTuned": "Stay tuned"
+    "stayTuned": "Stay tuned",
+    "itemNotFound": "Item not found",
+    "redeemFailed": "Failed to redeem item. Please try again.",
+    "processing": "Processing...",
+    "redemptionSuccess": "Redemption Successful!",
+    "redemptionSuccessText": "You have successfully redeemed: {itemName}",
+    "done": "Done",
+    "displayNameRequired": "Display name is required",
+    "displayNameMinLength": "Display name must be at least 2 characters",
+    "displayNameMaxLength": "Display name must be 30 characters or less",
+    "displayNameInvalidChars": "Display name can only contain letters, numbers, spaces, hyphens, and underscores",
+    "displayNameTakenShop": "This display name is already taken. Please choose another.",
+    "displayNameChangedTitle": "Display Name Changed!",
+    "displayNameChangedText": "Your display name has been successfully updated to {name}",
+    "changeDisplayNameTitle": "Change Display Name",
+    "changeDisplayNameIntro": "You've redeemed {itemName}. Enter your new display name below.",
+    "newDisplayNameLabel": "New Display Name",
+    "saveDisplayName": "Save Display Name",
+    "failedChangeDisplayName": "Failed to change display name. Please try again.",
+    "failedAddFavoritePlayer": "Failed to add favorite player. Please try again.",
+    "loadUserDataFailed": "Failed to load user data. Please try refreshing.",
+    "displayNamePlaceholder": "Enter your new display name",
+    "displayNameHint": "2-30 characters. Letters, numbers, spaces, hyphens, and underscores only.",
+    "updating": "Updating...",
+    "changeNameButton": "Change Name"
   },
   "auth": {
     "signInRequired": "Sign In Required",
@@ -360,7 +384,9 @@
       "generic": "Something went wrong. Please try again."
     },
     "picksSignInRequired": "Sign In to Make Picks",
-    "picksSignInDescription": "Sign in or create an account to view matches, make predictions, and compete on the leaderboard."
+    "picksSignInDescription": "Sign in or create an account to view matches, make predictions, and compete on the leaderboard.",
+    "registrationClosed": "We're not accepting new accounts right now—Banger Picks is invite-only for this round. Sign in if you already have an account, or contact the team if you need access.",
+    "registrationClosedShort": "New sign-ups are closed for now. Try signing in or reach out for an invite."
   },
   "onboarding": {
     "chooseDisplayName": "Choose Your Display Name",
@@ -427,6 +453,8 @@
     "stepProgress": "Pick {current} of {total}",
     "closesIn": "Picks close in {time}",
     "autoSaving": "Saving your picks…",
+    "firstJoinCompleteTitle": "You're in!",
+    "returningToDashboard": "Taking you home…",
     "allPicksSaved": "All picks saved. Good luck!",
     "retrySave": "Try saving again"
   }

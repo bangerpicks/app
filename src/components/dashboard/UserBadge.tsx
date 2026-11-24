@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { UserAvatar } from './UserAvatar'
 import { useAuth } from '@/lib/AuthProvider'
 import { getUserHeaderPhotoURL, loadUserDocument } from '@/lib/users'
@@ -97,7 +98,7 @@ export function UserBadge({ username, userPhotoUrl }: UserBadgeProps) {
 
   if (resolvedUsername) {
     return (
-      <a
+      <Link
         href="/profile/"
         className="relative z-[101] flex h-8 max-w-[9.5rem] items-center gap-1.5 rounded-[10px] bg-lime-yellow py-0.5 pl-1 pr-2.5 text-midnight-violet hover:opacity-90 touch-manipulation sm:max-w-[11rem]"
       >
@@ -105,7 +106,7 @@ export function UserBadge({ username, userPhotoUrl }: UserBadgeProps) {
         <span className="truncate text-sm font-bold leading-normal tracking-[0.28px]">
           {resolvedUsername}
         </span>
-      </a>
+      </Link>
     )
   }
 

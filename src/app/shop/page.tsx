@@ -9,8 +9,10 @@ import { ShopItem } from '@/types/shop'
 import { getUserData } from '@/lib/users'
 import { getAllShopItems } from '@/lib/shop'
 import { computeShopPointsBalance } from '@/lib/redemptions'
+import { useTranslations } from 'next-intl'
 
 export default function ShopPage() {
+  const tShop = useTranslations('shop')
   const { user, loading: authLoading } = useAuth()
   const [username, setUsername] = useState<string | undefined>(undefined)
   const [userPoints, setUserPoints] = useState<number>(0)
@@ -33,7 +35,7 @@ export default function ShopPage() {
         .catch((error) => {
           if (abortController.signal.aborted) return
           console.error('Error fetching user data:', error)
-          setError('Failed to load user data. Please try refreshing.')
+          setError(tShop('loadUserDataFailed'))
           setUsername(user.displayName || undefined)
           setUserPoints(0)
         })
@@ -46,7 +48,7 @@ export default function ShopPage() {
     return () => {
       abortController.abort()
     }
-  }, [user])
+  }, [user, tShop])
 
   useEffect(() => {
     getAllShopItems({ status: 'active' })

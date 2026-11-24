@@ -11,7 +11,7 @@ describe('mergeWeeklyRankingsWithStandings', () => {
     {
       userId: 'u1',
       displayName: 'Alice',
-      photoURL: 'https://example.com/alice.jpg',
+      photoURL: 'https://lh3.googleusercontent.com/alice.jpg',
       rank: 1,
       weeklyPoints: 0,
       points: 100,
@@ -37,7 +37,7 @@ describe('mergeWeeklyRankingsWithStandings', () => {
     assert.equal(merged.length, 2)
     assert.equal(merged[0].userId, 'u1')
     assert.equal(merged[0].matchPredictions.length, 2)
-    assert.equal(merged[0].photoURL, 'https://example.com/alice.jpg')
+    assert.equal(merged[0].photoURL, 'https://lh3.googleusercontent.com/alice.jpg')
     assert.equal(merged[0].weeklyPoints, 0)
   })
 
@@ -65,10 +65,10 @@ describe('mergeWeeklyRankingsWithStandings', () => {
     assert.equal(merged[0].userId, 'u2')
     assert.equal(merged[0].weeklyPoints, 12)
     assert.equal(merged[0].matchPredictions.length, 1)
-    assert.equal(merged[0].photoURL, 'https://cdn/wrong.jpg')
+    assert.equal(merged[0].photoURL, null)
     assert.equal(merged[1].userId, 'u1')
     assert.equal(merged[1].weeklyPoints, 8)
-    assert.equal(merged[1].photoURL, 'https://example.com/alice.jpg')
+    assert.equal(merged[1].photoURL, 'https://lh3.googleusercontent.com/alice.jpg')
     assert.equal(merged[1].matchPredictions[0].prediction, 'H')
   })
 
@@ -84,7 +84,7 @@ describe('mergeWeeklyRankingsWithStandings', () => {
     ]
     const merged = mergeWeeklyRankingsWithStandings(standings, liveRows)
     const alice = merged.find((r) => r.userId === 'u1')
-    assert.equal(alice.photoURL, 'https://example.com/alice.jpg')
+    assert.equal(alice.photoURL, 'https://lh3.googleusercontent.com/alice.jpg')
   })
 })
 

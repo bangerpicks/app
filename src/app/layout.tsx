@@ -10,19 +10,40 @@ import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { QueryProvider } from '@/lib/QueryProvider'
 import { ServiceWorkerRegistration } from '@/components/ServiceWorkerRegistration'
 import { RouteChromeReset } from '@/components/dashboard/RouteChromeReset'
+import { getSiteOrigin } from '@/lib/site-url'
+
+const siteOrigin = getSiteOrigin()
 
 export const metadata: Metadata = {
+  metadataBase: new URL(siteOrigin),
   title: 'Banger Picks - Football Predictions',
   description: 'Predict football matches and compete for the top spot',
+  alternates: {
+    canonical: '/',
+  },
+  openGraph: {
+    title: 'Banger Picks - Football Predictions',
+    description: 'Predict football matches and compete for the top spot',
+    url: '/',
+    siteName: 'Banger Picks',
+    type: 'website',
+  },
   icons: {
     icon: [
-      { url: '/favicon.svg', type: 'image/svg+xml' },
+      { url: '/app-logo.svg', type: 'image/svg+xml' },
+      { url: '/icon-192.png', sizes: '192x192', type: 'image/png' },
     ],
     apple: [
-      { url: '/app-logo.svg', sizes: '180x180', type: 'image/svg+xml' },
+      { url: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png' },
     ],
+    shortcut: [{ url: '/app-logo.svg', type: 'image/svg+xml' }],
   },
   manifest: '/manifest.json',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'Banger Picks',
+  },
 }
 
 const inter = Inter({
@@ -38,6 +59,7 @@ export const viewport: Viewport = {
   maximumScale: 5,
   userScalable: true,
   viewportFit: 'cover',
+  themeColor: '#240830',
 }
 
 export default function RootLayout({

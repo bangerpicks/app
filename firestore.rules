@@ -87,6 +87,14 @@ service cloud.firestore {
       return value is string && value.size() >= 2 && value.size() <= 30;
     }
 
+  // Keep in sync with src/lib/profile-photo-allowlist.mjs
+    function profilePhotoUrlOk(url) {
+      return url is string
+        && url.size() > 0
+        && url.size() <= 2048
+        && url.matches('^https://([a-zA-Z0-9-]+\\.)*(googleusercontent\\.com|ggpht\\.com|firebasestorage\\.googleapis\\.com|storage\\.googleapis\\.com|api-sports\\.io)(/.*)?$');
+    }
+
     function validUserCreate(userId) {
       return registrationsOpen()
         && isOwner(userId)
@@ -107,9 +115,7 @@ service cloud.firestore {
         && displayNameOk(request.resource.data.displayName)
         && (
           request.resource.data.photoURL == null
-          || (request.resource.data.photoURL is string
-            && request.resource.data.photoURL.size() > 0
-            && request.resource.data.photoURL.size() <= 2048)
+          || profilePhotoUrlOk(request.resource.data.photoURL)
         )
         && request.resource.data.points == 0
         && request.resource.data.pointsSpent == 0
@@ -133,9 +139,7 @@ service cloud.firestore {
         && player.name is string
         && player.name.size() > 0
         && player.name.size() <= 80
-        && player.photo is string
-        && player.photo.size() > 0
-        && player.photo.size() <= 2048;
+        && profilePhotoUrlOk(player.photo);
     }
 
     function favoritePlayerOptionMatches(player, redemption) {
@@ -187,9 +191,7 @@ service cloud.firestore {
         && (
           !changedKeys().hasAny(['photoURL'])
           || request.resource.data.photoURL == null
-          || (request.resource.data.photoURL is string
-            && request.resource.data.photoURL.size() > 0
-            && request.resource.data.photoURL.size() <= 2048)
+          || profilePhotoUrlOk(request.resource.data.photoURL)
         )
         && (!changedKeys().hasAny(['language']) || request.resource.data.language in ['en', 'es-MX'])
         && (!changedKeys().hasAny(['hasSeenOnboardingIntro']) || request.resource.data.hasSeenOnboardingIntro is bool)
@@ -462,9 +464,7 @@ service cloud.firestore {
         && data.playerName is string
         && data.playerName.size() > 0
         && data.playerName.size() <= 80
-        && data.playerPhoto is string
-        && data.playerPhoto.size() > 0
-        && data.playerPhoto.size() <= 2048
+        && profilePhotoUrlOk(data.playerPhoto)
         && data.pointsCost == cost
         && item.customization.optionsById is map
         && item.customization.optionsById.keys().hasAny([data.playerKey])
@@ -584,6 +584,17 @@ service cloud.firestore {
       return /databases/$(database)/documents/predictions/$(fixtureId)/entries/$(request.auth.uid);
     }
 
+    // Hide opponents' picks until the gameweek/fixture is locked (rankings use weeklyStandings meanwhile).
+    function predictionEntryReadable(entryUid, fixtureId) {
+      return isAdmin()
+        || isOwner(entryUid)
+        || (
+          resource != null
+          && resource.data.gameweekId is string
+          && !picksOpen(resource.data.gameweekId, fixtureId)
+        );
+    }
+
   // FieldValue.increment() is not visible in request.resource.data on create; allow
   // exists-only parent creates proven by the same-batch entry write.
     // FieldValue.increment() may omit playerCount from request.resource; getAfter holds the result.
@@ -645,8 +656,7 @@ service cloud.firestore {
       allow delete: if false;
 
       match /entries/{entryUid} {
-        // Rankings list entries while signed in. Signed-out player count fails closed.
-        allow read: if isSignedIn();
+        allow read: if isSignedIn() && predictionEntryReadable(entryUid, fixtureId);
         allow create: if (validPredictionWrite(entryUid, fixtureId) && !maintenanceOn()) || isAdmin();
         allow update: if (
           resource != null

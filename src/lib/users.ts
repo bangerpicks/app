@@ -24,7 +24,10 @@ import {
   normalizeDisplayNameKey,
   shouldReserveDisplayNameClaim,
 } from './display-name-claim.mjs'
-import { shouldSkipEnsureUserProfileWrite } from './user-profile-save.mjs'
+import {
+  shouldApplyEnsureUserDisplayNameUpdate,
+  shouldSkipEnsureUserProfileWrite,
+} from './user-profile-save.mjs'
 import { User } from 'firebase/auth'
 import { coalesceProfilePhotoUrl } from './profile-photo.mjs'
 import { db } from './firebase'
@@ -181,6 +184,25 @@ export class DisplayNameTakenError extends Error {
     super('Display name is already taken')
     this.name = 'DisplayNameTakenError'
   }
+}
+
+export class RegistrationClosedError extends Error {
+  constructor() {
+    super('REGISTRATION_CLOSED')
+    this.name = 'RegistrationClosedError'
+  }
+}
+
+export function isRegistrationClosedError(error: unknown): boolean {
+  return (
+    error instanceof RegistrationClosedError ||
+    (error instanceof Error && error.name === 'RegistrationClosedError')
+  )
+}
+
+export type EnsureUserDocumentOptions = {
+  /** When false, never overwrites displayName on an existing profile (e.g. pick auto-save). */
+  allowRename?: boolean
 }
 
 /**
@@ -547,7 +569,12 @@ export async function updateUserFavoritePlayer(
  * @param referralCode - Optional referral code if user was referred
  * @returns Promise<{ isNewUser: boolean }> - Indicates if the user document was just created
  */
-export async function ensureUserDocument(user: User, displayName: string, referralCode?: string | null): Promise<{ isNewUser: boolean }> {
+export async function ensureUserDocument(
+  user: User,
+  displayName: string,
+  referralCode?: string | null,
+  options?: EnsureUserDocumentOptions
+): Promise<{ isNewUser: boolean }> {
   try {
     if (!user || !user.uid) {
       throw new Error('Invalid user object')
@@ -607,19 +634,18 @@ export async function ensureUserDocument(user: User, displayName: string, referr
     } else {
       const currentData = userDoc.data()
 
-      if (shouldSkipEnsureUserProfileWrite(currentData, displayName, user.photoURL)) {
+      if (shouldSkipEnsureUserProfileWrite(currentData, displayName, user.photoURL, options)) {
         return { isNewUser: false }
       }
 
       const updates: Partial<UserDocument> = {}
       const resolvedDisplayName = displayName || currentData.displayName || 'Player'
-      if (resolvedDisplayName !== (currentData.displayName || 'Player')) {
+      const currentName = (currentData.displayName as string) || 'Player'
+      if (
+        shouldApplyEnsureUserDisplayNameUpdate(currentName, resolvedDisplayName, options)
+      ) {
         updates.displayName = resolvedDisplayName
-        await syncDisplayNameClaim(
-          user.uid,
-          resolvedDisplayName,
-          (currentData.displayName as string) || 'Player'
-        )
+        await syncDisplayNameClaim(user.uid, resolvedDisplayName, currentName)
       }
 
       if (user.photoURL !== currentData.photoURL) {
@@ -656,16 +682,22 @@ export async function ensureUserDocument(user: User, displayName: string, referr
     }
   } catch (error: any) {
     console.error(`Error ensuring user document for ${user.uid}:`, error)
-    
-    // Provide more specific error information
+
     if (error.code === 'permission-denied') {
+      const userRef = doc(db, 'users', user.uid)
+      const existing = await getDoc(userRef)
+      if (!existing.exists()) {
+        throw new RegistrationClosedError()
+      }
       throw new Error('Permission denied. Please check your authentication status.')
-    } else if (error.code === 'unauthenticated') {
+    }
+    if (error.code === 'unauthenticated') {
       throw new Error('User not authenticated. Please log in again.')
-    } else if (error.code === 'not-found') {
+    }
+    if (error.code === 'not-found') {
       throw new Error('Database not found. Please check your configuration.')
     }
-    
+
     throw error
   }
 }

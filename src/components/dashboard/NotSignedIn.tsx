@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import { AppShell } from './AppShell'
 import dynamic from 'next/dynamic'
@@ -58,12 +59,12 @@ export function NotSignedIn({
 
           {/* Optional Back Link */}
           {backHref && (
-            <a
+            <Link
               href={backHref}
               className="text-sm text-lime-yellow hover:underline transition-colors mt-1"
             >
               {backLabel || '\u2190 Back to Dashboard'}
-            </a>
+            </Link>
           )}
       </div>
     </AppShell>

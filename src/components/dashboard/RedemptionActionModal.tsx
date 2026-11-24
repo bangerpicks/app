@@ -27,6 +27,7 @@ export function RedemptionActionModal({
   onSuccess,
 }: RedemptionActionModalProps) {
   const t = useTranslations('shop')
+  const tCommon = useTranslations('common')
   const { user } = useAuth()
   const [step, setStep] = useState<'action' | 'success'>('action')
   const [loading, setLoading] = useState(false)
@@ -49,18 +50,17 @@ export function RedemptionActionModal({
 
   const validateDisplayName = (name: string): string | null => {
     if (!name || name.trim().length === 0) {
-      return 'Display name is required'
+      return t('displayNameRequired')
     }
     if (name.trim().length < 2) {
-      return 'Display name must be at least 2 characters'
+      return t('displayNameMinLength')
     }
     if (name.trim().length > 30) {
-      return 'Display name must be 30 characters or less'
+      return t('displayNameMaxLength')
     }
-    // Allow letters, numbers, spaces, hyphens, and underscores
     const validPattern = /^[a-zA-Z0-9 _-]+$/
     if (!validPattern.test(name)) {
-      return 'Display name can only contain letters, numbers, spaces, hyphens, and underscores'
+      return t('displayNameInvalidChars')
     }
     return null
   }
@@ -85,7 +85,7 @@ export function RedemptionActionModal({
       // Check if display name is available
       const isAvailable = await isDisplayNameAvailable(trimmedName, user.uid)
       if (!isAvailable) {
-        setDisplayNameError('This display name is already taken. Please choose another.')
+        setDisplayNameError(t('displayNameTakenShop'))
         setLoading(false)
         return
       }
@@ -99,7 +99,7 @@ export function RedemptionActionModal({
       setStep('success')
     } catch (err: any) {
       console.error('Error changing display name:', err)
-      setError(err.message || 'Failed to change display name. Please try again.')
+      setError(err.message || t('failedChangeDisplayName'))
     } finally {
       setLoading(false)
     }
@@ -124,7 +124,7 @@ export function RedemptionActionModal({
       setStep('success')
     } catch (err: any) {
       console.error('Error adding favorite player:', err)
-      setError(err.message || 'Failed to add favorite player. Please try again.')
+      setError(err.message || t('failedAddFavoritePlayer'))
     } finally {
       setLoading(false)
     }
@@ -163,7 +163,7 @@ export function RedemptionActionModal({
       <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
         <div className="bg-midnight-violet border-2 border-lime-yellow rounded-lg p-6 max-w-md w-full">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-ivory font-bold text-xl">Redemption Successful!</h3>
+            <h3 className="text-ivory font-bold text-xl">{t('redemptionSuccess')}</h3>
             <button
               onClick={handleClose}
               className="text-ivory hover:text-lime-yellow transition-colors"
@@ -172,13 +172,13 @@ export function RedemptionActionModal({
             </button>
           </div>
           <p className="text-ivory/70 mb-4">
-            You have successfully redeemed: <strong>{item.name}</strong>
+            {t('redemptionSuccessText', { itemName: item.name })}
           </p>
           <button
             onClick={handleClose}
             className="w-full py-2.5 px-4 rounded-lg font-semibold text-sm bg-lime-yellow text-midnight-violet hover:bg-lime-yellow/90 transition-colors"
           >
-            Close
+            {tCommon('close')}
           </button>
         </div>
       </div>
@@ -206,7 +206,7 @@ export function RedemptionActionModal({
               onClick={handleClose}
               className="w-full py-2.5 px-4 rounded-lg font-semibold text-sm bg-lime-yellow text-midnight-violet hover:bg-lime-yellow/90 transition-colors"
             >
-              Done
+              {t('done')}
             </button>
           </div>
         </div>
@@ -252,7 +252,7 @@ export function RedemptionActionModal({
               className="flex-1 py-2.5 px-4 rounded-lg font-semibold text-sm bg-ivory/10 text-ivory hover:bg-ivory/15 transition-colors disabled:opacity-50"
               title="Close (redemption will still be marked complete)"
             >
-              Cancel
+              {tCommon('cancel')}
             </button>
             <button
               onClick={handleFavoritePlayerAdd}
@@ -284,16 +284,16 @@ export function RedemptionActionModal({
               <div className="w-16 h-16 bg-lime-yellow rounded-full flex items-center justify-center mb-4">
                 <Check className="text-midnight-violet" size={32} />
               </div>
-              <h3 className="text-ivory font-bold text-xl mb-2">Display Name Changed!</h3>
+              <h3 className="text-ivory font-bold text-xl mb-2">{t('displayNameChangedTitle')}</h3>
               <p className="text-ivory/70">
-                Your display name has been successfully updated to <strong>{newDisplayName.trim()}</strong>
+                {t('displayNameChangedText', { name: newDisplayName.trim() })}
               </p>
             </div>
             <button
               onClick={handleClose}
               className="w-full py-2.5 px-4 rounded-lg font-semibold text-sm bg-lime-yellow text-midnight-violet hover:bg-lime-yellow/90 transition-colors"
             >
-              Done
+              {t('done')}
             </button>
           </div>
         </div>
@@ -304,7 +304,7 @@ export function RedemptionActionModal({
       <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
         <div className="bg-midnight-violet border-2 border-lime-yellow rounded-lg p-6 max-w-md w-full">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-ivory font-bold text-xl">Change Display Name</h3>
+            <h3 className="text-ivory font-bold text-xl">{t('changeDisplayNameTitle')}</h3>
             <button
               onClick={onClose}
               className="text-ivory hover:text-lime-yellow transition-colors"
@@ -315,7 +315,7 @@ export function RedemptionActionModal({
           </div>
 
           <p className="text-ivory/70 mb-4">
-            You&apos;ve redeemed <strong>{item.name}</strong>. Enter your new display name below.
+            {t('changeDisplayNameIntro', { itemName: item.name })}
           </p>
 
           {error && (
@@ -326,7 +326,7 @@ export function RedemptionActionModal({
 
           <div className="mb-4">
             <label className="block text-sm text-ivory mb-2">
-              New Display Name <span className="text-cinnabar">*</span>
+              {t('newDisplayNameLabel')} <span className="text-cinnabar">*</span>
             </label>
             <input
               type="text"
@@ -341,7 +341,7 @@ export function RedemptionActionModal({
                   setDisplayNameError(error)
                 }
               }}
-              placeholder="Enter your new display name"
+              placeholder={t('displayNamePlaceholder')}
               className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-ivory focus:outline-none focus:border-lime-yellow"
               disabled={loading}
               maxLength={30}
@@ -349,9 +349,7 @@ export function RedemptionActionModal({
             {displayNameError && (
               <p className="text-xs text-cinnabar mt-1">{displayNameError}</p>
             )}
-            <p className="text-xs text-ivory/50 mt-1">
-              2-30 characters. Letters, numbers, spaces, hyphens, and underscores only.
-            </p>
+            <p className="text-xs text-ivory/50 mt-1">{t('displayNameHint')}</p>
           </div>
 
           <div className="flex gap-3">
@@ -360,7 +358,7 @@ export function RedemptionActionModal({
               disabled={loading}
               className="flex-1 py-2.5 px-4 rounded-lg font-semibold text-sm bg-ivory/10 text-ivory hover:bg-ivory/15 transition-colors disabled:opacity-50"
             >
-              Cancel
+              {tCommon('cancel')}
             </button>
             <button
               onClick={handleDisplayNameChange}
@@ -370,10 +368,10 @@ export function RedemptionActionModal({
               {loading ? (
                 <>
                   <Loader2 className="animate-spin" size={18} />
-                  Updating...
+                  {t('updating')}
                 </>
               ) : (
-                'Change Name'
+                t('changeNameButton')
               )}
             </button>
           </div>

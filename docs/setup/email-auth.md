@@ -10,10 +10,12 @@ Banger Picks supports **phone SMS**, **email + password**, and **email magic lin
    - Enable **Email link (passwordless sign-in)** on the same provider (follow Firebase’s “Email link” steps for web).
    - Keep **Phone** enabled if you use SMS sign-in.
 3. **Settings → Authorized domains**
-   - Include `localhost`
-   - Include `banger-picks.web.app` and `banger-picks.firebaseapp.com`
-   - Add any custom domain you use for hosting
-4. **Templates** (optional): customize verification, password reset, and sign-in link emails.
+   - **Primary:** `bangerpicks.com`, `www.bangerpicks.com`
+   - **Development:** `localhost`
+   - **Legacy (until 301 verified):** `banger-picks.web.app`, `banger-picks.firebaseapp.com`
+   - Do **not** set `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN` to `bangerpicks.com` unless you complete [Firebase Auth custom domain](https://firebase.google.com/docs/auth/custom-domain) (`auth.bangerpicks.com`). The client should keep `banger-picks.firebaseapp.com` for `authDomain`.
+4. **Phone SMS:** confirm reCAPTCHA / domain allowlists include `bangerpicks.com` (and `www.bangerpicks.com` if users can land there before redirect).
+5. **Templates** (optional): customize verification, password reset, and sign-in link emails.
 
 ## Local testing
 

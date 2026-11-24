@@ -16,7 +16,7 @@ export async function completeSignInAfterAuth(
   const { isNewUser } = await ensureUserDocument(user, displayName, referralCode || undefined)
 
   let referralMessage: string | null = null
-  if (referralCode) {
+  if (referralCode && isNewUser) {
     try {
       await trackReferralSignup(user.uid, referralCode)
       referralMessage = 'Referral applied! Your friend earned 5 points.'

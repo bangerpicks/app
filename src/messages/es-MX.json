@@ -285,7 +285,31 @@
     "exclusiveItems": "Artículos Exclusivos",
     "pointRewards": "Recompensas de Puntos",
     "finishingTouches": "Estamos dando los últimos toques a una increíble experiencia de tienda. ¡Prepárate para canjear tus puntos por recompensas exclusivas, insignias y más!",
-    "stayTuned": "Mantente atento"
+    "stayTuned": "Mantente atento",
+    "itemNotFound": "Artículo no encontrado",
+    "redeemFailed": "No se pudo canjear el artículo. Intenta de nuevo.",
+    "processing": "Procesando...",
+    "redemptionSuccess": "¡Canje exitoso!",
+    "redemptionSuccessText": "Canjeaste con éxito: {itemName}",
+    "done": "Listo",
+    "displayNameRequired": "El nombre de pantalla es obligatorio",
+    "displayNameMinLength": "El nombre debe tener al menos 2 caracteres",
+    "displayNameMaxLength": "El nombre debe tener 30 caracteres o menos",
+    "displayNameInvalidChars": "El nombre solo puede tener letras, números, espacios, guiones y guiones bajos",
+    "displayNameTakenShop": "Ese nombre ya está en uso. Elige otro.",
+    "displayNameChangedTitle": "¡Nombre actualizado!",
+    "displayNameChangedText": "Tu nombre de pantalla ahora es {name}",
+    "changeDisplayNameTitle": "Cambiar nombre de pantalla",
+    "changeDisplayNameIntro": "Canjeaste {itemName}. Escribe tu nuevo nombre abajo.",
+    "newDisplayNameLabel": "Nuevo nombre de pantalla",
+    "saveDisplayName": "Guardar nombre",
+    "failedChangeDisplayName": "No se pudo cambiar el nombre. Intenta de nuevo.",
+    "failedAddFavoritePlayer": "No se pudo añadir el jugador favorito. Intenta de nuevo.",
+    "loadUserDataFailed": "No pudimos cargar tus datos. Actualiza la página.",
+    "displayNamePlaceholder": "Escribe tu nuevo nombre de pantalla",
+    "displayNameHint": "2-30 caracteres. Letras, números, espacios, guiones y guiones bajos.",
+    "updating": "Actualizando...",
+    "changeNameButton": "Cambiar nombre"
   },
   "auth": {
     "signInRequired": "Inicio de Sesión Requerido",
@@ -360,7 +384,9 @@
       "generic": "Algo salió mal. Intenta de nuevo."
     },
     "picksSignInRequired": "Inicia Sesión para Pronosticar",
-    "picksSignInDescription": "Inicia sesión o crea una cuenta para ver partidos, hacer predicciones y competir en la tabla."
+    "picksSignInDescription": "Inicia sesión o crea una cuenta para ver partidos, hacer predicciones y competir en la tabla.",
+    "registrationClosed": "Por ahora no aceptamos cuentas nuevas: Banger Picks es solo por invitación en esta ronda. Inicia sesión si ya tienes cuenta, o escríbenos si necesitas acceso.",
+    "registrationClosedShort": "Los registros nuevos están cerrados por ahora. Intenta iniciar sesión o pídenos una invitación."
   },
   "onboarding": {
     "chooseDisplayName": "Elige Tu Nombre de Pantalla",
@@ -427,6 +453,8 @@
     "stepProgress": "Pronóstico {current} de {total}",
     "closesIn": "Los pronósticos cierran en {time}",
     "autoSaving": "Guardando tus pronósticos…",
+    "firstJoinCompleteTitle": "¡Estás dentro!",
+    "returningToDashboard": "Volviendo al inicio…",
     "allPicksSaved": "¡Listo! Pronósticos guardados. ¡Mucha suerte!",
     "retrySave": "Intentar guardar de nuevo"
   }

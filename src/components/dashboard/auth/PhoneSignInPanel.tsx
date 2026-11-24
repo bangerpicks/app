@@ -9,6 +9,7 @@ import {
 } from 'firebase/auth'
 import { auth } from '@/lib/firebase'
 import { completeSignInAfterAuth } from '@/lib/auth-post-sign-in'
+import { isRegistrationClosedError } from '@/lib/users'
 import { COUNTRY_CODES } from './phone-country-codes'
 
 interface PhoneSignInPanelProps {
@@ -136,6 +137,10 @@ export function PhoneSignInPanel({
       }
       onDone(referralMessage)
     } catch (err: unknown) {
+      if (isRegistrationClosedError(err)) {
+        onError(t('registrationClosed'))
+        return
+      }
       onError(err instanceof Error ? err.message : t('invalidCode'))
     } finally {
       setLoading(false)

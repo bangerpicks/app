@@ -656,6 +656,22 @@ export const trackReferralSignup = functions.https.onCall(async (data: { referra
       throw new functions.https.HttpsError('invalid-argument', 'Self-referral is not allowed')
     }
 
+    const newUserSnap = await db.collection('users').doc(newUserUid).get()
+    if (!newUserSnap.exists) {
+      throw new functions.https.HttpsError('failed-precondition', 'User profile not found')
+    }
+    const newUserData = newUserSnap.data() || {}
+    const createdAt = newUserData.createdAt
+    const createdMs =
+      createdAt && typeof createdAt.toMillis === 'function' ? createdAt.toMillis() : 0
+    const NEW_SIGNUP_REFERRAL_WINDOW_MS = 24 * 60 * 60 * 1000
+    if (!createdMs || Date.now() - createdMs > NEW_SIGNUP_REFERRAL_WINDOW_MS) {
+      throw new functions.https.HttpsError(
+        'failed-precondition',
+        'Referral rewards apply only to new sign-ups'
+      )
+    }
+
     const existingSnapshot = await db
       .collection('referrals')
       .where('referrerUid', '==', referrerUid)
