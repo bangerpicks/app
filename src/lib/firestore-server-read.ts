@@ -148,12 +148,10 @@ export async function getQuerySnapshotServerPreferring(
     try {
       const cached = await getDocsFromCache(queryRef)
       if (!cached.empty) {
-        // Fast path: show cached data immediately. Not a failed refresh — no stale banner / retry.
-        return {
-          data: cached,
-          source: 'cache-fallback',
-          servedFromCache: false,
-        }
+        // Fast path: paint cached data immediately. servedFromCache stays true so the caller
+        // knows it still has to confirm with the server; Home (dashboard/page.tsx via
+        // loadHomeStaleWhileRevalidate) does that pass and only shows the stale banner if it fails.
+        return toQueryReadResult(cached, 'cache-fallback')
       }
     } catch {
       // No cache yet — continue to server path.

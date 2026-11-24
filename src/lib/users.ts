@@ -171,6 +171,19 @@ export async function getUserHeaderPhotoURL(user: User): Promise<string | null> 
 }
 
 /**
+ * Best-effort `displayNames/{normalized}` reservation. A permission-denied (name already
+ * claimed, including the shared default "player") must never fail sign-up, profile
+ * save, or picks save — log and continue.
+ */
+async function reserveDisplayNameBestEffort(normalized: string, uid: string): Promise<void> {
+  try {
+    await setDoc(doc(db, 'displayNames', normalized), { uid }, { merge: true })
+  } catch (error) {
+    console.warn('[users] displayName reservation skipped', normalized, error)
+  }
+}
+
+/**
  * Checks if a display name is available (not already taken by another user).
  * Performs case-insensitive comparison (e.g., "John" and "john" are considered duplicates).
  * 
@@ -506,7 +519,7 @@ export async function ensureUserDocument(user: User, displayName: string, referr
       await setDoc(userRef, userData)
       const normalized = (displayName || 'Player').trim().toLowerCase()
       if (normalized) {
-        await setDoc(doc(db, 'displayNames', normalized), { uid: user.uid }, { merge: true })
+        await reserveDisplayNameBestEffort(normalized, user.uid)
       }
       return { isNewUser: true }
     } else {
@@ -522,7 +535,7 @@ export async function ensureUserDocument(user: User, displayName: string, referr
         updates.displayName = resolvedDisplayName
         const normalized = resolvedDisplayName.trim().toLowerCase()
         if (normalized) {
-          await setDoc(doc(db, 'displayNames', normalized), { uid: user.uid }, { merge: true })
+          await reserveDisplayNameBestEffort(normalized, user.uid)
         }
       }
 

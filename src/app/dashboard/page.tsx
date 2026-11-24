@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useTranslations } from 'next-intl'
 import { useAuth } from '@/lib/AuthProvider'
 import { loadUserDocument } from '@/lib/users'
@@ -17,6 +17,11 @@ import { LoadBudget } from '@/lib/gameweek-selection'
 import { loadHomeCompetitionPlayCards } from '@/lib/competitions'
 import type { CompetitionDocument, CompetitionPlayCard } from '@/types/competition'
 import { FirestoreServedFromCacheError } from '@/lib/firestore-server-read'
+import { subscribeHomeCatalogChanges } from '@/lib/home-live-refresh'
+import {
+  loadHomeStaleWhileRevalidate,
+  shouldRefetchHomeOnResume,
+} from '@/lib/home-revalidate.mjs'
 import {
   shouldShowDashboardStaleBanner,
   staleBannerShowsRetry,
@@ -97,49 +102,88 @@ export default function DashboardPage() {
     }
   }, [user])
 
+  /** Bumped by live listeners / foreground resume: silent server refresh, no loading screen. */
+  const [backgroundRefreshKey, setBackgroundRefreshKey] = useState(0)
+  const lastServerLoadAtRef = useRef(0)
+  const loadInFlightRef = useRef(false)
+  const hasRenderedDataRef = useRef(false)
+
   useEffect(() => {
     const abortController = new AbortController()
-    const loadBudget = new LoadBudget()
-    const servedFromCacheRef = { current: false }
-    const readOpts = {
-      serverPreferring: true as const,
-      budget: loadBudget,
-      servedFromCacheRef,
-      staleWhileRevalidate: true as const,
+    const isCancelled = () => abortController.signal.aborted
+
+    type HomeLoad = Awaited<ReturnType<typeof loadHomeCompetitionPlayCards>>
+
+    const runLoad = async (staleWhileRevalidate: boolean) => {
+      const servedFromCacheRef = { current: false }
+      const data = await loadHomeCompetitionPlayCards(user?.uid ?? null, {
+        serverPreferring: true,
+        budget: new LoadBudget(),
+        servedFromCacheRef,
+        staleWhileRevalidate,
+      })
+      return { data, servedFromCache: servedFromCacheRef.current }
+    }
+
+    const apply = (data: HomeLoad, meta: { stale: boolean }) => {
+      setCompetitionCards(data.cards)
+      setComingSoonCompetitions(data.comingSoon)
+      setGameweeksById(data.gameweeksById)
+      setGameweeks([...data.gameweeksById.values()])
+      setError(null)
+      setServedFromFirestoreCache(meta.stale)
+      setRefreshFailed(meta.stale)
+      setLoadingGameweeks(false)
+      hasRenderedDataRef.current = true
     }
 
     async function fetchAvailableGameweeks() {
       if (authLoading) return
+      // Background refreshes keep the current cards on screen; only the first load shows Loading.
+      const silent = backgroundRefreshKey > 0 && hasRenderedDataRef.current
+      loadInFlightRef.current = true
       try {
-        setLoadingGameweeks(true)
-        setError(null)
-        setRefreshFailed(false)
-        setServedFromFirestoreCache(false)
-
-        const { cards, comingSoon, gameweeksById: byId } = await loadHomeCompetitionPlayCards(
-          user?.uid ?? null,
-          readOpts
-        )
-
-        if (abortController.signal.aborted) return
-
-        setCompetitionCards(cards)
-        setComingSoonCompetitions(comingSoon)
-        setGameweeksById(byId)
-        setGameweeks([...byId.values()])
-        if (servedFromCacheRef.current) {
-          setServedFromFirestoreCache(true)
+        if (!silent) {
+          setLoadingGameweeks(true)
+          setError(null)
+          setRefreshFailed(false)
+          setServedFromFirestoreCache(false)
         }
+
+        if (silent) {
+          // Background refresh: straight to the server, keep current cards until it lands.
+          const fresh = await runLoad(false)
+          if (isCancelled()) return
+          apply(fresh.data, { stale: fresh.servedFromCache })
+          if (!fresh.servedFromCache) lastServerLoadAtRef.current = Date.now()
+          return
+        }
+
+        // First paint from IndexedDB (fast), then always confirm with the server.
+        const { serverConfirmed } = await loadHomeStaleWhileRevalidate<HomeLoad>({
+          loadCacheFirst: () => runLoad(true),
+          loadServer: () => runLoad(false),
+          apply,
+          isCancelled,
+        })
+        if (serverConfirmed) lastServerLoadAtRef.current = Date.now()
       } catch (err: unknown) {
-        if (abortController.signal.aborted) return
+        if (isCancelled()) return
         console.error('Error fetching dashboard gameweeks:', err)
+        if (silent) {
+          // Keep what is on screen; flag it as not refreshed.
+          setServedFromFirestoreCache(true)
+          setRefreshFailed(true)
+          return
+        }
         const message = err instanceof Error ? err.message : 'Failed to load competitions'
         const cacheOnly = err instanceof FirestoreServedFromCacheError
         setError(message)
         setServedFromFirestoreCache(cacheOnly)
         setRefreshFailed(true)
       } finally {
-        if (!abortController.signal.aborted) {
+        loadInFlightRef.current = false
+        if (!isCancelled()) {
           setLoadingGameweeks(false)
         }
       }
@@ -149,8 +193,44 @@ export default function DashboardPage() {
 
     return () => {
       abortController.abort()
+      loadInFlightRef.current = false
     }
-  }, [loadGeneration, user?.uid, authLoading])
+  }, [loadGeneration, backgroundRefreshKey, user?.uid, authLoading])
+
+  const requestBackgroundRefresh = useCallback(() => {
+    setBackgroundRefreshKey((k) => k + 1)
+  }, [])
+
+  // Live: a publish, close-out, or activeGameweekId change re-runs the server load.
+  useEffect(() => {
+    if (authLoading) return
+    return subscribeHomeCatalogChanges(requestBackgroundRefresh)
+  }, [authLoading, user?.uid, requestBackgroundRefresh])
+
+  // Foreground: returning to the tab / app refetches (throttled).
+  useEffect(() => {
+    const onResume = () => {
+      const visible =
+        typeof document === 'undefined' || document.visibilityState !== 'hidden'
+      if (
+        shouldRefetchHomeOnResume({
+          visible,
+          inFlight: loadInFlightRef.current,
+          lastServerLoadAtMs: lastServerLoadAtRef.current,
+        })
+      ) {
+        requestBackgroundRefresh()
+      }
+    }
+    document.addEventListener('visibilitychange', onResume)
+    window.addEventListener('focus', onResume)
+    window.addEventListener('pageshow', onResume)
+    return () => {
+      document.removeEventListener('visibilitychange', onResume)
+      window.removeEventListener('focus', onResume)
+      window.removeEventListener('pageshow', onResume)
+    }
+  }, [requestBackgroundRefresh])
 
   const retryGameweekLoad = () => {
     setError(null)

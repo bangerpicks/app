@@ -34,3 +34,15 @@ test('firebase hosting revalidates HTML and app shell', () => {
   const catchAllIdx = headerRules().findIndex((r) => r.source === '**')
   assert.ok(catchAllIdx >= 0 && assetIdx > catchAllIdx, 'catch-all must precede immutable asset rule')
 })
+
+test('firebase hosting never long-caches the service worker', () => {
+  // /sw.js also matches **/*.@(js|css); a later rule must override it so app updates land.
+  const rules = headerRules()
+  const swIdx = rules.findIndex((r) => r.source === '/sw.js')
+  const assetIdx = rules.findIndex((r) => r.source?.includes('@(js|css'))
+  assert.ok(swIdx >= 0, 'expected /sw.js header rule')
+  assert.ok(swIdx > assetIdx, '/sw.js rule must come after the immutable js rule')
+  const cache = rules[swIdx].headers.find((h) => h.key === 'Cache-Control')
+  assert.doesNotMatch(cache.value, /immutable/)
+  assert.match(cache.value, /no-cache|max-age=0/)
+})

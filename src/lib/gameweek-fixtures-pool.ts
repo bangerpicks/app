@@ -6,31 +6,51 @@ type PoolEntry = {
   data: GameweekFixtureData[]
   listeners: Set<(data: GameweekFixtureData[]) => void>
   unsubscribe?: Unsubscribe
+  retryTimer?: ReturnType<typeof setTimeout>
+  failures: number
   refCount: number
 }
 
 const pools = new Map<string, PoolEntry>()
 
-function ensurePool(gameweekId: string): PoolEntry {
-  let pool = pools.get(gameweekId)
-  if (pool) return pool
+const RETRY_BASE_MS = 2_000
+const RETRY_MAX_MS = 60_000
 
-  pool = { data: [], listeners: new Set(), refCount: 0 }
-  pools.set(gameweekId, pool)
-
+function attachPoolListener(gameweekId: string, pool: PoolEntry): void {
   const fixturesRef = collection(db, 'gameweeks', gameweekId, 'fixtures')
   pool.unsubscribe = onSnapshot(
     query(fixturesRef),
     (snapshot) => {
+      pool.failures = 0
       const next: GameweekFixtureData[] = []
       snapshot.forEach((d) => next.push(d.data() as GameweekFixtureData))
-      pool!.data = next
-      pool!.listeners.forEach((l) => l(next))
+      pool.data = next
+      pool.listeners.forEach((l) => l(next))
     },
     (error) => {
+      // A Firestore listener is dead after an error; re-attach with backoff while still in use.
       console.error(`[fixtures-pool] ${gameweekId}`, error)
+      pool.unsubscribe?.()
+      pool.unsubscribe = undefined
+      if (pools.get(gameweekId) !== pool) return
+      const delay = Math.min(RETRY_MAX_MS, RETRY_BASE_MS * Math.pow(2, pool.failures++))
+      pool.retryTimer = setTimeout(() => {
+        pool.retryTimer = undefined
+        if (pools.get(gameweekId) === pool && pool.listeners.size > 0) {
+          attachPoolListener(gameweekId, pool)
+        }
+      }, delay)
     }
   )
+}
+
+function ensurePool(gameweekId: string): PoolEntry {
+  let pool = pools.get(gameweekId)
+  if (pool) return pool
+
+  pool = { data: [], listeners: new Set(), refCount: 0, failures: 0 }
+  pools.set(gameweekId, pool)
+  attachPoolListener(gameweekId, pool)
   return pool
 }
 
@@ -48,6 +68,7 @@ export function subscribeGameweekFixturesPool(
     pool.listeners.delete(listener)
     pool.refCount--
     if (pool.refCount <= 0 && pool.listeners.size === 0) {
+      if (pool.retryTimer) clearTimeout(pool.retryTimer)
       pool.unsubscribe?.()
       pools.delete(gameweekId)
     }
