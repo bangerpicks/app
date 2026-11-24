@@ -1257,6 +1257,22 @@ describe('seasons and standings', () => {
   })
 })
 
+describe('displayNames claims', () => {
+  it('allows create for own uid, read when signed in, and delete own claim only', async () => {
+    await assertSucceeds(setDoc(doc(dbAs(USER), 'displayNames', 'gaffer'), { uid: USER }))
+    await assertSucceeds(getDoc(doc(dbAs(OTHER), 'displayNames', 'gaffer')))
+    await assertDenied(setDoc(doc(dbAs(OTHER), 'displayNames', 'gaffer'), { uid: OTHER }))
+    await assertDenied(setDoc(doc(dbAs(USER), 'displayNames', 'taken'), { uid: OTHER }))
+    await assertDenied(setDoc(doc(dbAs(OTHER), 'displayNames', 'gaffer'), { uid: OTHER }, { merge: true }))
+    await assertSucceeds(deleteDoc(doc(dbAs(USER), 'displayNames', 'gaffer')))
+    await assertDenied(deleteDoc(doc(dbAs(OTHER), 'displayNames', 'taken')))
+    await seed((db) =>
+      setDoc(doc(db, 'displayNames', 'taken'), { uid: OTHER })
+    )
+    await assertDenied(deleteDoc(doc(dbAs(USER), 'displayNames', 'taken')))
+  })
+})
+
 describe('fixture search cache', () => {
   const cache = {
     from: '2026-11-01',

@@ -5,9 +5,7 @@ import { useTranslations } from 'next-intl'
 import { ShopItem, FavoritePlayerOption, isFavoritePlayerCustomization } from '@/types/shop'
 import { useAuth } from '@/lib/AuthProvider'
 import { updateProfile } from 'firebase/auth'
-import { updateDoc, doc, serverTimestamp } from 'firebase/firestore'
-import { db } from '@/lib/firebase'
-import { isDisplayNameAvailable, updateUserFavoritePlayer } from '@/lib/users'
+import { isDisplayNameAvailable, updateUserDisplayName, updateUserFavoritePlayer } from '@/lib/users'
 import { updateRedemptionStatus } from '@/lib/redemptions'
 import { X, Loader2, Check } from 'lucide-react'
 
@@ -92,15 +90,8 @@ export function RedemptionActionModal({
         return
       }
 
-      // Update Firebase Auth profile
       await updateProfile(user, { displayName: trimmedName })
-
-      // Update Firestore user document
-      const userRef = doc(db, 'users', user.uid)
-      await updateDoc(userRef, {
-        displayName: trimmedName,
-        lastUpdated: serverTimestamp(),
-      })
+      await updateUserDisplayName(user, trimmedName)
 
       // Mark redemption as fulfilled
       await updateRedemptionStatus(redemptionId, 'fulfilled')

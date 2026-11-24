@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useTranslations } from 'next-intl'
 import { useAuth } from '@/lib/AuthProvider'
 import { loadUserDocument } from '@/lib/users'
+import { needsCustomDisplayNamePrompt } from '@/lib/display-name-claim.mjs'
 import { DashboardClient } from '@/components/dashboard/DashboardClient'
 import dynamic from 'next/dynamic'
 
@@ -71,14 +72,14 @@ export default function DashboardPage() {
     const abortController = new AbortController()
 
     if (user) {
-      const needsDisplayName =
-        !user.displayName || user.displayName.trim() === 'Player'
-
       loadUserDocument(user)
         .then((profile) => {
           if (abortController.signal.aborted) return
-          setUsername(
-            profile?.displayName || user.displayName || undefined
+          const profileName = profile?.displayName || user.displayName || undefined
+          setUsername(profileName)
+          const needsDisplayName = needsCustomDisplayNamePrompt(
+            user.displayName,
+            profile?.displayName
           )
           const hasSeen = profile?.hasSeenOnboardingIntro === true
           if (!hasSeen || needsDisplayName) {
@@ -88,7 +89,7 @@ export default function DashboardPage() {
         .catch(() => {
           if (abortController.signal.aborted) return
           setUsername(user.displayName || undefined)
-          if (needsDisplayName) {
+          if (needsCustomDisplayNamePrompt(user.displayName, undefined)) {
             setShowOnboarding(true)
           }
         })
@@ -253,7 +254,7 @@ export default function DashboardPage() {
   const onboardingOpen =
     showOnboarding || (isDevOnboardingPreview && !devPreviewDismissed)
   const needsDisplayName = Boolean(
-    user && (!user.displayName || user.displayName.trim() === 'Player')
+    user && needsCustomDisplayNamePrompt(user.displayName, username)
   )
   const closeOnboarding = () => {
     setShowOnboarding(false)

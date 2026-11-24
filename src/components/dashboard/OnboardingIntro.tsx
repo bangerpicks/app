@@ -8,7 +8,12 @@ import { useTranslations } from 'next-intl'
 import { Target, Calendar, Trophy, ShoppingBag, ArrowRight } from 'lucide-react'
 import { auth } from '@/lib/firebase'
 import { updateProfile } from 'firebase/auth'
-import { markOnboardingIntroSeen, ensureUserDocument, isDisplayNameAvailable } from '@/lib/users'
+import {
+  DisplayNameTakenError,
+  ensureUserDocument,
+  isDisplayNameAvailable,
+  markOnboardingIntroSeen,
+} from '@/lib/users'
 import { trackReferralSignup } from '@/lib/referrals'
 import { getRandomSuggestions } from '@/data/displayNameSuggestions'
 
@@ -166,8 +171,13 @@ export function OnboardingIntro({ isOpen, onClose, requiresDisplayName = false, 
 
       // Move to instructions step
       setStep('instructions')
-    } catch (err: any) {
-      setError(err.message || t('failedToUpdate'))
+    } catch (err: unknown) {
+      if (err instanceof DisplayNameTakenError) {
+        setError(t('displayNameTaken'))
+      } else {
+        const message = err instanceof Error ? err.message : t('failedToUpdate')
+        setError(message)
+      }
       console.error('Display name update error:', err)
     } finally {
       setLoading(false)

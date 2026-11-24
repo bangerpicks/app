@@ -17,7 +17,13 @@ import {
   getDocs,
   where,
   writeBatch,
+  runTransaction,
 } from 'firebase/firestore'
+import {
+  isPlaceholderDisplayName,
+  normalizeDisplayNameKey,
+  shouldReserveDisplayNameClaim,
+} from './display-name-claim.mjs'
 import { shouldSkipEnsureUserProfileWrite } from './user-profile-save.mjs'
 import { User } from 'firebase/auth'
 import { coalesceProfilePhotoUrl } from './profile-photo.mjs'
@@ -170,17 +176,85 @@ export async function getUserHeaderPhotoURL(user: User): Promise<string | null> 
   return coalesceProfilePhotoUrl(user.photoURL)
 }
 
-/**
- * Best-effort `displayNames/{normalized}` reservation. A permission-denied (name already
- * claimed, including the shared default "player") must never fail sign-up, profile
- * save, or picks save — log and continue.
- */
-async function reserveDisplayNameBestEffort(normalized: string, uid: string): Promise<void> {
-  try {
-    await setDoc(doc(db, 'displayNames', normalized), { uid }, { merge: true })
-  } catch (error) {
-    console.warn('[users] displayName reservation skipped', normalized, error)
+export class DisplayNameTakenError extends Error {
+  constructor() {
+    super('Display name is already taken')
+    this.name = 'DisplayNameTakenError'
   }
+}
+
+/**
+ * Atomically reserve `displayNames/{key}` and release the previous claim owned by the same user.
+ * Placeholder names (e.g. Player) never create claims.
+ */
+export async function syncDisplayNameClaim(
+  uid: string,
+  displayName: string,
+  previousDisplayName?: string | null
+): Promise<void> {
+  const normalized = normalizeDisplayNameKey(displayName)
+  if (!shouldReserveDisplayNameClaim(normalized)) {
+    return
+  }
+
+  const previousKey = previousDisplayName
+    ? normalizeDisplayNameKey(previousDisplayName)
+    : ''
+  const releasePrevious =
+    previousKey && shouldReserveDisplayNameClaim(previousKey) && previousKey !== normalized
+
+  await runTransaction(db, async (transaction) => {
+    const claimRef = doc(db, 'displayNames', normalized)
+    const claimSnap = await transaction.get(claimRef)
+    if (claimSnap.exists()) {
+      const owner = claimSnap.data()?.uid as string | undefined
+      if (owner && owner !== uid) {
+        throw new DisplayNameTakenError()
+      }
+    } else {
+      transaction.set(claimRef, { uid })
+    }
+
+    if (releasePrevious) {
+      const oldRef = doc(db, 'displayNames', previousKey)
+      const oldSnap = await transaction.get(oldRef)
+      if (oldSnap.exists() && oldSnap.data()?.uid === uid) {
+        transaction.delete(oldRef)
+      }
+    }
+  })
+}
+
+/**
+ * Updates Firestore displayName and the displayNames claim in one flow.
+ */
+export async function updateUserDisplayName(
+  user: User,
+  displayName: string,
+  options?: { previousDisplayName?: string | null }
+): Promise<void> {
+  const trimmed = displayName.trim()
+  if (isPlaceholderDisplayName(trimmed)) {
+    throw new Error('Choose a display name other than the default placeholder.')
+  }
+
+  const previous =
+    options?.previousDisplayName ??
+    (await loadUserDocument(user))?.displayName ??
+    user.displayName ??
+  null
+
+  await syncDisplayNameClaim(user.uid, trimmed, previous)
+
+  const userRef = doc(db, 'users', user.uid)
+  await setDoc(
+    userRef,
+    {
+      displayName: trimmed,
+      lastUpdated: serverTimestamp(),
+    },
+    { merge: true }
+  )
 }
 
 /**
@@ -197,7 +271,10 @@ export async function isDisplayNameAvailable(displayName: string, excludeUserId?
       return false
     }
 
-    const normalizedName = displayName.trim().toLowerCase()
+    const normalizedName = normalizeDisplayNameKey(displayName)
+    if (isPlaceholderDisplayName(displayName)) {
+      return true
+    }
     const claimRef = doc(db, 'displayNames', normalizedName)
     const claimSnap = await withTimeout(
       getDoc(claimRef),
@@ -517,9 +594,14 @@ export async function ensureUserDocument(user: User, displayName: string, referr
       }
 
       await setDoc(userRef, userData)
-      const normalized = (displayName || 'Player').trim().toLowerCase()
-      if (normalized) {
-        await reserveDisplayNameBestEffort(normalized, user.uid)
+      try {
+        await syncDisplayNameClaim(user.uid, displayName || 'Player')
+      } catch (error) {
+        if (error instanceof DisplayNameTakenError) {
+          console.warn('[users] displayName claim skipped on create', displayName)
+        } else {
+          throw error
+        }
       }
       return { isNewUser: true }
     } else {
@@ -533,10 +615,11 @@ export async function ensureUserDocument(user: User, displayName: string, referr
       const resolvedDisplayName = displayName || currentData.displayName || 'Player'
       if (resolvedDisplayName !== (currentData.displayName || 'Player')) {
         updates.displayName = resolvedDisplayName
-        const normalized = resolvedDisplayName.trim().toLowerCase()
-        if (normalized) {
-          await reserveDisplayNameBestEffort(normalized, user.uid)
-        }
+        await syncDisplayNameClaim(
+          user.uid,
+          resolvedDisplayName,
+          (currentData.displayName as string) || 'Player'
+        )
       }
 
       if (user.photoURL !== currentData.photoURL) {

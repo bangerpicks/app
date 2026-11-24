@@ -13,6 +13,12 @@
 
 - Step-flow picks with fixture rail and auto-save; auto-save stops retrying on live score ticks after a failed save until Retry or a new pick.
 
+### Fix: display-name claims (sign-up / profile)
+
+- Placeholder **Player** no longer competes for a unique `displayNames` claim; real names use a create-only transaction (no merge steal).
+- Owners can release their old claim when renaming; shop redemption renames sync claims.
+- Onboarding prompt uses Firestore + Auth so a saved profile name is not ignored.
+
 ## 1.2.9 — 2026-11-23
 
 ### Ops & performance follow-ups
