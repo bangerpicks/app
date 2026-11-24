@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.2.10 — 2026-11-24
+
+### Fix: Home shows new rounds without navigating
+
+- Home paints from cache, then always refreshes from the server; live updates on publish, close-out, or active round change; refetch on focus.
+- Fixtures live listener reconnects after errors.
+- `/sw.js` is no longer cached for a year.
+- Display-name reservation can no longer fail sign-up or profile save (best-effort; full name fix still pending).
+
+### Picks UX (1.2.10 bundle with `d13e316`)
+
+- Step-flow picks with fixture rail and auto-save; auto-save stops retrying on live score ticks after a failed save until Retry or a new pick.
+
 ## 1.2.9 — 2026-11-23
 
 ### Ops & performance follow-ups

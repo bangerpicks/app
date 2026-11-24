@@ -67,6 +67,7 @@ export function PicksClient({
   const [activeFixtureId, setActiveFixtureId] = useState<number | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const isSavingRef = useRef(false)
+  const [autoSaveNonce, setAutoSaveNonce] = useState(0)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [saveSuccess, setSaveSuccess] = useState(false)
   const [crowdStatsRefreshToken, setCrowdStatsRefreshToken] = useState(0)
@@ -227,14 +228,17 @@ export function PicksClient({
   )
 
   useEffect(() => {
+    if (saveError) return
     if (!user || isDisabled || !allPicksMade || pendingPredictions.size === 0) return
     if (isSavingRef.current) return
     void performSave(user, buildCompletePredictions())
   }, [
+    autoSaveNonce,
+    saveError,
     user,
     isDisabled,
     allPicksMade,
-    pendingPredictions,
+    pendingPredictions.size,
     buildCompletePredictions,
     performSave,
   ])
@@ -264,6 +268,8 @@ export function PicksClient({
 
     if (allMadeAfter && !user) {
       setIsSignInOpen(true)
+    } else if (allMadeAfter && user) {
+      setAutoSaveNonce((n) => n + 1)
     }
   }
 
@@ -276,7 +282,8 @@ export function PicksClient({
       setSaveError(t('saveRequiresAllPicks'))
       return
     }
-    void performSave(user, buildCompletePredictions())
+    setSaveError(null)
+    setAutoSaveNonce((n) => n + 1)
   }
 
   const activeMatch = useMemo(
