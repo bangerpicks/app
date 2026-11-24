@@ -32,6 +32,7 @@ import {
   assignGameweekToActiveSeason,
   refreshStandingsAfterGameweekActivity,
 } from './standings-update'
+import { saveGameweekPicksHandler } from './save-gameweek-picks'
 
 admin.initializeApp()
 
@@ -718,6 +719,8 @@ type AdminApiFootballRequest =
  */
 export { syncCrowdPickCounters } from './crowd-counters'
 export { adminRunBackfills } from './ops-backfill'
+
+export const saveGameweekPicks = functions.https.onCall(saveGameweekPicksHandler)
 
 export const adminApiFootball = functions
   .runWith(scheduledOpts)

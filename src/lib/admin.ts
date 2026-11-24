@@ -42,6 +42,8 @@ export type DashboardFirestoreReadOptions = {
   servedFromCacheRef?: { current: boolean }
   /** Use persistent cache for first paint, then refresh from server */
   staleWhileRevalidate?: boolean
+  /** Override server-preferring retry count (0 = single attempt for cold first paint) */
+  maxRetries?: number
 }
 import { isFlagshipGameweek } from './gameweek-constants'
 import { getActiveSeason } from './seasons'
@@ -595,6 +597,7 @@ export async function getAllGameweeks(
         budget: readOptions.budget,
         timeoutMessage,
         staleWhileRevalidate: readOptions.staleWhileRevalidate,
+        maxRetries: readOptions.maxRetries,
       })
       markServedFromCacheRef(readOptions.servedFromCacheRef, result)
       snapshot = result.data
@@ -891,6 +894,7 @@ export async function getGameweekFixtures(
         budget: readOptions.budget,
         timeoutMessage,
         staleWhileRevalidate: readOptions.staleWhileRevalidate,
+        maxRetries: readOptions.maxRetries,
       })
       markServedFromCacheRef(readOptions.servedFromCacheRef, result)
       snapshot = result.data

@@ -174,6 +174,7 @@ function PicksPageContent() {
       serverPreferring: true as const,
       budget: loadBudget,
       servedFromCacheRef,
+      maxRetries: hadCache ? undefined : 0,
     }
 
     if (hadCache && sessionCache) {
@@ -247,6 +248,25 @@ function PicksPageContent() {
           return
         }
 
+        const dashboardGameweek = convertAdminGameweekToGameweekData(targetGameweek)
+        const sortedMatchesBare = fixtures
+          .map((fixture) => convertFixtureToMatchCard(fixture, new Map(), new Map(), locale))
+          .sort((a, b) => a.date.getTime() - b.date.getTime())
+
+        if (abortController.signal.aborted) return
+
+        setGameweekId(targetGameweek.gameweekId)
+        setGameweek(dashboardGameweek)
+        setInitialMatches(sortedMatchesBare)
+        const staleFirestoreLoad = servedFromCacheRef.current
+        setUsingSessionCache(false)
+        setRefreshFailed(staleFirestoreLoad)
+        setServedFromFirestoreCache(staleFirestoreLoad)
+        setIsRefreshingGameweek(false)
+        setError(null)
+        setEmptyReason(null)
+        setLoadingGameweek(false)
+
         const teamPositions = new Map<number, number>()
         const teamForms = new Map<number, FormResult[]>()
 
@@ -266,25 +286,18 @@ function PicksPageContent() {
           })
         }
 
-        const sortedMatches = fixtures
-          .map((fixture) =>
-            convertFixtureToMatchCard(fixture, teamPositions, teamForms, locale)
-          )
-          .sort((a, b) => a.date.getTime() - b.date.getTime())
+        const sortedMatches =
+          teamPositions.size > 0 || teamForms.size > 0
+            ? fixtures
+                .map((fixture) =>
+                  convertFixtureToMatchCard(fixture, teamPositions, teamForms, locale)
+                )
+                .sort((a, b) => a.date.getTime() - b.date.getTime())
+            : sortedMatchesBare
 
         if (abortController.signal.aborted) return
 
-        const dashboardGameweek = convertAdminGameweekToGameweekData(targetGameweek)
-        setGameweekId(targetGameweek.gameweekId)
-        setGameweek(dashboardGameweek)
         setInitialMatches(sortedMatches)
-        const staleFirestoreLoad = servedFromCacheRef.current
-        setUsingSessionCache(false)
-        setRefreshFailed(staleFirestoreLoad)
-        setServedFromFirestoreCache(staleFirestoreLoad)
-        setIsRefreshingGameweek(false)
-        setError(null)
-        setEmptyReason(null)
 
         writeDashboardSessionCache(cacheUid, locale, {
           gameweekId: targetGameweek.gameweekId,

@@ -122,6 +122,7 @@ export default function DashboardPage() {
         budget: new LoadBudget(),
         servedFromCacheRef,
         staleWhileRevalidate,
+        maxRetries: staleWhileRevalidate ? 0 : undefined,
       })
       return { data, servedFromCache: servedFromCacheRef.current }
     }

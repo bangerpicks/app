@@ -358,15 +358,35 @@ function RankingsPageContent() {
       let resolvedCompetitionId: string | null = null
       let seasonPromise: ReturnType<typeof loadSeason> | null = null
 
+      const allTimeTask = getAllTimeRankings(user, 100)
+        .then((rankingsResult) => {
+          if (abortController.signal.aborted) return rankingsResult
+          allTimeOk = true
+          setAllTimeRankings(rankingsResult)
+          setRankingsLoading(false)
+          return rankingsResult
+        })
+        .catch((err) => {
+          console.error('Error loading all-time rankings:', err)
+          if (!abortController.signal.aborted) {
+            setRankingsError('Failed to load rankings. Please try again later.')
+            setRankingsLoading(false)
+          }
+          return []
+        })
+
       try {
-        const [rankingsResult, allGameweeksList] = await Promise.all([
-          getAllTimeRankings(user, 100),
-          getAllGameweeks({ sortBy: 'date', sortOrder: 'desc', maxResults: 48 }),
-        ])
+        const allGameweeksList = await getAllGameweeks(
+          { sortBy: 'date', sortOrder: 'desc', maxResults: 48 },
+          {
+            serverPreferring: true,
+            budget: loadBudget,
+            servedFromCacheRef,
+            maxRetries: hadCache ? undefined : 0,
+          }
+        )
 
         if (abortController.signal.aborted) return
-
-        allTimeOk = true
         const options = await buildRankingsCompetitionOptions(allGameweeksList, {
           uid: user.uid,
           locale,
@@ -403,8 +423,6 @@ function RankingsPageContent() {
             )
           : []
         setCompletedGameweeks(pastOptions)
-        setAllTimeRankings(rankingsResult)
-        setRankingsLoading(false)
 
         if (!currentGameweek) {
           setCurrentGameweekId(null)
@@ -660,7 +678,7 @@ function RankingsPageContent() {
   )
 
   const initialWeeklyLoading = weeklyLoading && weeklyBoardStatus === 'loading'
-  if (authLoading || rankingsLoading || initialWeeklyLoading) {
+  if (authLoading || initialWeeklyLoading) {
     return (
       <div className="min-h-[100dvh] min-h-screen bg-midnight-violet flex items-center justify-center">
         <div className="text-ivory">{tCommon('loading')}</div>

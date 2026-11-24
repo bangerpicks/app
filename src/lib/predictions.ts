@@ -2,23 +2,12 @@
  * Prediction utility functions for Firestore operations
  */
 
-import {
-  doc,
-  setDoc,
-  getDoc,
-  getDocs,
-  collection,
-  serverTimestamp,
-  writeBatch,
-  Timestamp,
-  increment,
-} from 'firebase/firestore'
-import { db } from './firebase'
+import { doc, getDoc, getDocs, collection, Timestamp } from 'firebase/firestore'
+import { httpsCallable } from 'firebase/functions'
+import { db, functions } from './firebase'
 import { Prediction, MatchCardData } from '@/types/dashboard'
 import { withTimeout } from './firestore-utils'
 import { getDocServerPreferring } from './firestore-server-read'
-import { chunkPredictionFixtures } from './prediction-save-chunks.mjs'
-import { fixturesNeedingWrite } from './prediction-save-plan.mjs'
 
 /** Stable sentinel; translate in dashboard UI via dashboard.partialPredictionsSave. */
 export const PARTIAL_PREDICTIONS_SAVE_ERROR = 'partial-predictions-save'
@@ -77,7 +66,7 @@ export interface PredictionEntry {
  */
 interface GameweekPredictionsCache {
   predictions: Record<string, Prediction> // fixtureId (string) -> pick
-  updatedAt: ReturnType<typeof serverTimestamp>
+  updatedAt?: unknown
 }
 
 /**
@@ -122,158 +111,57 @@ export async function savePredictions(
       }
     }
 
-    // Create a map of fixtureId -> matchData for quick lookup
-    const matchDataMap = new Map<number, MatchCardData>()
-    matchData.forEach((match) => {
-      matchDataMap.set(match.fixtureId, match)
-    })
+    const picks = [...predictions.entries()].map(([fixtureId, pick]) => ({ fixtureId, pick }))
+    const matches = matchData.map((match) => ({
+      fixtureId: match.fixtureId,
+      homeTeam: {
+        id: match.homeTeam.id,
+        name: match.homeTeam.name,
+        logo: match.homeTeam.logo,
+      },
+      awayTeam: {
+        id: match.awayTeam.id,
+        name: match.awayTeam.name,
+        logo: match.awayTeam.logo,
+      },
+      league: {
+        id: match.league.id,
+        name: match.league.name,
+        logo: match.league.logo,
+      },
+      fixtureDateMs: match.date.getTime(),
+      matchStatus: match.matchStatus,
+      score: match.score ?? null,
+    }))
 
-    const cacheRef = doc(db, 'users', uid, 'gameweek_predictions', gameweekId)
-    const cacheSnap = await getDoc(cacheRef)
-    const creatingCache = !cacheSnap.exists()
-    const existingPredictions: Record<string, Prediction> = cacheSnap.exists()
-      ? (cacheSnap.data() as GameweekPredictionsCache).predictions || {}
-      : {}
-    const orderedFixtureIds = [...predictions.keys()].sort((a, b) => a - b)
-    const mergedPredictions: Record<string, Prediction> = { ...existingPredictions }
-    for (const fixtureId of orderedFixtureIds) {
-      const pick = predictions.get(fixtureId)
-      if (pick) {
-        mergedPredictions[String(fixtureId)] = pick
-      }
-    }
+    const saveFn = httpsCallable<
+      {
+        gameweekId: string
+        picks: Array<{ fixtureId: number; pick: Prediction }>
+        matches: typeof matches
+      },
+      { joinedGameweek: boolean }
+    >(functions, 'saveGameweekPicks')
 
-    const fixtureIdsToWrite = fixturesNeedingWrite({
-      creatingCache,
-      existingPredictions,
-      predictions,
-    })
-
-    if (fixtureIdsToWrite.length === 0) {
-      return { joinedGameweek: false }
-    }
-
-    const entrySnaps = await Promise.all(
-      fixtureIdsToWrite.map(async (fixtureId) => {
-        const entryRef = doc(db, 'predictions', String(fixtureId), 'entries', uid)
-        const entrySnap = await getDoc(entryRef)
-        return { fixtureId, entrySnap }
-      })
-    )
-    const entrySnapByFixtureId = new Map(
-      entrySnaps.map(({ fixtureId, entrySnap }) => [fixtureId, entrySnap])
-    )
-
-    let firstNewFixtureId: string | null = null
-    if (creatingCache) {
-      for (const fixtureId of fixtureIdsToWrite) {
-        const entrySnap = entrySnapByFixtureId.get(fixtureId)
-        if (entrySnap && !entrySnap.exists() && firstNewFixtureId == null) {
-          firstNewFixtureId = String(fixtureId)
-        }
-      }
-    }
-
-    // Production caps security-rule document accesses at 20 per atomic writeBatch
-    // (emulator tests may not enforce this). Split into sequential batches.
-    const chunks = chunkPredictionFixtures(fixtureIdsToWrite, {
-      includesGameweekJoinExtras: creatingCache,
-      firstNewFixtureId:
-        firstNewFixtureId != null ? Number(firstNewFixtureId) : null,
-    })
-
-    for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
-      const chunk = chunks[chunkIndex]
-      const batch = writeBatch(db)
-      const joinExtrasThisBatch =
-        creatingCache && chunkIndex === 0 && firstNewFixtureId != null
-
-      for (const fixtureId of chunk) {
-        const pick = predictions.get(fixtureId)!
-        const match = matchDataMap.get(fixtureId)!
-        const parentRef = doc(db, 'predictions', String(fixtureId))
-        const entryRef = doc(db, 'predictions', String(fixtureId), 'entries', uid)
-        const entrySnap = entrySnapByFixtureId.get(fixtureId)!
-        if (entrySnap.exists()) {
-          batch.set(parentRef, { exists: true }, { merge: true })
-        } else {
-          batch.set(parentRef, { exists: true, playerCount: increment(1) }, { merge: true })
-        }
-
-        const entryData: Partial<PredictionEntry> = {
-          uid,
-          fixtureId,
-          gameweekId,
-          pick,
-          createdAt: serverTimestamp() as any,
-          awarded: false,
-          points: 0,
-          correct: null,
-          homeTeam: {
-            id: match.homeTeam.id,
-            name: match.homeTeam.name,
-            logo: match.homeTeam.logo,
-          },
-          awayTeam: {
-            id: match.awayTeam.id,
-            name: match.awayTeam.name,
-            logo: match.awayTeam.logo,
-          },
-          league: {
-            id: match.league.id,
-            name: match.league.name,
-            country: '',
-            logo: match.league.logo || '',
-          },
-          fixtureDate: Timestamp.fromDate(match.date),
-          status: match.matchStatus || 'NS',
-          result: match.score
-            ? {
-                homeGoals: match.score.home,
-                awayGoals: match.score.away,
-              }
-            : null,
-        }
-
-        batch.set(entryRef, entryData, { merge: true })
-      }
-
-      if (joinExtrasThisBatch) {
-        batch.set(cacheRef, {
-          predictions: mergedPredictions,
-          updatedAt: serverTimestamp(),
-          joinedFixtureId: firstNewFixtureId,
-        })
-        batch.update(doc(db, 'gameweeks', gameweekId), { playerCount: increment(1) })
-      } else {
-        batch.set(cacheRef, {
-          predictions: mergedPredictions,
-          updatedAt: serverTimestamp(),
-        })
-      }
-
-      try {
-        await batch.commit()
-      } catch (batchError) {
-        if (chunkIndex > 0) {
-          throw new Error(PARTIAL_PREDICTIONS_SAVE_ERROR)
-        }
-        throw batchError
-      }
-    }
-
-    return { joinedGameweek: creatingCache }
-  } catch (error: any) {
+    const { data } = await saveFn({ gameweekId, picks, matches })
+    return { joinedGameweek: Boolean(data?.joinedGameweek) }
+  } catch (error: unknown) {
     console.error('Error saving predictions:', error)
-    
-    // Provide more specific error information
-    if (error.code === 'permission-denied') {
-      throw new Error('Permission denied. Please check your authentication status.')
-    } else if (error.code === 'unauthenticated') {
+
+    const code = (error as { code?: string })?.code
+    const message = error instanceof Error ? error.message : String(error)
+
+    if (code === 'functions/unauthenticated' || code === 'unauthenticated') {
       throw new Error('User not authenticated. Please log in again.')
     }
-    
-    throw error
+    if (code === 'functions/permission-denied' || code === 'permission-denied') {
+      throw new Error('Permission denied. Please check your authentication status.')
+    }
+    if (code === 'functions/failed-precondition' && /closed|maintenance/i.test(message)) {
+      throw new Error(message)
+    }
+
+    throw error instanceof Error ? error : new Error(message || 'Failed to save predictions')
   }
 }
 

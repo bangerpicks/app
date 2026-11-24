@@ -467,7 +467,7 @@ export async function loadHomeCompetitionPlayCards(
   const cards: CompetitionPlayCard[] = []
   const comingSoon: CompetitionDocument[] = []
 
-  for (const comp of competitions) {
+  const resolveGameweekId = (comp: CompetitionDocument): string | null => {
     let gwId = comp.activeGameweekId || null
     if (!gwId) {
       const activeGw = rawGameweeks.find(
@@ -481,22 +481,42 @@ export async function loadHomeCompetitionPlayCards(
       )
       gwId = match?.gameweekId ?? null
     }
+    return gwId
+  }
+
+  const missingGwIds = new Set<string>()
+  for (const comp of competitions) {
+    const gwId = resolveGameweekId(comp)
     if (!gwId) {
       if (isCompetitionComingSoon(comp)) comingSoon.push(comp)
       continue
     }
     if (!gameweeksById.has(gwId)) {
-      try {
-        const gw = await getGameweekById(gwId)
-        if (gw) {
-          gameweeksById.set(gw.gameweekId, convertAdminGameweekToGameweekData(gw))
-        } else {
-          continue
+      missingGwIds.add(gwId)
+    }
+  }
+
+  if (missingGwIds.size > 0) {
+    const fetched = await Promise.all(
+      [...missingGwIds].map(async (gwId) => {
+        try {
+          const gw = await getGameweekById(gwId)
+          return gw ? { gwId, gw } : null
+        } catch {
+          return null
         }
-      } catch {
-        continue
+      })
+    )
+    for (const row of fetched) {
+      if (row?.gw) {
+        gameweeksById.set(row.gw.gameweekId, convertAdminGameweekToGameweekData(row.gw))
       }
     }
+  }
+
+  for (const comp of competitions) {
+    const gwId = resolveGameweekId(comp)
+    if (!gwId) continue
 
     const gwData = gameweeksById.get(gwId)
     if (!gwData) continue
