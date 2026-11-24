@@ -26,6 +26,22 @@ export function RouteChromeReset() {
     navBars.forEach((node, index) => {
       if (index > 0) node.remove()
     })
+
+    const headers = document.querySelectorAll('header[data-app-header]')
+    headers.forEach((node, index) => {
+      if (index > 0) node.remove()
+    })
+
+    const onPicksOrDiscover =
+      pathname === '/picks' ||
+      pathname.startsWith('/picks/') ||
+      pathname === '/discover' ||
+      pathname.startsWith('/discover/')
+    if (onPicksOrDiscover) {
+      document
+        .querySelectorAll('body > div[aria-labelledby="onboarding-title"]')
+        .forEach((node) => node.remove())
+    }
   }, [pathname])
 
   return null

@@ -127,9 +127,9 @@ export default function DashboardPage() {
         setComingSoonCompetitions(comingSoon)
         setGameweeksById(byId)
         setGameweeks([...byId.values()])
-        const staleLoad = servedFromCacheRef.current
-        setServedFromFirestoreCache(staleLoad)
-        setRefreshFailed(staleLoad)
+        if (servedFromCacheRef.current) {
+          setServedFromFirestoreCache(true)
+        }
       } catch (err: unknown) {
         if (abortController.signal.aborted) return
         console.error('Error fetching dashboard gameweeks:', err)

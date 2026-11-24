@@ -18,6 +18,11 @@ import {
   getQuerySnapshotServerPreferring,
   markServedFromCacheRef,
 } from './firestore-server-read'
+import {
+  coalesceProfilePhotoUrl,
+  normalizeProfilePhotoUrl,
+} from './profile-photo.mjs'
+import { mergeWeeklyRankingsWithStandings } from './weekly-rankings-merge.mjs'
 import { mapWithConcurrency } from './rankings-concurrency'
 import { rankingsHungReadGate } from './rankings-load-state.mjs'
 
@@ -289,12 +294,15 @@ async function fetchSingleUser(
   const userDoc = result.data
   if (userDoc.exists()) {
     const data = userDoc.data()
-    const photoURL = data.favoritePlayer?.photo || data.photoURL || null
+    const photoURL = coalesceProfilePhotoUrl(
+      data.favoritePlayer?.photo,
+      data.photoURL
+    )
     return {
       userId,
       displayName: data.displayName || 'Player',
       points: data.points || 0,
-      photoURL: photoURL || null,
+      photoURL,
       lastWeekPlace: data.lastWeekPlace ?? null,
       lastCompletedGameweekId: data.lastCompletedGameweekId ?? null,
     }
@@ -345,7 +353,7 @@ function buildUserDataFromStandings(
     map.set(row.userId, {
       displayName: row.displayName || 'Player',
       points: row.points || 0,
-      photoURL: row.photoURL ?? null,
+      photoURL: normalizeProfilePhotoUrl(row.photoURL),
       lastWeekPlace: row.lastWeekPlace ?? null,
       lastCompletedGameweekId: row.lastCompletedGameweekId ?? null,
     })
@@ -424,9 +432,20 @@ export async function getWeeklyRankings(
     standingsRows.length > 0 &&
     userIds.every((uid) => standingsUserData.has(uid))
 
-  const userDataMap = canUseStandingsForUsers
-    ? standingsUserData
-    : await batchFetchUsers(userIds, readOptions)
+  let userDataMap: Map<string, BatchUserData>
+  if (canUseStandingsForUsers) {
+    userDataMap = standingsUserData
+    const photoOverlay = await batchFetchUsers(userIds, readOptions)
+    for (const uid of userIds) {
+      const row = userDataMap.get(uid)
+      const fresh = photoOverlay.get(uid)
+      if (!row || !fresh) continue
+      const photo = coalesceProfilePhotoUrl(fresh.photoURL, row.photoURL)
+      if (photo) row.photoURL = photo
+    }
+  } else {
+    userDataMap = await batchFetchUsers(userIds, readOptions)
+  }
 
     // Build ranking entries
     const rankingEntries: RankingEntry[] = []
@@ -546,4 +565,45 @@ export async function getWeeklyRankings(
     })
 
   return rankingEntries
+}
+
+/**
+ * Fill missing table avatars from users/{uid} (favorite player + photoURL).
+ * weeklyStandings snapshots often only store auth photoURL.
+ */
+export async function enrichRankingEntriesWithProfilePhotos(
+  entries: RankingEntry[],
+  readOptions: RankingsFirestoreReadOptions
+): Promise<RankingEntry[]> {
+  const missingUids = entries
+    .filter((e) => !normalizeProfilePhotoUrl(e.photoURL))
+    .map((e) => e.userId)
+  if (missingUids.length === 0) {
+    return entries
+  }
+
+  const uniqueMissing = [...new Set(missingUids)]
+  const photoByUid = await batchFetchUsers(uniqueMissing, readOptions)
+
+  return entries.map((entry) => {
+    if (normalizeProfilePhotoUrl(entry.photoURL)) {
+      return entry
+    }
+    const fresh = photoByUid.get(entry.userId)
+    const photo = coalesceProfilePhotoUrl(fresh?.photoURL)
+    if (!photo) return entry
+    return { ...entry, photoURL: photo }
+  })
+}
+
+export async function mergeWeeklyRankingsForTable(
+  standingsRows: RankingEntry[] | null | undefined,
+  liveRows: RankingEntry[],
+  readOptions: RankingsFirestoreReadOptions
+): Promise<RankingEntry[]> {
+  const merged = mergeWeeklyRankingsWithStandings(
+    standingsRows,
+    liveRows
+  ) as unknown as RankingEntry[]
+  return enrichRankingEntriesWithProfilePhotos(merged, readOptions)
 }

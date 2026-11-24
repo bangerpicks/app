@@ -15,6 +15,10 @@ interface CompetitionsSectionProps {
   gameweeksById?: Map<string, GameweekData>
   comingSoonCompetitions?: CompetitionDocument[]
   headingAs?: 'h1' | 'h2'
+  /** Hide “Active competitions” heading (signed-in home). */
+  showSectionHeader?: boolean
+  /** One grid for all tracks (no flagship/league/cup stacks). */
+  flatGrid?: boolean
 }
 
 type GroupKey = 'flagship' | 'league' | 'cup'
@@ -34,6 +38,8 @@ export function CompetitionsSection({
   gameweeksById,
   comingSoonCompetitions = [],
   headingAs: HeadingTag = 'h2',
+  showSectionHeader = true,
+  flatGrid = false,
 }: CompetitionsSectionProps) {
   const t = useTranslations('dashboard')
 
@@ -96,14 +102,18 @@ export function CompetitionsSection({
     cup: 'competitionGroupCup',
   }
 
+  const useGrouped = showGrouped && !flatGrid
+
   return (
     <section className="w-full flex flex-col gap-4">
-      <div className="flex flex-col gap-1 text-center sm:text-left">
-        <HeadingTag className="text-xl sm:text-2xl font-black text-ivory tracking-wide">
-          {t('availableCompetitions')}
-        </HeadingTag>
-        <p className="text-sm text-ivory/70">{t('availableCompetitionsSubtitle')}</p>
-      </div>
+      {showSectionHeader ? (
+        <div className="flex flex-col gap-1 text-center sm:text-left">
+          <HeadingTag className="text-xl sm:text-2xl font-black text-ivory tracking-wide">
+            {t('availableCompetitions')}
+          </HeadingTag>
+          <p className="text-sm text-ivory/70">{t('availableCompetitionsSubtitle')}</p>
+        </div>
+      ) : null}
 
       {(cardRows && cardRows.length > 0) || comingSoonCompetitions.length > 0 ? (
         <div
@@ -132,7 +142,7 @@ export function CompetitionsSection({
         <div className="w-full p-8 rounded-xl bg-midnight-violet/60 border border-ivory/15 text-center">
           <p className="text-ivory/80 text-base">{t('noActiveCompetitions')}</p>
         </div>
-      ) : showGrouped ? (
+      ) : useGrouped ? (
         <div className="w-full flex flex-col gap-8">
           {GROUP_ORDER.map((key) => {
             const items = grouped[key]

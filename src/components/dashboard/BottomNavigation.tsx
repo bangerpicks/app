@@ -9,14 +9,14 @@ import { ChevronLeftIcon as ChevronLeftSolidIcon } from '@heroicons/react/24/sol
 import {
   dashboardNavItems,
   isDashboardNavItemActive,
-  isPicksRoute,
+  isDashboardBackNavRoute,
 } from './dashboard-nav'
 
 export function BottomNavigation() {
   const pathname = usePathname()
   const t = useTranslations()
   const tPicks = useTranslations('picks')
-  const onPicksPage = isPicksRoute(pathname)
+  const dashboardTabAsBack = isDashboardBackNavRoute(pathname)
   const [mounted, setMounted] = useState(false)
   const viewportBottomInset = useVisualViewportBottomInset()
 
@@ -39,7 +39,7 @@ export function BottomNavigation() {
     >
       {dashboardNavItems.map((item) => {
         const dashboardAsBack =
-          onPicksPage && item.href === '/dashboard/'
+          dashboardTabAsBack && item.href === '/dashboard/'
         const isActive =
           !dashboardAsBack && isDashboardNavItemActive(pathname, item.href)
         const Icon = dashboardAsBack

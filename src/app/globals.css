@@ -16,6 +16,22 @@
   /* Header height for sticky table positioning */
   --header-height: 64px;
   --bottom-nav-height: 84px;
+  /* Mobile rankings: reserve space above the fixed horizontal scrubber (above bottom nav). */
+  --rankings-h-scroll-track-inset: 2.875rem;
+}
+
+.rankings-competition-picker-trigger:not(:disabled):active {
+  border-color: rgba(218, 255, 0, 0.45);
+}
+
+.rankings-competition-picker-menu {
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rankings-competition-picker-trigger .transition-transform {
+    transition: none;
+  }
 }
 
 @layer utilities {
@@ -97,6 +113,17 @@ thead[class*="sticky"] {
   /* Ensure proper stacking */
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
+}
+
+/* App header: fixed + portaled (picks/gameweek stacking contexts). */
+header[data-app-header] {
+  position: fixed;
+  transform: translate3d(0, 0, 0);
+  -webkit-transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  pointer-events: auto;
+  z-index: 130;
 }
 
 /* Bottom tab bar: fixed to visual viewport (sticky bottom + parent transforms break on iOS Safari). */
@@ -311,6 +338,10 @@ td[class*="sticky"] {
   .rankings-table-scroller.rankings-table-vert-scroll {
     touch-action: pan-y;
   }
+
+  .rankings-table-scroller.rankings-h-scroll-pad {
+    padding-bottom: var(--rankings-h-scroll-track-inset);
+  }
 }
 
 .rankings-table-scroll-track-shell {
@@ -436,6 +467,17 @@ main {
   }
   to {
     opacity: 1;
+  }
+}
+
+@keyframes picksCardIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 

@@ -25,6 +25,8 @@ export interface CompetitionDocument {
   opensAt?: Timestamp | null
   tagline?: string
   tagline_esMX?: string
+  /** When set, card header uses this league badge (e.g. Liga MX = 262). */
+  primaryLeagueId?: number
   createdAt?: Timestamp
   updatedAt?: Timestamp
 }

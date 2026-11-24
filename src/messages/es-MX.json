@@ -167,6 +167,8 @@
     "weekClosed": "Semana Cerrada",
     "comingSoon": "Próximamente",
     "viewPicks": "Ver Pronósticos",
+    "viewTable": "Ver tabla",
+    "gameweekMissingId": "Este enlace no incluye una jornada. Vuelve al dashboard y abre una jornada desde ahí.",
     "viewDetails": "Ver Detalles",
     "viewGameweek": "Ver Jornada",
     "gameweekMatchPreviewLabel": "Partidos en vivo y próximos",
@@ -178,6 +180,7 @@
     "availableCompetitionsSubtitle": "Elige un torneo o jornada para enviar tus predicciones",
     "noActiveCompetitions": "No hay competiciones activas en este momento. ¡Vuelve pronto!",
     "signedInSubtitle": "Elige tus competiciones abajo.",
+    "joinLeague": "Unirme a liga",
     "browseAllCompetitions": "Ver todas las competiciones",
     "joinCodeLabel": "Código de acceso",
     "joinCodePlaceholder": "Ingresa el código",
@@ -232,6 +235,8 @@
     "lastWeekChampionShort": "🏆 1.º",
     "lastWeek2ndShort": "2.º sem. pas.",
     "lastWeek3rdShort": "3.º sem. pas.",
+    "competitionPickerLabel": "Competencia",
+    "competitionPickerTap": "Toca para cambiar de liga",
     "trackBangerWorld": "Banger World",
     "trackLeague": "Jornadas de liga",
     "trackCup": "Copa y especiales",
@@ -416,6 +421,12 @@
     "backToDashboard": "Todas las Competiciones",
     "gameweekNotFound": "Competición No Encontrada",
     "gameweekNotFoundDesc": "No pudimos encontrar el torneo o jornada que solicitaste.",
-    "returnToDashboard": "Volver al Panel"
+    "returnToDashboard": "Volver al Panel",
+    "fixtureRailLabel": "Todos los partidos de esta jornada",
+    "stepProgress": "Pronóstico {current} de {total}",
+    "closesIn": "Los pronósticos cierran en {time}",
+    "autoSaving": "Guardando tus pronósticos…",
+    "allPicksSaved": "¡Listo! Pronósticos guardados. ¡Mucha suerte!",
+    "retrySave": "Intentar guardar de nuevo"
   }
 }

@@ -1,7 +1,7 @@
 'use client'
 
 import type { ReactNode, Ref } from 'react'
-import { Header } from './Header'
+import { HeaderChrome, HeaderChromeSpacer } from './HeaderChrome'
 import { BottomNavigation } from './BottomNavigation'
 import { usePageChromeScrollUnlock } from './usePageChromeScrollUnlock'
 
@@ -39,7 +39,8 @@ export function AppShell({
         shellClassName ?? ''
       }`}
     >
-      <Header username={username} userPhotoUrl={userPhotoUrl} />
+      <HeaderChrome username={username} userPhotoUrl={userPhotoUrl} />
+      <HeaderChromeSpacer />
       {banner}
       <main className={`relative z-0 ${mainClassName ?? defaultMainClassName}`}>
         {children}

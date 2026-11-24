@@ -31,15 +31,35 @@ const LanguageContext = createContext<LanguageContextType>({
   loading: true,
 })
 
+function persistLocaleToStorage(locale: Locale) {
+  try {
+    window.localStorage.setItem(LOCALE_STORAGE_KEY, locale)
+  } catch {
+    // ignore
+  }
+}
+
 export function LanguageProvider({ children }: { children: ReactNode }) {
   const { user, loading: authLoading } = useAuth()
   const { profile } = useUserProfile()
-  const [locale, setLocaleState] = useState<Locale>(() => readStoredLocale() ?? 'en')
+  /** Avoid stale es-MX in localStorage before Firestore profile language loads. */
+  const [locale, setLocaleState] = useState<Locale>('en')
   const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (
+      profile?.language === 'en' ||
+      profile?.language === 'es-MX'
+    ) {
+      setLocaleState(profile.language)
+      persistLocaleToStorage(profile.language)
+    }
+  }, [profile?.language])
 
   // Load user's language preference
   useEffect(() => {
     if (authLoading) return
+
     const loadLanguage = async () => {
       const { getUserLanguage, updateUserLanguage } = await import('./user-language')
       if (user) {
@@ -49,9 +69,11 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
           const userLang = fromProfile ?? (await getUserLanguage(user))
           if (userLang) {
             setLocaleState(userLang)
+            persistLocaleToStorage(userLang)
           } else {
             const browser = detectBrowserLanguage()
             setLocaleState(browser)
+            persistLocaleToStorage(browser)
             try {
               await updateUserLanguage(user, browser)
             } catch (persistError) {
@@ -60,12 +82,13 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
           }
         } catch (error) {
           console.error('Error loading user language:', error)
-          // Fallback to browser language if user preference fails
-          setLocaleState(detectBrowserLanguage())
+          setLocaleState('en')
+          persistLocaleToStorage('en')
         }
       } else {
-        // If not logged in, use browser/system language
-        setLocaleState(detectBrowserLanguage())
+        const guest = readStoredLocale() ?? detectBrowserLanguage()
+        setLocaleState(guest)
+        persistLocaleToStorage(guest)
       }
       setLoading(false)
     }
@@ -79,17 +102,14 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
         const { updateUserLanguage } = await import('./user-language')
         await updateUserLanguage(user, newLocale)
         setLocaleState(newLocale)
+        persistLocaleToStorage(newLocale)
       } catch (error) {
         console.error('Error updating user language:', error)
         throw error
       }
     } else {
       setLocaleState(newLocale)
-      try {
-        window.localStorage.setItem(LOCALE_STORAGE_KEY, newLocale)
-      } catch {
-        // ignore
-      }
+      persistLocaleToStorage(newLocale)
     }
   }
 

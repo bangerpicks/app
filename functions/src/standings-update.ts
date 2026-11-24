@@ -120,7 +120,13 @@ export async function buildWeeklyStandingsEntries(
       weeklyPoints,
       weeklyCorrect: correctByUid.get(uid) || 0,
       displayName: (data?.displayName as string) || 'Player',
-      photoURL: (data?.photoURL as string | null | undefined) ?? null,
+      photoURL:
+        (typeof data?.favoritePlayer === 'object' &&
+        data?.favoritePlayer !== null &&
+        typeof (data.favoritePlayer as { photo?: string }).photo === 'string' &&
+        (data.favoritePlayer as { photo: string }).photo.trim()) ||
+        (typeof data?.photoURL === 'string' && data.photoURL.trim()) ||
+        null,
       isBot: userIsBot(uid, data),
       joinMs,
     })

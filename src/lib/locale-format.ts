@@ -21,6 +21,21 @@ export function formatMatchKickoffTime(date: Date, locale: Locale): string {
   }).format(date)
 }
 
+const MS_PER_DAY = 24 * 60 * 60 * 1000
+
+/** Kickoff time, or short weekday (Mon, Tue, …) when kickoff is more than 24h away. */
+export function formatMatchPreviewKickoffOrWeekday(
+  date: Date,
+  locale: Locale,
+  now: Date = new Date()
+): string {
+  if (date.getTime() - now.getTime() > MS_PER_DAY) {
+    const intlLocale = intlLocaleForAppLocale(locale)
+    return new Intl.DateTimeFormat(intlLocale, { weekday: 'short' }).format(date)
+  }
+  return formatMatchKickoffTime(date, locale)
+}
+
 /** Absolute open time in the viewer's own timezone, e.g. "Mon, Nov 23, 8:00 PM CST". */
 export function formatComingSoonOpensAt(date: Date, locale: Locale): string {
   const intlLocale = intlLocaleForAppLocale(locale)

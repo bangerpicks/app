@@ -56,3 +56,9 @@ export function isDashboardNavItemActive(pathname: string, href: string): boolea
 export function isPicksRoute(pathname: string): boolean {
   return normalizePath(pathname) === '/picks'
 }
+
+/** Sub-routes where the Dashboard nav tab acts as a back control (mobile + desktop header). */
+export function isDashboardBackNavRoute(pathname: string): boolean {
+  const path = normalizePath(pathname)
+  return path === '/picks' || path === '/discover'
+}

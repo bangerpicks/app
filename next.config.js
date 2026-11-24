@@ -46,7 +46,13 @@ const nextConfig = {
   trailingSlash: true,
   images: {
     unoptimized: true,
-    domains: ['api-football.com', 'media.api-sports.io'],
+    remotePatterns: [
+      { protocol: 'https', hostname: 'media.api-sports.io', pathname: '/**' },
+      { protocol: 'https', hostname: '**.googleusercontent.com', pathname: '/**' },
+      { protocol: 'https', hostname: 'firebasestorage.googleapis.com', pathname: '/**' },
+      { protocol: 'https', hostname: 'platform-lookaside.fbsbx.com', pathname: '/**' },
+      { protocol: 'https', hostname: 'graph.facebook.com', pathname: '/**' },
+    ],
   },
   // Disable output file tracing which can cause EISDIR errors on Windows
   experimental: {

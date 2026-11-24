@@ -1,20 +1,19 @@
 'use client'
 
-import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { ChevronLeftIcon } from '@heroicons/react/24/solid'
 import {
   dashboardNavItems,
   isDashboardNavItemActive,
-  isPicksRoute,
+  isDashboardBackNavRoute,
 } from './dashboard-nav'
 
 export function DesktopHeaderNav() {
   const pathname = usePathname()
   const t = useTranslations()
   const tPicks = useTranslations('picks')
-  const onPicksPage = isPicksRoute(pathname)
+  const dashboardTabAsBack = isDashboardBackNavRoute(pathname)
 
   return (
     <nav
@@ -23,7 +22,7 @@ export function DesktopHeaderNav() {
     >
       {dashboardNavItems.map((item) => {
         const dashboardAsBack =
-          onPicksPage && item.href === '/dashboard/'
+          dashboardTabAsBack && item.href === '/dashboard/'
         const isActive =
           !dashboardAsBack && isDashboardNavItemActive(pathname, item.href)
         const Icon = dashboardAsBack ? ChevronLeftIcon : isActive ? item.iconSolid : item.iconOutline
@@ -32,10 +31,10 @@ export function DesktopHeaderNav() {
           : t(item.labelKey)
 
         return (
-          <Link
+          <a
             key={item.href}
             href={item.href}
-            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold tracking-wide transition-colors min-h-[44px] ${
+            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold tracking-wide transition-colors min-h-[44px] touch-manipulation ${
               isActive
                 ? 'bg-lime-yellow text-midnight-violet'
                 : dashboardAsBack
@@ -46,7 +45,7 @@ export function DesktopHeaderNav() {
           >
             <Icon className="w-5 h-5 shrink-0" aria-hidden="true" />
             <span className="truncate">{label}</span>
-          </Link>
+          </a>
         )
       })}
     </nav>

@@ -1,6 +1,5 @@
 'use client'
 
-import { useLocale } from 'next-intl'
 import { GameweekCard } from './GameweekCard'
 import type { GameweekData } from '@/types/dashboard'
 import type { CompetitionDocument } from '@/types/competition'
@@ -16,20 +15,10 @@ export function CompetitionCard({
   gameweek,
   playerCount,
 }: CompetitionCardProps) {
-  const locale = useLocale()
-  const title =
-    locale === 'es-MX' && competition.displayName_esMX
-      ? competition.displayName_esMX
-      : competition.displayName
-
-  const brandedGameweek: GameweekData = {
-    ...gameweek,
-    name: title,
-  }
-
   return (
     <GameweekCard
-      gameweek={brandedGameweek}
+      gameweek={gameweek}
+      competition={competition}
       playerCount={playerCount}
       href={`/picks/?id=${gameweek.gameweekId}`}
       isInteractive

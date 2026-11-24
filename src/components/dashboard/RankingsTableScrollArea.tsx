@@ -234,7 +234,7 @@ export function RankingsTableScrollArea({
       data-testid={scrollerTestId}
       className={`rankings-table-scroller w-full ${
         fillViewport ? 'rankings-table-vert-scroll min-h-0 flex-1' : 'overflow-x-auto'
-      }`}
+      } ${canScrollX ? 'rankings-h-scroll-pad' : ''}`}
     >
       {children}
     </div>
@@ -290,7 +290,6 @@ export function RankingsTableScrollArea({
 
       {canScrollX ? (
         <>
-          <div className="h-11 shrink-0 lg:hidden" aria-hidden />
           <div
             className="rankings-table-scroll-track-shell lg:hidden fixed inset-x-0 z-[35] border-t border-ivory/15 bg-midnight-violet/97 px-4 pb-2 pt-2 sm:px-5"
             style={{

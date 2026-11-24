@@ -32,6 +32,8 @@ import { marketOddsFromFirestoreData } from '@/lib/market-odds-firestore'
 import type { Locale } from '@/i18n/config'
 import { fetchCurrentGameweek, resolvePlayerCountFromGameweek, LoadBudget } from '@/lib/gameweek-selection'
 import { convertAdminGameweekToGameweekData } from '@/lib/convert-gameweek-data'
+import { resolveCompetitionForAdminGameweek } from '@/lib/competitions'
+import type { CompetitionDocument } from '@/types/competition'
 import {
   readDashboardSessionCache,
   writeDashboardSessionCache,
@@ -117,6 +119,7 @@ function PicksPageContent() {
 
   const [username, setUsername] = useState<string | undefined>(undefined)
   const [gameweek, setGameweek] = useState<GameweekData | null>(null)
+  const [competition, setCompetition] = useState<CompetitionDocument | undefined>(undefined)
   const [initialMatches, setInitialMatches] = useState<MatchCardData[]>([])
   const [gameweekId, setGameweekId] = useState<string | null>(null)
   const [loadingGameweek, setLoadingGameweek] = useState(true)
@@ -177,8 +180,18 @@ function PicksPageContent() {
       setGameweek(sessionCache.gameweek)
       setInitialMatches(sessionCache.matches)
       setGameweekId(sessionCache.gameweekId)
+      setCompetition(sessionCache.competition)
       setUsingSessionCache(true)
       setLoadingGameweek(false)
+      if (!sessionCache.competition && sessionCache.gameweekId) {
+        void getGameweekById(sessionCache.gameweekId).then((gw) => {
+          if (gw && !abortController.signal.aborted) {
+            void resolveCompetitionForAdminGameweek(gw).then((comp) => {
+              if (!abortController.signal.aborted) setCompetition(comp)
+            })
+          }
+        })
+      }
     }
 
     async function fetchGameweekAndFixtures() {
@@ -209,11 +222,16 @@ function PicksPageContent() {
         if (abortController.signal.aborted) return
 
         if (!targetGameweek) {
+          setCompetition(undefined)
           setEmptyReason('no-week')
           setServedFromFirestoreCache(false)
           setRefreshFailed(false)
           return
         }
+
+        const linkedCompetition = await resolveCompetitionForAdminGameweek(targetGameweek)
+        if (abortController.signal.aborted) return
+        setCompetition(linkedCompetition)
 
         const fixtures = await getGameweekFixtures(
           targetGameweek.gameweekId,
@@ -272,6 +290,7 @@ function PicksPageContent() {
           gameweekId: targetGameweek.gameweekId,
           gameweek: dashboardGameweek,
           matches: sortedMatches,
+          competition: linkedCompetition,
         })
 
         const storedCount = resolvePlayerCountFromGameweek(targetGameweek)
@@ -485,6 +504,7 @@ function PicksPageContent() {
     return (
       <PicksClient
         gameweek={gameweek}
+        competition={competition}
         playerCount={gameweek.playerCount}
         matches={[]}
         username={username}
@@ -497,6 +517,7 @@ function PicksPageContent() {
     return (
       <PicksClient
         gameweek={gameweek}
+        competition={competition}
         playerCount={gameweek.playerCount}
         matches={[]}
         username={username}
@@ -526,6 +547,7 @@ function PicksPageContent() {
       )}
       <PicksClient
         gameweek={gameweek}
+        competition={competition}
         playerCount={gameweek.playerCount}
         matches={displayMatches}
         username={username}

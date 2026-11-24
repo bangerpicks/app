@@ -3,6 +3,8 @@
  * precomputed weeklyStandings (rank + points after scoring).
  */
 
+import { coalesceProfilePhotoUrl, normalizeProfilePhotoUrl } from './profile-photo.mjs'
+
 /**
  * @param {Array<{ userId: string; rank?: number; points?: number; weeklyPoints?: number; displayName?: string; photoURL?: string | null; isCurrentUser?: boolean }> | null | undefined} standingsRows
  * @param {Array<{ userId: string; rank?: number; points?: number; weeklyPoints?: number; displayName?: string; photoURL?: string | null; matchPredictions?: unknown[]; isCurrentUser?: boolean; lastWeekPlace?: number | null; lastCompletedGameweekId?: string | null; allTimeScore?: number; accuracy?: number; totalPredictions?: number; correctPredictions?: number }> | null | undefined} liveRows
@@ -39,14 +41,7 @@ export function mergeWeeklyRankingsWithStandings(standingsRows, liveRows) {
     const standing = standingsByUid.get(uid)
 
     if (live) {
-      const standingPhoto =
-        standing?.photoURL != null && standing.photoURL !== ''
-          ? standing.photoURL
-          : null
-      const photoURL =
-        live.photoURL != null && live.photoURL !== ''
-          ? live.photoURL
-          : standingPhoto
+      const photoURL = coalesceProfilePhotoUrl(live.photoURL, standing?.photoURL)
 
       merged.push({
         ...live,
@@ -64,7 +59,7 @@ export function mergeWeeklyRankingsWithStandings(standingsRows, liveRows) {
       merged.push({
         userId: standing.userId,
         displayName: standing.displayName || 'Player',
-        photoURL: standing.photoURL ?? null,
+        photoURL: normalizeProfilePhotoUrl(standing.photoURL),
         points: standing.points ?? 0,
         weeklyPoints: standing.weeklyPoints ?? standing.points ?? 0,
         rank: standing.rank ?? 0,

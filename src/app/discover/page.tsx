@@ -1,9 +1,9 @@
 'use client'
 
 import { FormEvent, useCallback, useEffect, useState } from 'react'
-import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import { AppShell } from '@/components/dashboard/AppShell'
+import { PicksBackNav } from '@/components/dashboard/PicksBackNav'
 import { discoverPublicCompetitions } from '@/lib/competitions'
 import type { CompetitionDocument } from '@/types/competition'
 import type { QueryDocumentSnapshot, DocumentData } from 'firebase/firestore'
@@ -13,6 +13,7 @@ import { CompetitionCard } from '@/components/dashboard/CompetitionCard'
 import { ComingSoonCompetitionCard } from '@/components/dashboard/ComingSoonCompetitionCard'
 import { isCompetitionComingSoon } from '@/lib/competition-catalog'
 import type { GameweekData } from '@/types/dashboard'
+import { JoinCompetitionInput } from '@/components/dashboard/JoinCompetitionInput'
 
 type DiscoverRow = {
   competition: CompetitionDocument
@@ -22,6 +23,7 @@ type DiscoverRow = {
 
 export default function DiscoverPage() {
   const t = useTranslations('dashboard')
+  const tPicks = useTranslations('picks')
   const [items, setItems] = useState<CompetitionDocument[]>([])
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
@@ -95,14 +97,23 @@ export default function DiscoverPage() {
   }
 
   return (
-    <AppShell mainClassName="flex-1 px-4 sm:px-5 py-6 pb-bottom-nav flex flex-col items-center gap-6 overflow-x-hidden">
+    <AppShell
+      banner={
+        <PicksBackNav href="/dashboard/">{tPicks('backToDashboard')}</PicksBackNav>
+      }
+      mainClassName="flex-1 px-4 sm:px-5 py-6 pb-bottom-nav flex flex-col items-center gap-6 overflow-x-hidden"
+    >
       <div className="w-full max-w-5xl flex flex-col gap-4">
         <div className="flex flex-col gap-2">
           <h1 className="text-2xl font-black text-ivory">{t('discoverTitle')}</h1>
           <p className="text-sm text-ivory/70">{t('discoverSubtitle')}</p>
-          <Link href="/dashboard/" className="text-xs text-lime-yellow font-semibold">
-            {t('discoverBackHome')}
-          </Link>
+        </div>
+
+        <div className="flex flex-col gap-2 rounded-xl border border-ivory/15 bg-midnight-violet/50 p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-ivory/60">
+            {t('joinCodeLabel')}
+          </p>
+          <JoinCompetitionInput />
         </div>
 
         <form onSubmit={onSearch} className="flex gap-2">

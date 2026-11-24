@@ -65,6 +65,29 @@ export function pickNextMatchPreviews(matches, limit = 3) {
 }
 
 /**
+ * Preview tiles for dashboard cards: user's picked fixtures (kickoff order), up to `limit`.
+ * Falls back to {@link pickNextMatchPreviews} when the user has no saved picks.
+ *
+ * @param {MatchCardData[]} matches
+ * @param {Map<number, 'H' | 'D' | 'A'> | ReadonlyMap<number, 'H' | 'D' | 'A'>} picks
+ * @param {number} [limit]
+ * @returns {MatchCardData[]}
+ */
+export function pickGameweekCardPreviews(matches, picks, limit = 3) {
+  if (!matches?.length) return []
+  if (!picks?.size) return pickNextMatchPreviews(matches, limit)
+
+  const sorted = [...matches].sort((a, b) => {
+    const ta = a.date instanceof Date ? a.date.getTime() : new Date(a.date).getTime()
+    const tb = b.date instanceof Date ? b.date.getTime() : new Date(b.date).getTime()
+    return ta - tb
+  })
+
+  const picked = sorted.filter((m) => picks.has(m.fixtureId))
+  return picked.slice(0, limit)
+}
+
+/**
  * @param {MatchCardData[]} matches
  * @returns {{ hasLive: boolean, allFinished: boolean, hasUpcoming: boolean, total: number }}
  */
@@ -96,4 +119,30 @@ export function summarizeFixtureSlate(matches) {
     hasUpcoming,
     total: matches.length,
   }
+}
+
+/**
+ * @param {number} home
+ * @param {number} away
+ * @returns {'H' | 'D' | 'A' | null}
+ */
+export function matchWinnerFromScore(home, away) {
+  if (home == null || away == null) return null
+  if (home > away) return 'H'
+  if (home < away) return 'A'
+  return 'D'
+}
+
+/**
+ * @param {MatchCardData} match
+ * @param {'H' | 'D' | 'A' | null | undefined} prediction
+ * @returns {boolean | null}
+ */
+export function pickCorrectnessForMatch(match, prediction) {
+  if (!prediction || !isMatchFinished(match.matchStatus)) return null
+  const home = match.score?.home
+  const away = match.score?.away
+  if (home == null || away == null) return null
+  const winner = matchWinnerFromScore(home, away)
+  return winner === prediction
 }

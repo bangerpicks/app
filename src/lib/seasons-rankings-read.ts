@@ -18,6 +18,7 @@ import {
   seasonDisplayName,
 } from './seasons'
 import { rankingsHungReadGate } from './rankings-load-state.mjs'
+import { normalizeProfilePhotoUrl } from './profile-photo.mjs'
 
 export type RankingsSeasonReadContext = {
   budget: LoadBudget
@@ -48,7 +49,7 @@ function mapWeeklyStandingsToRankingEntries(
   return entries.map((entry) => ({
     userId: entry.uid,
     displayName: entry.displayName,
-    photoURL: entry.photoURL,
+    photoURL: normalizeProfilePhotoUrl(entry.photoURL),
     points: entry.points,
     weeklyPoints: entry.points,
     rank: entry.rank,

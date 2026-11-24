@@ -20,6 +20,7 @@ import {
 } from 'firebase/firestore'
 import { shouldSkipEnsureUserProfileWrite } from './user-profile-save.mjs'
 import { User } from 'firebase/auth'
+import { coalesceProfilePhotoUrl } from './profile-photo.mjs'
 import { db } from './firebase'
 import { RankingEntry } from '@/types/dashboard'
 import { readWithTimeoutAndRetry, withTimeout } from './firestore-utils'
@@ -159,10 +160,14 @@ export async function getUserHeaderPhotoURL(user: User): Promise<string | null> 
 
   const data = await loadUserDocument(user)
   if (data) {
-    return data.favoritePlayer?.photo || data.photoURL || user.photoURL || null
+    return coalesceProfilePhotoUrl(
+      data.favoritePlayer?.photo,
+      data.photoURL,
+      user.photoURL
+    )
   }
 
-  return user.photoURL ?? null
+  return coalesceProfilePhotoUrl(user.photoURL)
 }
 
 /**

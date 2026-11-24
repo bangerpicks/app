@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import Image from 'next/image'
+import { UserAvatar } from './UserAvatar'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { User } from 'firebase/auth'
@@ -13,6 +14,7 @@ import { useIsAdmin } from '@/lib/useIsAdmin'
 import { clearAllDashboardSessionCaches } from '@/lib/dashboard-cache'
 import { User as UserIcon, Trophy, Target, Coins, LogOut, Settings, Shield } from 'lucide-react'
 import { ProfileHowItWorks } from './ProfileHowItWorks'
+import { ReferralPopup } from './ReferralPopup'
 
 interface ProfileClientProps {
   user: User
@@ -72,17 +74,12 @@ export function ProfileClient({ user, userData }: ProfileClientProps) {
         <div className="w-full flex flex-col items-center gap-4 mb-6">
           {/* Profile Picture */}
           <div className="relative w-24 h-24 sm:w-32 sm:h-32 rounded-full bg-lime-yellow/20 border-2 border-lime-yellow flex items-center justify-center overflow-hidden">
-            {photoURL ? (
-              <Image
-                src={photoURL}
-                alt={displayName}
-                width={128}
-                height={128}
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              <UserIcon className="w-12 h-12 sm:w-16 sm:h-16 text-lime-yellow" />
-            )}
+            <UserAvatar
+              photoURL={photoURL}
+              displayName={displayName}
+              showUserIcon
+              iconClassName="w-12 h-12 sm:w-16 sm:h-16 text-lime-yellow"
+            />
           </div>
 
           {/* Display Name */}
@@ -209,6 +206,10 @@ export function ProfileClient({ user, userData }: ProfileClientProps) {
             </div>
           </div>
         )}
+
+        <div className="w-full mb-6">
+          <ReferralPopup variant="card" />
+        </div>
 
         <ProfileHowItWorks />
 

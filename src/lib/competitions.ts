@@ -52,6 +52,7 @@ import {
   listCompetitionIdsFromGameweeks,
   isCompetitionComingSoon,
 } from './competition-catalog.mjs'
+import { resolveCompetitionDisplayName } from './competition-display'
 
 export type CreateCompetitionInput = {
   competitionId: string
@@ -91,6 +92,7 @@ function mapCompetitionDoc(
     opensAt: (data.opensAt as CompetitionDocument['opensAt']) ?? null,
     tagline: data.tagline as string | undefined,
     tagline_esMX: data.tagline_esMX as string | undefined,
+    primaryLeagueId: data.primaryLeagueId as number | undefined,
     createdAt: data.createdAt as CompetitionDocument['createdAt'],
     updatedAt: data.updatedAt as CompetitionDocument['updatedAt'],
   }
@@ -390,6 +392,14 @@ export async function updateCompetition(
   await updateDoc(ref, update)
 }
 
+export async function resolveCompetitionForAdminGameweek(
+  gw: AdminGameweekData
+): Promise<CompetitionDocument> {
+  const id = competitionIdForGameweek(gw)
+  const doc = await safeGetCompetitionById(id)
+  return doc ?? syntheticCompetitionFromGameweek(gw)
+}
+
 export function syntheticCompetitionFromGameweek(
   gw: AdminGameweekData
 ): CompetitionDocument {
@@ -532,22 +542,55 @@ export async function listPublicCompetitionSummaries(): Promise<CompetitionDocum
 
 export type CompetitionPickerOption = { id: string; label: string }
 
+export type BuildRankingsCompetitionOptionsInput = {
+  uid?: string | null
+  locale?: string
+}
+
+function sortRankingsCompetitionOptions(
+  options: CompetitionPickerOption[]
+): CompetitionPickerOption[] {
+  return [...options].sort((a, b) => {
+    if (a.id === DEFAULT_FLAGSHIP_ID) return -1
+    if (b.id === DEFAULT_FLAGSHIP_ID) return 1
+    return a.label.localeCompare(b.label, undefined, { sensitivity: 'base' })
+  })
+}
+
 export async function buildRankingsCompetitionOptions(
-  allGameweeks: AdminGameweekData[]
+  allGameweeks: AdminGameweekData[],
+  opts?: BuildRankingsCompetitionOptionsInput
 ): Promise<CompetitionPickerOption[]> {
-  const ids = listCompetitionIdsFromGameweeks(allGameweeks)
-  let docs: CompetitionDocument[] = []
-  try {
-    docs = await listPublicCompetitionSummaries()
-  } catch {
-    docs = []
+  const locale = opts?.locale ?? 'en'
+  const ids = new Set(listCompetitionIdsFromGameweeks(allGameweeks))
+
+  const [publicDocs, myDocs] = await Promise.all([
+    listPublicCompetitionSummaries().catch(() => [] as CompetitionDocument[]),
+    opts?.uid
+      ? getMyCompetitions(opts.uid).catch(() => [] as CompetitionDocument[])
+      : Promise.resolve([] as CompetitionDocument[]),
+  ])
+
+  const docById = new Map<string, CompetitionDocument>()
+  for (const d of publicDocs) docById.set(d.competitionId, d)
+  for (const d of myDocs) {
+    docById.set(d.competitionId, d)
+    ids.add(d.competitionId)
   }
-  const labelById = new Map(docs.map((d) => [d.competitionId, d.displayName]))
+
+  const gwNameByCompetitionId = new Map<string, string>()
   for (const gw of allGameweeks) {
     const id = competitionIdForGameweek(gw)
-    if (!labelById.has(id)) {
-      labelById.set(id, id === DEFAULT_FLAGSHIP_ID ? 'Banger World' : gw.name)
-    }
+    gwNameByCompetitionId.set(id, gw.name)
   }
-  return ids.map((id) => ({ id, label: labelById.get(id) || id }))
+
+  const labelForId = (id: string): string => {
+    const doc = docById.get(id)
+    if (doc) return resolveCompetitionDisplayName(doc, locale)
+    if (id === DEFAULT_FLAGSHIP_ID) return 'Banger World'
+    return gwNameByCompetitionId.get(id) || id
+  }
+
+  const options = [...ids].map((id) => ({ id, label: labelForId(id) }))
+  return sortRankingsCompetitionOptions(options)
 }

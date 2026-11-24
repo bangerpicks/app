@@ -21,10 +21,12 @@ import {
   shouldShowWeeklyRankingsError,
   shouldShowWeeklyStandingsEmptyCopy,
 } from '@/lib/rankings-load-state.mjs'
-import { weekNavigationState } from '@/lib/rankings-week-nav.mjs'
 import type { CompetitionTrackId } from '@/lib/competition-tracks'
 import type { CompetitionPickerOption } from '@/lib/competitions'
-import { Trophy, Medal, Award, ChevronLeft, ChevronRight } from 'lucide-react'
+import { RankingsCompetitionSelect } from './RankingsCompetitionSelect'
+import { RankingsViewToolbar } from './RankingsViewToolbar'
+import { Trophy, Medal, Award } from 'lucide-react'
+import { UserAvatar } from './UserAvatar'
 
 interface RankingsClientProps {
   allTimeRankings: RankingEntry[]
@@ -120,13 +122,11 @@ function RankingRow({
       </div>
 
       <div className="w-10 h-10 rounded-full bg-ivory/10 flex-shrink-0 overflow-hidden flex items-center justify-center">
-        {entry.photoURL ? (
-          <img src={entry.photoURL} alt="" className="w-full h-full object-cover" />
-        ) : (
-          <span className="text-ivory/50 text-sm font-bold">
-            {(entry.displayName || '?').charAt(0).toUpperCase()}
-          </span>
-        )}
+        <UserAvatar
+          photoURL={entry.photoURL}
+          displayName={entry.displayName}
+          initialClassName="text-ivory/50 text-sm font-bold"
+        />
       </div>
 
       <div className="flex-1 min-w-0">
@@ -221,15 +221,6 @@ export function RankingsClient({
     return past
   })()
 
-  const selectedWeekIndex =
-    selectedGameweekId != null
-      ? navigableWeeks.findIndex((gw) => gw.gameweekId === selectedGameweekId)
-      : -1
-  const weekNav = weekNavigationState(
-    selectedWeekIndex,
-    navigableWeeks.length
-  )
-
   const hallOfFameList = allTimeRankings
   const playerCount = gameweekData?.gameweek.playerCount ?? 0
   const showWeeklyError = shouldShowWeeklyRankingsError(
@@ -251,6 +242,14 @@ export function RankingsClient({
   const showWeeklyTable = hasWeeklyRankingsTableRows(weeklyRankings)
   const lockWeeklyViewport = isThisWeekView && Boolean(gameweekData) && showWeeklyTable
 
+  const useCompetitionPicker = competitionOptions.length > 0
+  const competitionPickerOptions = useCompetitionPicker
+    ? competitionOptions
+    : competitionTracks.map((trackId) => ({
+        id: trackId,
+        label: t(TRACK_LABEL_KEY[trackId]),
+      }))
+
   useEffect(() => {
     const noop = () => {}
     window.addEventListener('scroll', noop, { passive: true })
@@ -270,40 +269,17 @@ export function RankingsClient({
         lockWeeklyViewport ? 'overflow-hidden' : ''
       }`}
     >
-      {competitionOptions.length > 1 ? (
-        <div className="w-full max-w-2xl lg:max-w-4xl flex shrink-0 gap-2 overflow-x-auto rankings-competition-tracks">
-          {competitionOptions.map((opt) => (
-            <button
-              key={opt.id}
-              type="button"
-              onClick={() => onSelectCompetition?.(opt.id)}
-              className={`shrink-0 rounded-lg px-3 py-2 text-xs sm:text-sm font-semibold transition-colors ${
-                selectedCompetitionId === opt.id
-                  ? 'bg-lime-yellow text-midnight-violet'
-                  : 'bg-ivory/10 text-ivory/70 hover:bg-ivory/15'
-              }`}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-      ) : competitionTracks.length > 1 ? (
-        <div className="w-full max-w-2xl lg:max-w-4xl flex shrink-0 gap-2 overflow-x-auto rankings-competition-tracks">
-          {competitionTracks.map((trackId) => (
-            <button
-              key={trackId}
-              type="button"
-              onClick={() => onSelectTrack?.(trackId)}
-              className={`shrink-0 rounded-lg px-3 py-2 text-xs sm:text-sm font-semibold transition-colors ${
-                selectedTrackId === trackId
-                  ? 'bg-lime-yellow text-midnight-violet'
-                  : 'bg-ivory/10 text-ivory/70 hover:bg-ivory/15'
-              }`}
-            >
-              {t(TRACK_LABEL_KEY[trackId])}
-            </button>
-          ))}
-        </div>
+      {competitionPickerOptions.length > 0 ? (
+        <RankingsCompetitionSelect
+          options={competitionPickerOptions}
+          selectedId={
+            useCompetitionPicker ? (selectedCompetitionId ?? null) : (selectedTrackId ?? null)
+          }
+          onSelect={(id) => {
+            if (useCompetitionPicker) onSelectCompetition?.(id)
+            else onSelectTrack?.(id as CompetitionTrackId)
+          }}
+        />
       ) : null}
 
       {showGlobalSeasonNotice ? (
@@ -312,38 +288,17 @@ export function RankingsClient({
         </p>
       ) : null}
 
-      <div className="w-full max-w-2xl lg:max-w-4xl flex shrink-0 gap-2 sm:gap-3 rankings-view-tabs">
-        <button
-          onClick={() => setActiveView('this-week')}
-          className={`flex-1 py-3 px-3 sm:px-4 rounded-lg font-semibold text-xs sm:text-sm transition-colors ${
-            activeView === 'this-week'
-              ? 'bg-lime-yellow text-midnight-violet'
-              : 'bg-ivory/10 text-ivory/70 hover:bg-ivory/15'
-          }`}
-        >
-          {t('thisWeek')}
-        </button>
-        <button
-          onClick={() => setActiveView('season')}
-          className={`flex-1 py-3 px-3 sm:px-4 rounded-lg font-semibold text-xs sm:text-sm transition-colors ${
-            activeView === 'season'
-              ? 'bg-lime-yellow text-midnight-violet'
-              : 'bg-ivory/10 text-ivory/70 hover:bg-ivory/15'
-          }`}
-        >
-          {t('season')}
-        </button>
-        <button
-          onClick={() => setActiveView('hall-of-fame')}
-          className={`flex-1 py-3 px-3 sm:px-4 rounded-lg font-semibold text-xs sm:text-sm transition-colors ${
-            activeView === 'hall-of-fame'
-              ? 'bg-lime-yellow text-midnight-violet'
-              : 'bg-ivory/10 text-ivory/70 hover:bg-ivory/15'
-          }`}
-        >
-          {t('hallOfFame')}
-        </button>
-      </div>
+      <RankingsViewToolbar
+        activeView={activeView}
+        onChangeView={setActiveView}
+        gameweekData={isThisWeekView ? gameweekData : undefined}
+        navigableWeeks={navigableWeeks}
+        selectedGameweekId={selectedGameweekId}
+        onSelectGameweek={onSelectGameweek}
+        className={
+          isThisWeekView && gameweekData ? 'rounded-b-none border-b-0 mb-0' : undefined
+        }
+      />
 
       {(isHallOfFame || isSeasonView) && (
         <div className="w-full max-w-2xl lg:max-w-4xl flex flex-col items-center gap-2 shrink-0 text-center">
@@ -366,8 +321,8 @@ export function RankingsClient({
         <div
           className={`flex w-full min-h-0 flex-col ${
             lockWeeklyViewport
-              ? 'max-w-none flex-1 -mx-4 sm:-mx-5'
-              : 'max-w-2xl lg:max-w-4xl'
+              ? 'max-w-none flex-1 -mx-4 sm:-mx-5 -mt-0.5'
+              : 'max-w-2xl lg:max-w-4xl -mt-0.5'
           }`}
         >
           {gameweekData && (
@@ -377,65 +332,6 @@ export function RankingsClient({
                   <p className="text-ivory/70 text-sm">{t('loadingWeek')}</p>
                 </div>
               )}
-              <div className="w-full shrink-0 bg-lime-yellow rounded-t-lg px-3 py-2.5 sm:px-4 sm:py-3">
-                <div className="flex items-center justify-center gap-1 sm:gap-2">
-                  {navigableWeeks.length > 1 && onSelectGameweek && (
-                    <button
-                      type="button"
-                      disabled={!weekNav.canGoToOlderWeek}
-                      onClick={() => {
-                        if (
-                          weekNav.canGoToOlderWeek &&
-                          weekNav.olderWeekIndex != null
-                        ) {
-                          onSelectGameweek(
-                            navigableWeeks[weekNav.olderWeekIndex].gameweekId
-                          )
-                        }
-                      }}
-                      className="p-1.5 rounded-lg text-midnight-violet disabled:opacity-30 hover:bg-midnight-violet/10 transition-colors flex-shrink-0"
-                      aria-label={t('previousWeek')}
-                    >
-                      <ChevronLeft className="w-5 h-5" />
-                    </button>
-                  )}
-                  <div className="flex flex-col items-center gap-0.5 min-w-0 flex-1">
-                  <h2 className="text-midnight-violet font-bold text-base sm:text-lg text-center truncate max-w-full">
-                    {gameweekData.gameweek.name}
-                  </h2>
-                  <p className="text-midnight-violet/80 text-xs sm:text-sm font-semibold">
-                    {t(
-                      pickPluralKey(
-                        gameweekData.gameweek.playerCount,
-                        'playerCountOne',
-                        'playerCountMany'
-                      ),
-                      { count: gameweekData.gameweek.playerCount }
-                    )}
-                  </p>
-                  </div>
-                  {navigableWeeks.length > 1 && onSelectGameweek && (
-                    <button
-                      type="button"
-                      disabled={!weekNav.canGoToNewerWeek}
-                      onClick={() => {
-                        if (
-                          weekNav.canGoToNewerWeek &&
-                          weekNav.newerWeekIndex != null
-                        ) {
-                          onSelectGameweek(
-                            navigableWeeks[weekNav.newerWeekIndex].gameweekId
-                          )
-                        }
-                      }}
-                      className="p-1.5 rounded-lg text-midnight-violet disabled:opacity-30 hover:bg-midnight-violet/10 transition-colors flex-shrink-0"
-                      aria-label={t('nextWeek')}
-                    >
-                      <ChevronRight className="w-5 h-5" />
-                    </button>
-                  )}
-                </div>
-              </div>
               <div
                 className={`w-full -mt-px flex flex-col min-h-0 ${
                   lockWeeklyViewport ? 'flex-1' : ''

@@ -26,7 +26,7 @@ import {
   seasonDisplayName,
 } from '@/lib/seasons-rankings-read'
 import { useLocale, useTranslations } from 'next-intl'
-import { mergeWeeklyRankingsWithStandings } from '@/lib/weekly-rankings-merge.mjs'
+import { mergeWeeklyRankingsForTable } from '@/lib/rankings'
 import { LoadBudget } from '@/lib/gameweek-selection'
 import type { CompetitionTrackId } from '@/lib/competition-tracks'
 import { PAST_GAMEWEEKS_LIMIT, parseTrackParam } from './rankings-url'
@@ -301,10 +301,11 @@ function RankingsPageContent() {
           readOptions: readOpts,
           precomputedStandings: precomputed,
         })
-        const rankings = mergeWeeklyRankingsWithStandings(
+        const rankings = await mergeWeeklyRankingsForTable(
           precomputed,
-          rankingsLive
-        ) as unknown as RankingEntry[]
+          rankingsLive,
+          readOpts
+        )
         const sliceStatus = resolveWeeklyRankingsSliceStatus({
           succeeded: true,
           rowCount: rankings.length,
@@ -329,6 +330,7 @@ function RankingsPageContent() {
     }
 
     const fetchAllRankings = async () => {
+      if (!user) return
       const loadBudget = new LoadBudget()
       const servedFromCacheRef = { current: false }
       const readOpts: RankingsFirestoreReadOptions = {
@@ -365,7 +367,10 @@ function RankingsPageContent() {
         if (abortController.signal.aborted) return
 
         allTimeOk = true
-        const options = await buildRankingsCompetitionOptions(allGameweeksList)
+        const options = await buildRankingsCompetitionOptions(allGameweeksList, {
+          uid: user.uid,
+          locale,
+        })
         setCompetitionOptions(options)
         const ids = options.map((o) => o.id)
         const compFromUrl = searchParams.get('competition')
@@ -587,10 +592,11 @@ function RankingsPageContent() {
             readOptions: readOpts,
             precomputedStandings: precomputed,
           })
-          const rankings = mergeWeeklyRankingsWithStandings(
+          const rankings = await mergeWeeklyRankingsForTable(
             precomputed,
-            rankingsLive
-          ) as unknown as RankingEntry[]
+            rankingsLive,
+            readOpts
+          )
           return { transformed: transformedData, rankings }
         })()
         if (abortController.signal.aborted) return

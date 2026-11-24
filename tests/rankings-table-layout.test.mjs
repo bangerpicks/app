@@ -32,14 +32,28 @@ describe('RankingsTable mobile sticky geometry', () => {
     )
     assert.match(scrollAreaSource, /fillViewport/)
     assert.match(scrollAreaSource, /rankings-table-vert-scroll/)
+    assert.match(rankingsClient, /RankingsCompetitionSelect/)
+    const competitionSelect = readFileSync(
+      new URL('../src/components/dashboard/RankingsCompetitionSelect.tsx', import.meta.url),
+      'utf8'
+    )
+    assert.match(competitionSelect, /rankings-competition-picker/)
+    assert.match(competitionSelect, /rankings-competition-picker-trigger/)
     assert.match(rankingsClient, /lockWeeklyViewport/)
     assert.match(rankingsClient, /-mx-4 sm:-mx-5/)
     assert.match(rankingsClient, /max-w-none flex-1/)
     assert.match(rankingsClient, /fillViewport/)
     assert.doesNotMatch(rankingsClient, /ReferralPopup/)
-    const tabsIdx = rankingsClient.indexOf('rankings-view-tabs')
-    const heroIdx = rankingsClient.indexOf("hallOfFameBlurb")
-    assert.ok(tabsIdx > -1 && heroIdx > tabsIdx, 'view tabs render above Season/HoF hero')
+    assert.match(rankingsClient, /RankingsViewToolbar/)
+    const toolbar = readFileSync(
+      new URL('../src/components/dashboard/RankingsViewToolbar.tsx', import.meta.url),
+      'utf8'
+    )
+    assert.match(toolbar, /rankings-view-tabs/)
+    assert.match(toolbar, /rankings-week-strip/)
+    const heroIdx = rankingsClient.indexOf('hallOfFameBlurb')
+    const toolbarIdx = rankingsClient.indexOf('RankingsViewToolbar')
+    assert.ok(toolbarIdx > -1 && heroIdx > toolbarIdx, 'view toolbar renders above Season/HoF hero')
     assert.match(source, /rankings-table-head-row/)
     assert.match(globals, /\.rankings-table-vert-scroll[\s\S]*min-height: 0/)
     assert.match(globals, /\.rankings-table-head-row th[\s\S]*top: 0/)
@@ -67,6 +81,8 @@ describe('RankingsTable mobile sticky geometry', () => {
     )
     assert.match(globals, /overscroll-behavior-x: contain/)
     assert.match(globals, /-webkit-overflow-scrolling: touch/)
+    assert.match(globals, /--rankings-h-scroll-track-inset/)
+    assert.match(scrollAreaSource, /rankings-h-scroll-pad/)
   })
 
   it('exposes a vertical side scrubber for weekly viewport on mobile', () => {

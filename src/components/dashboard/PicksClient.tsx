@@ -7,7 +7,6 @@ import { useAuth } from '@/lib/AuthProvider'
 import { ensureUserDocument } from '@/lib/users'
 import { savePredictions, PARTIAL_PREDICTIONS_SAVE_ERROR } from '@/lib/predictions'
 import { AppShell } from './AppShell'
-import { GameweekCard } from './GameweekCard'
 import { MatchCard } from './MatchCard'
 import dynamic from 'next/dynamic'
 
@@ -16,17 +15,28 @@ const SignInModal = dynamic(
   { ssr: false }
 )
 import { GameweekData, MatchCardData, Prediction } from '@/types/dashboard'
+import type { CompetitionDocument } from '@/types/competition'
 import { GafferDisplayPrefsProvider } from '@/lib/gaffer-display-prefs'
 import { useCrowdPickStats } from '@/hooks/useCrowdPickStats'
 import { useLanguage } from '@/lib/LanguageProvider'
 import { patchDashboardSessionGameweekPlayerCount } from '@/lib/dashboard-cache'
 import { playerCountAfterFirstJoinSave } from '@/lib/player-count-display.mjs'
 import { PicksBackNav } from './PicksBackNav'
+import { PicksFixtureRail } from './PicksFixtureRail'
 import { StickySaveBar } from './StickySaveBar'
 import { isGameweekPicksWindowOpen } from '@/lib/gameweek-selection'
+import { resolveCompetitionDisplayName } from '@/lib/competition-display'
+import { pickError, pickLight, pickSuccess } from '@/lib/haptics'
+import {
+  resolveActiveStepIndex,
+  resolveInitialFixtureId,
+  resolveNextFixtureId,
+} from '@/lib/picks-step-flow'
+import { useCountdown } from '@/hooks/useCountdown'
 
 interface PicksClientProps {
   gameweek: GameweekData
+  competition?: CompetitionDocument
   playerCount: number
   matches: MatchCardData[]
   username?: string
@@ -35,6 +45,7 @@ interface PicksClientProps {
 
 export function PicksClient({
   gameweek,
+  competition,
   playerCount,
   matches,
   username,
@@ -53,7 +64,9 @@ export function PicksClient({
   const containerRef = useRef<HTMLDivElement>(null)
   const [pendingPredictions, setPendingPredictions] = useState<Map<number, Prediction>>(new Map())
   const [savedPredictions, setSavedPredictions] = useState<Map<number, Prediction>>(new Map())
+  const [activeFixtureId, setActiveFixtureId] = useState<number | null>(null)
   const [isSaving, setIsSaving] = useState(false)
+  const isSavingRef = useRef(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [saveSuccess, setSaveSuccess] = useState(false)
   const [crowdStatsRefreshToken, setCrowdStatsRefreshToken] = useState(0)
@@ -80,29 +93,41 @@ export function PicksClient({
     setSavedPredictions(saved)
   }, [matches])
 
-  const isDisabled = !isGameweekPicksWindowOpen(gameweek)
-
-  const handlePredictionSelect = (fixtureId: number, prediction: Prediction) => {
-    if (isDisabled || isSaving) return
-
-    setPendingPredictions((prev) => {
-      const next = new Map(prev)
-      next.set(fixtureId, prediction)
-      return next
-    })
-    setSaveError(null)
-    setSaveSuccess(false)
-  }
-
-  const getDisplayPrediction = (fixtureId: number): Prediction | null => {
-    if (pendingPredictions.has(fixtureId)) {
-      return pendingPredictions.get(fixtureId) || null
+  useEffect(() => {
+    if (matches.length === 0) {
+      setActiveFixtureId(null)
+      return
     }
-    return savedPredictions.get(fixtureId) || null
-  }
+    setActiveFixtureId((current) => {
+      if (current != null && matches.some((m) => m.fixtureId === current)) {
+        return current
+      }
+      const getSavedOnly = (fixtureId: number): Prediction | null => {
+        const match = matches.find((m) => m.fixtureId === fixtureId)
+        return match?.userPrediction ?? null
+      }
+      return resolveInitialFixtureId(matches, getSavedOnly)
+    })
+  }, [gameweek.gameweekId, matches])
+
+  const picksWindowOpen = isGameweekPicksWindowOpen(gameweek)
+  const { formatted: deadlineCountdown } = useCountdown(
+    picksWindowOpen ? gameweek.deadline ?? null : null
+  )
+
+  const getDisplayPrediction = useCallback(
+    (fixtureId: number): Prediction | null => {
+      if (pendingPredictions.has(fixtureId)) {
+        return pendingPredictions.get(fixtureId) || null
+      }
+      return savedPredictions.get(fixtureId) || null
+    },
+    [pendingPredictions, savedPredictions]
+  )
 
   const missingPickCount = matches.filter((m) => getDisplayPrediction(m.fixtureId) == null).length
   const allPicksMade = matches.length > 0 && missingPickCount === 0
+  const isDisabled = !picksWindowOpen
 
   const buildCompletePredictions = useCallback((): Map<number, Prediction> => {
     const complete = new Map<number, Prediction>()
@@ -119,18 +144,21 @@ export function PicksClient({
 
   const performSave = useCallback(
     async (authUser: User, completePredictions: Map<number, Prediction>) => {
-      if (isDisabled || isSaving) return
+      if (isDisabled || isSavingRef.current) return
 
       if (gameweek.status !== 'OPEN') {
         setSaveError(t('gameweekClosed'))
+        pickError()
         return
       }
 
       if (completePredictions.size !== matches.length) {
         setSaveError(t('saveRequiresAllPicks'))
+        pickError()
         return
       }
 
+      isSavingRef.current = true
       setIsSaving(true)
       setSaveError(null)
       setSaveSuccess(false)
@@ -167,6 +195,7 @@ export function PicksClient({
 
         setPendingPredictions(new Map())
         setSaveSuccess(true)
+        pickSuccess()
         setCrowdStatsRefreshToken((n) => n + 1)
 
         setTimeout(() => {
@@ -174,6 +203,7 @@ export function PicksClient({
         }, 3000)
       } catch (error: unknown) {
         console.error('Error saving predictions:', error)
+        pickError()
         const message = error instanceof Error ? error.message : null
         if (message === PARTIAL_PREDICTIONS_SAVE_ERROR) {
           setSaveError(t('partialPredictionsSave'))
@@ -181,6 +211,7 @@ export function PicksClient({
           setSaveError(message || 'Failed to save predictions. Please try again.')
         }
       } finally {
+        isSavingRef.current = false
         setIsSaving(false)
       }
     },
@@ -188,7 +219,6 @@ export function PicksClient({
       gameweek.gameweekId,
       gameweek.status,
       isDisabled,
-      isSaving,
       locale,
       matches,
       t,
@@ -196,92 +226,104 @@ export function PicksClient({
     ]
   )
 
-  const handleSubmit = async () => {
+  useEffect(() => {
+    if (!user || isDisabled || !allPicksMade || pendingPredictions.size === 0) return
+    if (isSavingRef.current) return
+    void performSave(user, buildCompletePredictions())
+  }, [
+    user,
+    isDisabled,
+    allPicksMade,
+    pendingPredictions,
+    buildCompletePredictions,
+    performSave,
+  ])
+
+  const handlePredictionSelect = (fixtureId: number, prediction: Prediction) => {
+    if (isDisabled || isSaving) return
+
+    const nextPending = new Map(pendingPredictions)
+    nextPending.set(fixtureId, prediction)
+
+    const getPredAfterPick = (id: number): Prediction | null => {
+      if (nextPending.has(id)) return nextPending.get(id) ?? null
+      return savedPredictions.get(id) ?? null
+    }
+
+    const allMadeAfter = matches.every((m) => getPredAfterPick(m.fixtureId) != null)
+
+    setPendingPredictions(nextPending)
+    setSaveError(null)
+    setSaveSuccess(false)
+    pickLight()
+
+    const nextFixtureId = resolveNextFixtureId(matches, getPredAfterPick, fixtureId)
+    if (nextFixtureId != null) {
+      setActiveFixtureId(nextFixtureId)
+    }
+
+    if (allMadeAfter && !user) {
+      setIsSignInOpen(true)
+    }
+  }
+
+  const handleRetrySave = () => {
     if (!user) {
       setIsSignInOpen(true)
       return
     }
-    if (isDisabled || isSaving) return
-
-    if (pendingPredictions.size === 0) {
-      return
-    }
-
     if (!allPicksMade) {
       setSaveError(t('saveRequiresAllPicks'))
       return
     }
-
-    await performSave(user, buildCompletePredictions())
+    void performSave(user, buildCompletePredictions())
   }
 
-  const hasPendingPredictions = pendingPredictions.size > 0
-  const hasAnyPicks = matches.some((m) => getDisplayPrediction(m.fixtureId) != null)
-  const canSave = hasPendingPredictions && allPicksMade && !isSaving
-
-  const saveButtonLabel = () => {
-    if (isSaving) return t('saving')
-    if (!allPicksMade) {
-      return t('picksRemainingToSave', { count: missingPickCount })
-    }
-    if (hasPendingPredictions) {
-      return pendingPredictions.size === 1
-        ? t('savePrediction', { count: pendingPredictions.size })
-        : t('savePredictions', { count: pendingPredictions.size })
-    }
-    return t('noChangesToSave')
-  }
-
-  const saveBlock = !isDisabled && matches.length > 0 && (
-    <div className="w-full flex flex-col gap-2 max-w-md lg:max-w-none">
-      {saveError && (
-        <div className="bg-cinnabar/20 border border-cinnabar/40 rounded-lg px-3 py-2 text-cinnabar text-sm">
-          {saveError}
-        </div>
-      )}
-
-      {saveSuccess && (
-        <div className="bg-lime-yellow/20 border border-lime-yellow/40 rounded-lg px-3 py-2 text-lime-yellow text-sm">
-          {t('savedSuccessfully')}
-        </div>
-      )}
-
-      <button
-        type="button"
-        onClick={handleSubmit}
-        disabled={!canSave}
-        className="w-full bg-lime-yellow text-midnight-violet py-3 px-4 rounded-lg font-semibold hover:bg-lime-yellow/90 active:bg-lime-yellow/80 disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px] transition-colors"
-      >
-        {saveButtonLabel()}
-      </button>
-    </div>
+  const activeMatch = useMemo(
+    () => matches.find((m) => m.fixtureId === activeFixtureId) ?? matches[0] ?? null,
+    [matches, activeFixtureId]
   )
 
-  const matchList = (
-    <>
-      {fixturesPending && (
-        <p className="text-ivory/80 text-sm text-center py-6">{t('fixturesLoading')}</p>
-      )}
-      {matches.map((match) => (
-        <MatchCard
-          key={match.fixtureId}
-          match={match}
-          userPrediction={getDisplayPrediction(match.fixtureId)}
-          onPredictionSelect={handlePredictionSelect}
-          disabled={isDisabled || isSaving}
-          crowdPickStats={crowdStatsByFixture.get(match.fixtureId)}
-          crowdPickPercents={crowdPercentsByFixture.get(match.fixtureId)}
-          crowdPickCount={playerCountByFixture.get(match.fixtureId) ?? 0}
-        />
-      ))}
-    </>
-  )
+  const stepIndex = activeFixtureId != null ? resolveActiveStepIndex(matches, activeFixtureId) : 1
 
-  const showMobileSave = Boolean(saveBlock)
-  const mobileScrollPad =
-    showMobileSave && (saveError || saveSuccess)
-      ? 'max-lg:pb-[calc(var(--bottom-nav-height)+env(safe-area-inset-bottom,0px)+8.5rem)]'
-      : 'max-lg:pb-[calc(var(--bottom-nav-height)+env(safe-area-inset-bottom,0px)+5.25rem)]'
+  const headerTitle =
+    competition != null
+      ? resolveCompetitionDisplayName(competition, locale)
+      : gameweek.name
+
+  const statusFooter =
+    isSaving || saveError || saveSuccess ? (
+      <div className="w-full flex flex-col gap-2 max-w-md mx-auto">
+        {isSaving && (
+          <p className="text-center text-sm text-ivory/85">{tPicks('autoSaving')}</p>
+        )}
+        {saveError && (
+          <>
+            <div className="bg-cinnabar/20 border border-cinnabar/40 rounded-lg px-3 py-2 text-cinnabar text-sm">
+              {saveError}
+            </div>
+            <button
+              type="button"
+              onClick={handleRetrySave}
+              disabled={isSaving}
+              className="w-full bg-lime-yellow text-midnight-violet py-3 px-4 rounded-lg font-semibold hover:bg-lime-yellow/90 disabled:opacity-50 min-h-[44px]"
+            >
+              {tPicks('retrySave')}
+            </button>
+          </>
+        )}
+        {saveSuccess && (
+          <div className="bg-lime-yellow/20 border border-lime-yellow/40 rounded-lg px-3 py-2 text-lime-yellow text-sm text-center">
+            {tPicks('allPicksSaved')}
+          </div>
+        )}
+      </div>
+    ) : null
+
+  const showStickyFooter = Boolean(statusFooter)
+  const mobileScrollPad = showStickyFooter
+    ? 'max-lg:pb-[calc(var(--bottom-nav-height)+env(safe-area-inset-bottom,0px)+7.5rem)]'
+    : undefined
 
   return (
     <AppShell
@@ -291,48 +333,79 @@ export function PicksClient({
         <PicksBackNav href="/dashboard/">{tPicks('backToDashboard')}</PicksBackNav>
       }
       mainClassName={
-        showMobileSave
-          ? `flex-1 px-4 sm:px-5 py-2.5 pb-bottom-nav ${mobileScrollPad} flex flex-col items-center gap-5 overflow-x-hidden`
-          : 'flex-1 px-4 sm:px-5 py-2.5 pb-bottom-nav flex flex-col items-center gap-5 overflow-x-hidden'
+        mobileScrollPad
+          ? `flex-1 px-4 sm:px-5 py-2.5 pb-bottom-nav ${mobileScrollPad} flex flex-col items-center gap-4 overflow-x-hidden`
+          : 'flex-1 px-4 sm:px-5 py-2.5 pb-bottom-nav flex flex-col items-center gap-4 overflow-x-hidden'
       }
       footer={
         <>
-          {saveBlock && <StickySaveBar>{saveBlock}</StickySaveBar>}
+          {showStickyFooter && <StickySaveBar>{statusFooter}</StickySaveBar>}
           <SignInModal isOpen={isSignInOpen} onClose={() => setIsSignInOpen(false)} />
         </>
       }
     >
-      <div className="w-full max-w-6xl mx-auto flex flex-col items-center gap-5 lg:gap-6">
-        {/* Mobile Gameweek Card */}
-        <div className="w-full flex flex-col items-center gap-5 lg:hidden">
-          <GameweekCard
-            gameweek={gameweek}
-            playerCount={displayPlayerCount}
-            hasAnyPicks={hasAnyPicks}
-            isInteractive={false}
-            fixtureMatches={matches}
-          />
-        </div>
-
-        {/* Match Slate + Desktop Sidebar */}
-        <GafferDisplayPrefsProvider>
-          <div className="w-full lg:grid lg:grid-cols-[minmax(0,1fr)_20rem] lg:gap-6 lg:items-start">
-            <div className="flex flex-col gap-5 w-full min-w-0">{matchList}</div>
-
-            <aside className="hidden lg:flex flex-col gap-5 lg:sticky lg:top-[calc(var(--header-height)+1rem)] lg:self-start w-full">
-              <GameweekCard
-                gameweek={gameweek}
-                playerCount={displayPlayerCount}
-                hasAnyPicks={hasAnyPicks}
-                isInteractive={false}
-                fixtureMatches={matches}
-              />
-
-              {saveBlock}
-            </aside>
+      <div className="w-full max-w-2xl mx-auto flex flex-col gap-3 min-w-0">
+        <header className="w-full min-w-0 leading-none">
+          <div className="flex items-center justify-between gap-2">
+            <h1 className="text-sm font-bold text-ivory truncate min-w-0">{headerTitle}</h1>
+            {matches.length > 0 && activeMatch ? (
+              <span
+                className="text-[10px] font-bold text-lime-yellow tabular-nums shrink-0"
+                aria-label={tPicks('stepProgress', { current: stepIndex, total: matches.length })}
+              >
+                {stepIndex}/{matches.length}
+              </span>
+            ) : null}
           </div>
+          {picksWindowOpen && deadlineCountdown ? (
+            <p className="text-[10px] text-ivory/55 tabular-nums mt-1 truncate">
+              {tPicks('closesIn', { time: deadlineCountdown })}
+            </p>
+          ) : (
+            <p className="text-[10px] text-ivory/55 mt-1 truncate">{gameweek.name}</p>
+          )}
+        </header>
+
+        <PicksFixtureRail
+          matches={matches}
+          activeFixtureId={activeFixtureId}
+          getPrediction={getDisplayPrediction}
+          onSelect={(fixtureId) => {
+            if (fixtureId !== activeFixtureId) {
+              setActiveFixtureId(fixtureId)
+            }
+          }}
+          disabled={isSaving}
+        />
+
+        {fixturesPending && (
+          <p className="text-ivory/80 text-sm text-center py-4">{t('fixturesLoading')}</p>
+        )}
+
+        <GafferDisplayPrefsProvider>
+          {activeMatch ? (
+            <div
+              key={activeMatch.fixtureId}
+              className="w-full animate-[picksCardIn_220ms_ease-out]"
+            >
+              <MatchCard
+                match={activeMatch}
+                userPrediction={getDisplayPrediction(activeMatch.fixtureId)}
+                onPredictionSelect={handlePredictionSelect}
+                disabled={isDisabled || isSaving}
+                crowdPickStats={crowdStatsByFixture.get(activeMatch.fixtureId)}
+                crowdPickPercents={crowdPercentsByFixture.get(activeMatch.fixtureId)}
+                crowdPickCount={playerCountByFixture.get(activeMatch.fixtureId) ?? 0}
+              />
+            </div>
+          ) : null}
         </GafferDisplayPrefsProvider>
 
+        {displayPlayerCount > 0 && (
+          <p className="text-center text-[11px] text-ivory/50">
+            {t('crowdPicksSubtitle', { count: displayPlayerCount })}
+          </p>
+        )}
       </div>
     </AppShell>
   )

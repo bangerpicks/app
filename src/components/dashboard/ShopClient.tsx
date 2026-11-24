@@ -151,7 +151,6 @@ export function ShopClient({ items, userPoints, username }: ShopClientProps) {
   return (
     <AppShell
       username={username}
-      banner={<ReferralPopup />}
       mainClassName="flex-1 px-4 sm:px-5 pb-bottom-nav py-4 sm:py-5 overflow-x-hidden"
     >
         {/* Title Section */}
@@ -161,6 +160,10 @@ export function ShopClient({ items, userPoints, username }: ShopClientProps) {
           <p className="text-ivory/70 text-sm sm:text-base text-center">
             {t('subtitle')}
           </p>
+        </div>
+
+        <div className="w-full mb-6">
+          <ReferralPopup variant="card" />
         </div>
 
         {/* Points Balance Card */}

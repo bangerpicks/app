@@ -1,9 +1,12 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
+  pickGameweekCardPreviews,
   pickNextMatchPreviews,
   isMatchInPlay,
   isMatchFinished,
+  matchWinnerFromScore,
+  pickCorrectnessForMatch,
 } from '../src/lib/gameweek-match-preview.mjs'
 
 function match(id, status, dateMs, score) {
@@ -42,5 +45,40 @@ describe('pickNextMatchPreviews', () => {
     assert.equal(isMatchInPlay('HT'), true)
     assert.equal(isMatchFinished('FT'), true)
     assert.equal(isMatchInPlay('TBP'), false)
+  })
+})
+
+describe('pick correctness', () => {
+  it('scores finished matches against user picks', () => {
+    assert.equal(matchWinnerFromScore(2, 1), 'H')
+    assert.equal(matchWinnerFromScore(1, 1), 'D')
+    const m = match(1, 'FT', Date.now(), { home: 2, away: 0 })
+    assert.equal(pickCorrectnessForMatch(m, 'H'), true)
+    assert.equal(pickCorrectnessForMatch(m, 'A'), false)
+    assert.equal(pickCorrectnessForMatch(match(2, 'NS', Date.now()), 'H'), null)
+  })
+})
+
+describe('pickGameweekCardPreviews', () => {
+  it('shows only user-picked fixtures in kickoff order when user has picks', () => {
+    const base = Date.now()
+    const fixtures = [
+      match(10, 'TBP', base + 99_000),
+      match(20, 'TBP', base + 1_000),
+      match(30, 'TBP', base + 2_000),
+    ]
+    const picks = new Map([[20, 'H']])
+    const picked = pickGameweekCardPreviews(fixtures, picks, 3)
+    assert.deepEqual(
+      picked.map((m) => m.fixtureId),
+      [20]
+    )
+  })
+
+  it('falls back to next-match previews without picks', () => {
+    const base = Date.now()
+    const fixtures = [match(1, 'TBP', base + 1_000), match(2, 'TBP', base + 2_000)]
+    const picked = pickGameweekCardPreviews(fixtures, new Map(), 1)
+    assert.deepEqual(picked.map((m) => m.fixtureId), [1])
   })
 })

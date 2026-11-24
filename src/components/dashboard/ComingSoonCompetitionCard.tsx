@@ -1,25 +1,36 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { useLocale, useTranslations } from 'next-intl'
+import { useEffect, useMemo, useState } from 'react'
+import { useTranslations } from 'next-intl'
+import { useLanguage } from '@/lib/LanguageProvider'
 import { Hourglass } from 'lucide-react'
 import type { CompetitionDocument } from '@/types/competition'
-import type { Locale } from '@/i18n/config'
+import type { GameweekData } from '@/types/dashboard'
 import {
   comingSoonCountdown,
   formatComingSoonCountdown,
   timestampToMs,
 } from '@/lib/competition-catalog'
 import { formatComingSoonOpensAt } from '@/lib/locale-format'
+import { brandGameweekForCompetition } from '@/lib/competition-display'
+import { inferLeagueBrandFromCompetition } from '@/lib/competition-league-brand'
+import { resolveGameweekCardBranding } from '@/lib/gameweek-card-branding'
+import { GameweekCardHeader } from './GameweekCardHeader'
 
 interface ComingSoonCompetitionCardProps {
   competition: CompetitionDocument
 }
 
+function competitionKindToGameweekType(kind: CompetitionDocument['kind']): string {
+  if (kind === 'league') return 'league'
+  if (kind === 'cup') return 'cup'
+  return 'banger-week'
+}
+
 /** Non-interactive teaser for a competition whose first round is not published yet. */
 export function ComingSoonCompetitionCard({ competition }: ComingSoonCompetitionCardProps) {
   const t = useTranslations('dashboard')
-  const locale = useLocale() as Locale
+  const { locale } = useLanguage()
   const [nowMs, setNowMs] = useState(() => Date.now())
 
   useEffect(() => {
@@ -27,33 +38,48 @@ export function ComingSoonCompetitionCard({ competition }: ComingSoonCompetition
     return () => window.clearInterval(id)
   }, [])
 
-  const isEs = locale === 'es-MX'
-  const title = isEs && competition.displayName_esMX ? competition.displayName_esMX : competition.displayName
-  const tagline = isEs && competition.tagline_esMX ? competition.tagline_esMX : competition.tagline
+  const headerLeagueBrand = inferLeagueBrandFromCompetition(competition)
   const opensAtMs = timestampToMs(competition.opensAt)
   const countdown = comingSoonCountdown(opensAtMs, nowMs)
   const opensAtLabel = opensAtMs > 0 ? formatComingSoonOpensAt(new Date(opensAtMs), locale) : ''
 
-  return (
-    <div className="w-full gameweek-card-slot" aria-label={`${title} — ${t('comingSoonBadge')}`}>
-      <div className="bg-lime-yellow/85 rounded-t-[10px] px-3 py-3 sm:px-4 sm:py-3.5 flex items-center gap-3 shadow-sm">
-        <div
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-midnight-violet/15 bg-midnight-violet/10"
-          aria-hidden
-        >
-          <Hourglass className="h-6 w-6 text-midnight-violet" strokeWidth={2.25} />
-        </div>
-        <div className="min-w-0 flex-1 text-left">
-          <h2 className="text-base sm:text-lg font-black leading-tight text-midnight-violet">{title}</h2>
-          {tagline ? (
-            <p className="mt-0.5 text-xs sm:text-sm font-medium leading-snug text-midnight-violet/80 line-clamp-2">
-              {tagline}
-            </p>
-          ) : null}
-        </div>
-      </div>
+  const brandingCopy = useMemo(
+    () => ({
+      flagshipTitle: t('gameweekBrandFlagshipTitle'),
+      flagshipSubtitle: t('gameweekBrandFlagshipSubtitle'),
+      leagueSubtitle: t('gameweekBrandLeagueSubtitle'),
+      cupSubtitle: t('gameweekBrandCupSubtitle'),
+      edition: (week: number) => t('gameweekBrandEdition', { week }),
+    }),
+    [t]
+  )
 
-      <div className="border-2 border-dashed border-ivory/25 border-t-0 rounded-b-[10px] px-4 py-5 flex flex-col items-center gap-3 bg-midnight-violet/50 backdrop-blur-sm gameweek-card-body-slot">
+  const branding = useMemo(() => {
+    const present = brandGameweekForCompetition(
+      {
+        gameweekId: competition.competitionId,
+        name: competition.displayName,
+        playerCount: 0,
+        status: 'UPCOMING',
+        type: competitionKindToGameweekType(competition.kind) as GameweekData['type'],
+      },
+      competition,
+      locale
+    )
+    return resolveGameweekCardBranding(present, brandingCopy)
+  }, [brandingCopy, competition, locale])
+
+  return (
+    <div className="w-full gameweek-card-slot" aria-label={`${branding.title} — ${t('comingSoonBadge')}`}>
+      <GameweekCardHeader
+        branding={branding}
+        shellClassName="bg-amber-glow text-midnight-violet"
+        leagueBrand={headerLeagueBrand}
+        icon={branding.icon}
+        markFallback={<Hourglass className="h-6 w-6 text-current" strokeWidth={2.25} />}
+      />
+
+      <div className="border-2 border-dashed border-amber-glow/50 border-t-0 rounded-b-[10px] px-4 py-5 flex flex-col items-center gap-3 bg-midnight-violet/50 backdrop-blur-sm gameweek-card-body-slot">
         <span className="rounded-full border border-amber-glow/60 bg-amber-glow/10 px-3 py-1 text-[11px] font-bold uppercase tracking-widest text-amber-glow">
           {t('comingSoonBadge')}
         </span>

@@ -167,6 +167,8 @@
     "weekClosed": "Week Closed",
     "comingSoon": "Coming Soon",
     "viewPicks": "View Picks",
+    "viewTable": "View table",
+    "gameweekMissingId": "This link is missing a gameweek. Head back to the dashboard and open a game week from there.",
     "viewDetails": "View Details",
     "viewGameweek": "View Game Week",
     "gameweekMatchPreviewLabel": "Live and upcoming matches",
@@ -178,6 +180,7 @@
     "availableCompetitionsSubtitle": "Select a tournament or gameweek below to submit your predictions",
     "noActiveCompetitions": "No active competitions right now. Check back soon for upcoming tournaments!",
     "signedInSubtitle": "Pick your competitions below.",
+    "joinLeague": "Join league",
     "browseAllCompetitions": "Browse all competitions",
     "joinCodeLabel": "Join code",
     "joinCodePlaceholder": "Enter code",
@@ -232,6 +235,8 @@
     "lastWeekChampionShort": "🏆 1st",
     "lastWeek2ndShort": "LW 2nd",
     "lastWeek3rdShort": "LW 3rd",
+    "competitionPickerLabel": "Competition",
+    "competitionPickerTap": "Tap to switch league",
     "trackBangerWorld": "Banger World",
     "trackLeague": "League slates",
     "trackCup": "Cup & specials",
@@ -416,6 +421,12 @@
     "backToDashboard": "All Competitions",
     "gameweekNotFound": "Competition Not Found",
     "gameweekNotFoundDesc": "We could not find the tournament or gameweek you requested.",
-    "returnToDashboard": "Back to Dashboard"
+    "returnToDashboard": "Back to Dashboard",
+    "fixtureRailLabel": "All matches in this gameweek",
+    "stepProgress": "Pick {current} of {total}",
+    "closesIn": "Picks close in {time}",
+    "autoSaving": "Saving your picks…",
+    "allPicksSaved": "All picks saved. Good luck!",
+    "retrySave": "Try saving again"
   }
 }

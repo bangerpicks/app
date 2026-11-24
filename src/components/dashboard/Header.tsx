@@ -1,6 +1,6 @@
 import Image from 'next/image'
 import Link from 'next/link'
-import { UserBadge } from './UserBadge'
+import { HeaderActions } from './HeaderActions'
 import { DesktopHeaderNav } from './DesktopHeaderNav'
 
 interface HeaderProps {
@@ -29,9 +29,7 @@ export function Header({ logoUrl = '/logo.svg', username, userPhotoUrl }: Header
         />
       </Link>
       <DesktopHeaderNav />
-      <div className="flex-shrink-0 ml-auto">
-        <UserBadge username={username} userPhotoUrl={userPhotoUrl} />
-      </div>
+      <HeaderActions username={username} userPhotoUrl={userPhotoUrl} />
     </header>
   )
 }

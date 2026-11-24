@@ -3,11 +3,12 @@
  */
 
 import { GameweekData, MatchCardData } from '@/types/dashboard'
+import type { CompetitionDocument } from '@/types/competition'
 import { refreshPicksStatusFromDeadline } from '@/lib/gameweek-selection'
 
 export const DASHBOARD_SESSION_CACHE_TTL_MS = 10 * 60 * 1000
 export const DASHBOARD_SESSION_CACHE_KEY_PREFIX = 'banger-picks-dashboard-cache:v1'
-const CACHE_VERSION = 1
+const CACHE_VERSION = 2
 
 type SerializedGameweekData = Omit<GameweekData, 'deadline' | 'startDate' | 'endDate'> & {
   deadline?: string
@@ -25,6 +26,7 @@ export interface DashboardSessionCache {
   gameweekId: string
   gameweek: GameweekData
   matches: MatchCardData[]
+  competition?: CompetitionDocument
   locale: string
   uid: string | null
 }
@@ -86,6 +88,7 @@ export function readDashboardSessionCache(
       gameweekId: string
       gameweek: SerializedGameweekData
       matches: SerializedMatchCardData[]
+      competition?: CompetitionDocument
       locale?: string
       uid?: string | null
     }
@@ -100,6 +103,7 @@ export function readDashboardSessionCache(
       gameweekId: parsed.gameweekId,
       gameweek: deserializeGameweek(parsed.gameweek),
       matches: parsed.matches.map(deserializeMatch),
+      competition: parsed.competition,
       locale: parsed.locale ?? locale,
       uid: parsed.uid ?? uid,
     }
@@ -123,6 +127,7 @@ export function writeDashboardSessionCache(
       gameweekId: payload.gameweekId,
       gameweek: serializeGameweek(payload.gameweek),
       matches: payload.matches.map(serializeMatch),
+      competition: payload.competition,
       locale,
       uid,
     }

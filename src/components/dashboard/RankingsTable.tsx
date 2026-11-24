@@ -2,6 +2,7 @@
 
 import Image from 'next/image'
 import { useTranslations } from 'next-intl'
+import { UserAvatar } from './UserAvatar'
 import { RankingEntry, GameweekRankingData } from '@/types/dashboard'
 import { RankingsTableScrollArea } from './RankingsTableScrollArea'
 
@@ -136,20 +137,11 @@ export function RankingsTable({
                 <td className="rankings-table-sticky-user sticky z-10 bg-midnight-violet pl-0 pr-2 py-2 w-[96px] min-w-[96px] max-w-[96px] sm:w-auto sm:min-w-[140px] sm:max-w-none sm:pl-1">
                   <div className="flex items-center gap-1.5 sm:gap-2">
                     <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-ivory/10 flex-shrink-0 overflow-hidden flex items-center justify-center">
-                      {entry.photoURL ? (
-                        <Image
-                          src={entry.photoURL}
-                          alt=""
-                          width={28}
-                          height={28}
-                          className="w-full h-full object-cover"
-                          unoptimized
-                        />
-                      ) : (
-                        <span className="text-ivory/50 text-[10px] sm:text-xs font-bold">
-                          {(entry.displayName || '?').charAt(0).toUpperCase()}
-                        </span>
-                      )}
+                      <UserAvatar
+                        photoURL={entry.photoURL}
+                        displayName={entry.displayName}
+                        initialClassName="text-ivory/50 text-[10px] sm:text-xs font-bold"
+                      />
                     </div>
                     <div className="flex flex-col gap-0.5 min-w-0 flex-1">
                       <span

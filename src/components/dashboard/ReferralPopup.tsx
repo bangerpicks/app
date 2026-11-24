@@ -8,9 +8,11 @@ import { Share2, Minimize2, Maximize2 } from 'lucide-react'
 
 interface ReferralPopupProps {
   className?: string
+  /** banner = sticky under header; card = inline panel for profile/shop */
+  variant?: 'banner' | 'card'
 }
 
-export function ReferralPopup({ className }: ReferralPopupProps) {
+export function ReferralPopup({ className, variant = 'banner' }: ReferralPopupProps) {
   const { user } = useAuth()
   const t = useTranslations('referral')
   const [isMinimized, setIsMinimized] = useState(false)
@@ -77,6 +79,35 @@ export function ReferralPopup({ className }: ReferralPopupProps) {
     return null
   }
 
+  const shareButton = (
+    <button
+      type="button"
+      onClick={handleShare}
+      className="bg-midnight-violet text-lime-yellow px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg font-semibold text-xs sm:text-sm hover:bg-midnight-violet/90 transition-colors flex items-center gap-1.5 sm:gap-2 shrink-0"
+      aria-label={t('shareAria')}
+    >
+      <Share2 className="w-4 h-4" />
+      <span>{copied ? t('copied') : t('share')}</span>
+    </button>
+  )
+
+  if (variant === 'card') {
+    return (
+      <div
+        className={`w-full max-w-2xl mx-auto rounded-2xl border-2 border-lime-yellow/40 bg-lime-yellow/10 p-4 ${className ?? ''}`}
+      >
+        <p className="text-sm font-semibold text-ivory mb-1">{t('banner')}</p>
+        {referralCode ? (
+          <p className="text-xs text-ivory/75 mb-3">
+            {t('yourCodeLabel')}{' '}
+            <span className="font-mono font-bold text-lime-yellow">{referralCode}</span>
+          </p>
+        ) : null}
+        {shareButton}
+      </div>
+    )
+  }
+
   return (
     <div
       className={`sticky z-50 transition-all duration-300 ${
@@ -93,6 +124,7 @@ export function ReferralPopup({ className }: ReferralPopupProps) {
               {t('bannerMinimized')}
             </p>
             <button
+              type="button"
               onClick={() => setIsMinimized(false)}
               className="ml-2 p-1 text-midnight-violet hover:bg-midnight-violet/10 rounded transition-colors"
               aria-label={t('expandAria')}
@@ -115,17 +147,9 @@ export function ReferralPopup({ className }: ReferralPopupProps) {
                 )}
               </div>
               <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
+                {shareButton}
                 <button
-                  onClick={handleShare}
-                  className="bg-midnight-violet text-lime-yellow px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg font-semibold text-xs sm:text-sm hover:bg-midnight-violet/90 transition-colors flex items-center gap-1.5 sm:gap-2"
-                  aria-label={t('shareAria')}
-                >
-                  <Share2 className="w-4 h-4" />
-                  <span className="hidden sm:inline">
-                    {copied ? t('copied') : t('share')}
-                  </span>
-                </button>
-                <button
+                  type="button"
                   onClick={() => setIsMinimized(true)}
                   className="p-2 text-midnight-violet hover:bg-midnight-violet/10 rounded transition-colors"
                   aria-label={t('minimizeAria')}

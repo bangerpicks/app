@@ -148,7 +148,12 @@ export async function getQuerySnapshotServerPreferring(
     try {
       const cached = await getDocsFromCache(queryRef)
       if (!cached.empty) {
-        return toQueryReadResult(cached, 'cache-fallback')
+        // Fast path: show cached data immediately. Not a failed refresh — no stale banner / retry.
+        return {
+          data: cached,
+          source: 'cache-fallback',
+          servedFromCache: false,
+        }
       }
     } catch {
       // No cache yet — continue to server path.
