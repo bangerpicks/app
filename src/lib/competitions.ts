@@ -20,6 +20,8 @@ import {
   type DocumentData,
   increment,
   arrayUnion,
+  arrayRemove,
+  deleteField,
 } from 'firebase/firestore'
 import { db } from './firebase'
 import { normalizeJoinCode } from './join-code.mjs'
@@ -56,9 +58,11 @@ import {
 import { resolveCompetitionDisplayName } from './competition-display'
 import {
   fetchHomePlayCatalog,
-  fetchHomeMembershipIds,
+  fetchHomeMembershipSummary,
   playCardFromCompetitionDoc,
 } from './home-catalog-client'
+import { shouldShowHomePlayCard } from './home-membership-filter.mjs'
+import type { CompetitionJoinVia } from '@/types/competition'
 
 export type CreateCompetitionInput = {
   competitionId: string
@@ -288,7 +292,8 @@ export async function resolveJoinCodeToCompetitionId(
 
 export async function joinCompetition(
   uid: string,
-  competitionId: string
+  competitionId: string,
+  joinedVia: CompetitionJoinVia = 'discover'
 ): Promise<{ ok: true } | { ok: false; reason: 'not-found' | 'full' | 'archived' }> {
   const comp = await getCompetitionById(competitionId)
   if (!comp) return { ok: false, reason: 'not-found' }
@@ -305,11 +310,14 @@ export async function joinCompetition(
 
   const memRef = doc(db, 'users', uid, 'competitions', competitionId)
   const existing = await getDoc(memRef)
+  const homeMemRef = doc(db, 'users', uid, 'homeMembership', 'summary')
+
   if (!existing.exists()) {
     const membership: CompetitionMembership & { competitionId: string } = {
       competitionId,
       joinedAt: Timestamp.now(),
       role: 'member',
+      joinedVia,
     }
     await setDoc(memRef, membership)
     await updateDoc(doc(db, 'competitions', competitionId), {
@@ -318,10 +326,27 @@ export async function joinCompetition(
     }).catch(() => {
       /* rules may deny memberCount bump for non-admin */
     })
-    const homeMemRef = doc(db, 'users', uid, 'homeMembership', 'summary')
     await setDoc(
       homeMemRef,
-      { competitionIds: arrayUnion(competitionId), updatedAt: Timestamp.now() },
+      {
+        competitionIds: arrayUnion(competitionId),
+        dismissedCompetitionIds: arrayRemove(competitionId),
+        updatedAt: Timestamp.now(),
+      },
+      { merge: true }
+    ).catch(() => {})
+  } else {
+    await updateDoc(memRef, {
+      joinedVia,
+      pendingLeaveGameweekId: deleteField(),
+    }).catch(() => {})
+    await setDoc(
+      homeMemRef,
+      {
+        competitionIds: arrayUnion(competitionId),
+        dismissedCompetitionIds: arrayRemove(competitionId),
+        updatedAt: Timestamp.now(),
+      },
       { merge: true }
     ).catch(() => {})
   }
@@ -338,9 +363,51 @@ export async function joinCompetitionByCode(
 > {
   const competitionId = await resolveJoinCodeToCompetitionId(rawCode)
   if (!competitionId) return { ok: false, reason: 'invalid' }
-  const result = await joinCompetition(uid, competitionId)
+  const result = await joinCompetition(uid, competitionId, 'code')
   if (!result.ok) return { ok: false, reason: result.reason }
   return { ok: true, competitionId }
+}
+
+async function fetchPendingLeaveByCompetitionId(
+  uid: string
+): Promise<Map<string, string | null | undefined>> {
+  const map = new Map<string, string | null | undefined>()
+  try {
+    const memSnap = await getDocs(collection(db, 'users', uid, 'competitions'))
+    for (const d of memSnap.docs) {
+      const pending = d.data().pendingLeaveGameweekId
+      if (typeof pending === 'string' && pending.trim()) {
+        map.set(d.id, pending.trim())
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  return map
+}
+
+function applyHomeMembershipFilters(
+  cards: CompetitionPlayCard[],
+  uid: string | null | undefined,
+  summary: { competitionIds: string[]; dismissedCompetitionIds: string[] },
+  pendingLeaveByCompetitionId: Map<string, string | null | undefined>
+): CompetitionPlayCard[] {
+  if (!uid) return cards
+  return cards
+    .map((card) => {
+      const pending = pendingLeaveByCompetitionId.get(card.competition.competitionId)
+      return {
+        ...card,
+        pendingLeaveGameweekId: pending === card.gameweekId ? pending : undefined,
+      }
+    })
+    .filter((card) =>
+      shouldShowHomePlayCard(card.competition.competitionId, card.gameweekId, {
+        dismissedCompetitionIds: summary.dismissedCompetitionIds,
+        pendingLeaveByCompetitionId,
+        memberCompetitionIds: summary.competitionIds,
+      })
+    )
 }
 
 export async function createCompetition(
@@ -457,10 +524,12 @@ export async function loadHomeCompetitionPlayCards(
   gameweeksById: Map<string, GameweekData>
 }> {
   try {
-    const [catalog, memberIds] = await Promise.all([
+    const [catalog, homeSummary, pendingLeaveByCompetitionId] = await Promise.all([
       fetchHomePlayCatalog(),
-      uid ? fetchHomeMembershipIds(uid) : Promise.resolve([] as string[]),
+      uid ? fetchHomeMembershipSummary(uid) : Promise.resolve({ competitionIds: [], dismissedCompetitionIds: [] }),
+      uid ? fetchPendingLeaveByCompetitionId(uid) : Promise.resolve(new Map()),
     ])
+    const memberIds = homeSummary.competitionIds
     if (catalog && catalog.cards.length > 0) {
       const byCompId = new Map(catalog.cards.map((c) => [c.competition.competitionId, c]))
       const mergedCards = [...catalog.cards]
@@ -493,8 +562,14 @@ export async function loadHomeCompetitionPlayCards(
           } as GameweekData)
         }
       }
+      const filtered = applyHomeMembershipFilters(
+        [...deduped.values()],
+        uid,
+        homeSummary,
+        pendingLeaveByCompetitionId
+      )
       return {
-        cards: [...deduped.values()],
+        cards: filtered,
         comingSoon: catalog.comingSoon,
         gameweeksById,
       }
@@ -588,7 +663,16 @@ export async function loadHomeCompetitionPlayCards(
     })
   }
 
-  return { cards, comingSoon, gameweeksById }
+  const homeSummary = uid
+    ? await fetchHomeMembershipSummary(uid).catch(() => ({
+        competitionIds: [],
+        dismissedCompetitionIds: [],
+      }))
+    : { competitionIds: [], dismissedCompetitionIds: [] }
+  const pendingLeaveByCompetitionId = uid ? await fetchPendingLeaveByCompetitionId(uid) : new Map()
+  const filtered = applyHomeMembershipFilters(cards, uid, homeSummary, pendingLeaveByCompetitionId)
+
+  return { cards: filtered, comingSoon, gameweeksById }
 }
 
 async function loadActiveGameweeksForHome(

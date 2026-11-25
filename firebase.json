@@ -9,7 +9,27 @@
     "redirects": [
       {
         "source": "/",
-        "destination": "/dashboard/",
+        "destination": "/my-games/",
+        "type": 301
+      },
+      {
+        "source": "/dashboard",
+        "destination": "/my-games/",
+        "type": 301
+      },
+      {
+        "source": "/dashboard/**",
+        "destination": "/my-games/",
+        "type": 301
+      },
+      {
+        "source": "/competitions",
+        "destination": "/my-games/",
+        "type": 301
+      },
+      {
+        "source": "/competitions/**",
+        "destination": "/my-games/",
         "type": 301
       }
     ],

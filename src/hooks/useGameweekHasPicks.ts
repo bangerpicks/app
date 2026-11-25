@@ -8,12 +8,20 @@ export function useGameweekHasPicks(
   gameweekId: string,
   enabled = true
 ): boolean | undefined {
-  const { user } = useAuth()
+  const { user, loading: authLoading } = useAuth()
   const [hasAnyPicks, setHasAnyPicks] = useState<boolean | undefined>(undefined)
 
   useEffect(() => {
-    if (!enabled || !gameweekId || !user?.uid) {
+    if (!enabled || !gameweekId) {
       setHasAnyPicks(undefined)
+      return
+    }
+    if (authLoading) {
+      setHasAnyPicks(undefined)
+      return
+    }
+    if (!user?.uid) {
+      setHasAnyPicks(false)
       return
     }
 
@@ -29,7 +37,7 @@ export function useGameweekHasPicks(
     return () => {
       cancelled = true
     }
-  }, [gameweekId, enabled, user?.uid])
+  }, [gameweekId, enabled, user?.uid, authLoading])
 
   return hasAnyPicks
 }

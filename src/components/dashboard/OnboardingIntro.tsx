@@ -17,6 +17,7 @@ import {
 } from '@/lib/users'
 import { trackReferralSignup } from '@/lib/referrals'
 import { getRandomSuggestions } from '@/data/displayNameSuggestions'
+import { COMPETITIONS_HOME_PATH, isCompetitionsHomePath } from '@/lib/app-routes'
 
 interface OnboardingIntroProps {
   isOpen: boolean
@@ -44,8 +45,7 @@ export function OnboardingIntro({ isOpen, onClose, requiresDisplayName = false, 
   const router = useRouter()
   const pathname = usePathname()
 
-  const onDashboardHome =
-    pathname === '/dashboard' || pathname === '/dashboard/'
+  const onDashboardHome = isCompetitionsHomePath(pathname)
   const showOnboardingLayer = isOpen && onDashboardHome
 
   // Handle mounting for portal
@@ -199,20 +199,15 @@ export function OnboardingIntro({ isOpen, onClose, requiresDisplayName = false, 
         await markOnboardingIntroSeen(user)
       }
       onClose()
-      // Navigate to dashboard only if we're not already there
-      const onDashboard =
-        pathname === '/dashboard' || pathname === '/dashboard/'
-      if (!onDashboard) {
-        router.push('/dashboard/')
+      if (!isCompetitionsHomePath(pathname)) {
+        router.push(COMPETITIONS_HOME_PATH)
       }
     } catch (error) {
       console.error('Error marking onboarding as seen:', error)
       // Still close even if there's an error
       onClose()
-      const onDashboard =
-        pathname === '/dashboard' || pathname === '/dashboard/'
-      if (!onDashboard) {
-        router.push('/dashboard/')
+      if (!isCompetitionsHomePath(pathname)) {
+        router.push(COMPETITIONS_HOME_PATH)
       }
     } finally {
       setLoading(false)

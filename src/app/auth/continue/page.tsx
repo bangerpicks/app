@@ -11,6 +11,7 @@ import {
   readStoredEmailForSignIn,
 } from '@/lib/auth-email'
 import { completeSignInAfterAuth } from '@/lib/auth-post-sign-in'
+import { COMPETITIONS_HOME_PATH } from '@/lib/app-routes'
 
 type PageState = 'loading' | 'needEmail' | 'error' | 'success'
 
@@ -33,7 +34,7 @@ export default function AuthContinuePage() {
           typeof window !== 'undefined' ? sessionStorage.getItem('referralCode') : null
         await completeSignInAfterAuth(user, { referralCode })
         setState('success')
-        router.replace('/dashboard/')
+        router.replace(COMPETITIONS_HOME_PATH)
       } catch (err: unknown) {
         console.error('Email link sign-in error:', err)
         setState('error')
@@ -111,7 +112,7 @@ export default function AuthContinuePage() {
             <h1 className="text-xl font-bold text-ivory">{t('emailLinkInvalidTitle')}</h1>
             <p className="text-ivory/70 text-sm">{error ?? t('emailLinkInvalid')}</p>
             <Link
-              href="/dashboard/"
+              href={COMPETITIONS_HOME_PATH}
               className="mt-4 text-lime-yellow font-semibold hover:underline"
             >
               {t('backToDashboard')}

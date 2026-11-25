@@ -13,13 +13,13 @@ import {
 
 function TeamLogo({ src, alt }: { src: string; alt: string }) {
   return (
-    <div className="w-4 h-4 flex-shrink-0 flex items-center justify-center">
+    <div className="w-5 h-5 flex-shrink-0 flex items-center justify-center">
       {src ? (
         <Image
           src={src}
           alt={alt}
-          width={16}
-          height={16}
+          width={20}
+          height={20}
           loading="lazy"
           className="object-contain w-full h-full"
         />
@@ -35,7 +35,7 @@ const PICK_INITIALS: Prediction[] = ['H', 'D', 'A']
 function PickInitials({ prediction }: { prediction: Prediction | null | undefined }) {
   return (
     <div
-      className="grid grid-cols-3 w-full px-0.5 text-[9px] font-black leading-none tracking-tight"
+      className="grid grid-cols-3 w-full px-0.5 text-[10px] font-black leading-none tracking-tight"
       aria-hidden
     >
       {PICK_INITIALS.map((pos) => (
@@ -86,20 +86,20 @@ function MatchPreviewPill({ match }: { match: MatchCardData }) {
         : 'border border-ivory/15 bg-midnight-violet/80'
 
   const scoreSlot = showScore ? (
-    <span className="flex items-center gap-0.5 text-[10px] font-bold tabular-nums leading-none shrink-0">
+    <span className="flex items-center gap-0.5 text-[11px] font-bold tabular-nums leading-none shrink-0">
       <span>{homeScore}</span>
       <span className="text-ivory/45 font-medium">-</span>
       <span>{awayScore}</span>
     </span>
   ) : (
-    <span className="text-[10px] text-ivory/45 font-medium leading-none shrink-0" aria-hidden>
+    <span className="text-[11px] text-ivory/45 font-medium leading-none shrink-0" aria-hidden>
       -
     </span>
   )
 
   return (
     <div
-      className={`flex flex-col items-center gap-1 min-w-[4.75rem] w-max py-1.5 px-2 rounded-lg text-ivory ${resultOutline}`}
+      className={`flex w-full flex-col items-center gap-1.5 py-2 px-1.5 rounded-lg text-ivory ${resultOutline}`}
       title={`${match.homeTeam.name} vs ${match.awayTeam.name}`}
     >
       <div className="flex items-center justify-center gap-1 w-full">
@@ -109,7 +109,7 @@ function MatchPreviewPill({ match }: { match: MatchCardData }) {
       </div>
       {suffix ? (
         <span
-          className={`text-[10px] font-semibold tabular-nums leading-none whitespace-nowrap ${
+          className={`text-[11px] font-semibold tabular-nums leading-none whitespace-nowrap ${
             inPlay ? 'text-cinnabar font-black' : 'text-ivory/65'
           }`}
         >
@@ -132,11 +132,11 @@ export function GameweekMatchPreviewPills({ previews }: GameweekMatchPreviewPill
 
   return (
     <ul
-      className="flex flex-wrap justify-center gap-1.5 list-none p-0 m-0"
+      className="flex w-full gap-1.5 list-none p-0 m-0"
       aria-label={t('gameweekMatchPreviewLabel')}
     >
       {previews.map((match) => (
-        <li key={match.fixtureId} className="flex-shrink-0">
+        <li key={match.fixtureId} className="flex min-w-0 flex-1">
           <MatchPreviewPill match={match} />
         </li>
       ))}

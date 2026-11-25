@@ -63,7 +63,7 @@ export function NotSignedIn({
               href={backHref}
               className="text-sm text-lime-yellow hover:underline transition-colors mt-1"
             >
-              {backLabel || '\u2190 Back to Dashboard'}
+              {backLabel || `\u2190 ${t('backToDashboard')}`}
             </Link>
           )}
       </div>

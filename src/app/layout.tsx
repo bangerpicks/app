@@ -22,7 +22,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: 'Banger Picks - Football Predictions',
     description: 'Predict football matches and compete for the top spot',
-    url: '/dashboard/',
+    url: '/my-games/',
     siteName: 'Banger Picks',
     type: 'website',
   },

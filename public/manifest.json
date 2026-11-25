@@ -3,7 +3,7 @@
   "short_name": "Banger Picks",
   "description": "Predict football matches and compete for the top spot",
   "id": "https://bangerpicks.com/",
-  "start_url": "/dashboard/",
+  "start_url": "/my-games/",
   "scope": "/",
   "display": "standalone",
   "background_color": "#240830",

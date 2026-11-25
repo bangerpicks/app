@@ -63,13 +63,16 @@ describe('buildWeeklyStandingsEntries', () => {
       },
     })
 
-    const entries = await buildWeeklyStandingsEntries(db, 'gw-1', [101, 102])
+    const entries = await buildWeeklyStandingsEntries(db, 'gw-1', [101, 102], { includePicks: true })
     assert.equal(entries.length, 2)
     const byUid = Object.fromEntries(entries.map((e) => [e.uid, e]))
     assert.equal(byUid['user-a'].points, 0)
     assert.equal(byUid['user-b'].points, 0)
     assert.equal(byUid['user-a'].correct, 0)
     assert.ok(byUid['user-a'].rank >= 1)
+    assert.deepEqual(byUid['user-a'].picks['101'], { p: 'H', c: null })
+    assert.deepEqual(byUid['user-a'].picks['102'], { p: 'D', c: null })
+    assert.deepEqual(byUid['user-b'].picks['101'], { p: 'A', c: null })
   })
 
   it('still sums awarded points when scoring has started', async () => {

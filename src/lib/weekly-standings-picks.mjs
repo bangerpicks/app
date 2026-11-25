@@ -1,6 +1,6 @@
 /**
  * v1.2.11: build the Rankings "picks" columns from server-written weeklyStandings
- * (`entries[].picks`, present only after lock). Pure; shared by rankings.ts and tests.
+ * (`entries[].picks`). Pure; shared by rankings.ts and tests.
  */
 
 /**

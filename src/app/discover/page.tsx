@@ -12,6 +12,9 @@ import { ComingSoonCompetitionCard } from '@/components/dashboard/ComingSoonComp
 import { isCompetitionComingSoon } from '@/lib/competition-catalog'
 import type { GameweekData } from '@/types/dashboard'
 import { JoinCompetitionInput } from '@/components/dashboard/JoinCompetitionInput'
+import { MY_GAMES_HOME_PATH } from '@/lib/app-routes'
+import { useAuth } from '@/lib/AuthProvider'
+import { joinLeague, useMyLeagueMembership } from '@/lib/league-membership'
 import { playCardFromCompetitionDoc } from '@/lib/home-catalog-client'
 
 type DiscoverRow = {
@@ -52,8 +55,11 @@ function DiscoverSkeletonGrid() {
 }
 
 export default function DiscoverPage() {
+  const { user } = useAuth()
   const t = useTranslations('dashboard')
   const tPicks = useTranslations('picks')
+  const { isMember, refresh: refreshMembership } = useMyLeagueMembership(user?.uid)
+  const [joiningId, setJoiningId] = useState<string | null>(null)
   const [items, setItems] = useState<CompetitionDocument[]>([])
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
@@ -110,7 +116,7 @@ export default function DiscoverPage() {
   return (
     <AppShell
       banner={
-        <PicksBackNav href="/dashboard/">{tPicks('backToDashboard')}</PicksBackNav>
+        <PicksBackNav href={MY_GAMES_HOME_PATH}>{tPicks('backToDashboard')}</PicksBackNav>
       }
       mainClassName="flex-1 px-4 sm:px-5 py-6 pb-bottom-nav flex flex-col items-center gap-6 overflow-x-hidden"
     >
@@ -152,6 +158,24 @@ export default function DiscoverPage() {
                 competition={row.competition}
                 gameweek={row.gameweek}
                 playerCount={row.playerCount}
+                discoverJoin={
+                  user
+                    ? {
+                        isMember: isMember(row.competition.competitionId),
+                        joining: joiningId === row.competition.competitionId,
+                        onJoin: async () => {
+                          if (!user) return
+                          setJoiningId(row.competition.competitionId)
+                          try {
+                            await joinLeague(user.uid, row.competition.competitionId, 'discover')
+                            await refreshMembership()
+                          } finally {
+                            setJoiningId(null)
+                          }
+                        },
+                      }
+                    : undefined
+                }
               />
             ))}
             {comingSoon.map((comp) => (

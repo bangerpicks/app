@@ -6,6 +6,7 @@ import {
   type PlanExistingEntry,
   type PlanFixture,
 } from './save-gameweek-picks-plan'
+import { refreshWeeklyStandingsForGameweek } from './standings-update'
 
 type Pick = 'H' | 'D' | 'A'
 
@@ -219,14 +220,19 @@ export async function executeSaveGameweekPicks(
   })
 
   if (result.wrote) {
-    // Outside the transaction (hot doc): tell the standings refresher this board is stale.
+    // Outside the transaction: refresh Rankings snapshot (picks + player list) for this week.
     try {
-      await standingsRef.set(
-        { gameweekId, dirtyAt: admin.firestore.FieldValue.serverTimestamp() },
-        { merge: true }
-      )
+      await refreshWeeklyStandingsForGameweek(db, gameweekId, nowMs)
     } catch (error) {
-      console.warn('[saveGameweekPicks] weeklyStandings dirty flag failed', error)
+      console.warn('[saveGameweekPicks] weeklyStandings refresh failed', error)
+      try {
+        await standingsRef.set(
+          { gameweekId, dirtyAt: admin.firestore.FieldValue.serverTimestamp() },
+          { merge: true }
+        )
+      } catch (dirtyError) {
+        console.warn('[saveGameweekPicks] weeklyStandings dirty flag failed', dirtyError)
+      }
     }
   }
   return { joinedGameweek: result.joinedGameweek }

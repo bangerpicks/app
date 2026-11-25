@@ -10,7 +10,7 @@ interface PicksBackNavProps {
 const linkClassName =
   'inline-flex items-center gap-1 text-sm font-semibold text-lime-yellow hover:text-lime-yellow/85 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lime-yellow'
 
-/** Desktop-only back link; mobile uses the dynamic Dashboard tab in bottom nav. */
+/** Desktop-only back link; mobile uses the Leagues tab as back on picks/discover routes. */
 export function PicksBackNav({ href, children }: PicksBackNavProps) {
   return (
     <div className="hidden lg:block w-full border-b border-ivory/10">

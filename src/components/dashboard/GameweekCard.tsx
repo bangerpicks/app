@@ -5,7 +5,7 @@ import { useTranslations } from 'next-intl'
 import { useLanguage } from '@/lib/LanguageProvider'
 import { GameweekData, MatchCardData } from '@/types/dashboard'
 import { useCountdown, type CountdownTime } from '@/hooks/useCountdown'
-import { useMemo, type ReactNode } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { GameweekMatchPreviewPills } from './GameweekMatchPreviewPills'
 import {
   resolveGameweekDisplayPhase,
@@ -20,11 +20,18 @@ import { useGameweekHasPicks } from '@/hooks/useGameweekHasPicks'
 import { resolveGameweekCardBranding } from '@/lib/gameweek-card-branding'
 import { brandGameweekForCompetition } from '@/lib/competition-display'
 import { GameweekCardHeader } from './GameweekCardHeader'
+import { LeagueActionsSheet } from './LeagueActionsSheet'
 import { GameweekCardMetaRow } from './GameweekCardMetaRow'
 import { isGameweekPicksWindowOpen } from '@/lib/gameweek-selection'
 import type { CompetitionDocument } from '@/types/competition'
 import { resolveCompetitionHeaderLeagueBrand } from '@/lib/competition-league-brand'
 import { resolveGameweekCardPhaseChrome } from '@/lib/gameweek-card-phase-chrome'
+import {
+  shouldShowGameweekTableCta,
+  shouldShowPersonalGameweekCta,
+  personalGameweekCtaMessageKey,
+  gameweekCardNoteOverrideKey,
+} from '@/lib/gameweek-card-cta-logic.mjs'
 
 interface GameweekCardProps {
   gameweek: GameweekData
@@ -41,6 +48,9 @@ interface GameweekCardProps {
   fixtureMatches?: MatchCardData[]
   /** Enables Liga MX (etc.) header badge when the slate is single-league. */
   competition?: CompetitionDocument
+  showLeagueActions?: boolean
+  pendingLeaveGameweekId?: string | null
+  onLeagueMembershipChange?: () => void
 }
 
 const PHASE_LABEL_KEY: Record<
@@ -162,6 +172,7 @@ interface GameweekCardCTAsProps {
   onClick?: () => void
   urgencyLevel: UrgencyLevel
   hasAnyPicks: boolean
+  playerCount: number
 }
 
 function gameweekTableHref(gameweekId: string) {
@@ -175,32 +186,39 @@ function GameweekCardCTAs({
   onClick,
   urgencyLevel,
   hasAnyPicks,
+  playerCount,
 }: GameweekCardCTAsProps) {
   const t = useTranslations('dashboard')
   const tableHref = gameweekTableHref(gameweekId)
-  const showSplit = hasAnyPicks && phase !== 'UPCOMING'
-  const flexBtn = showSplit ? `flex-1 min-w-0 ${CTA_SPLIT_TEXT}` : 'w-full'
+  const showTable = shouldShowGameweekTableCta(phase, hasAnyPicks, playerCount)
+  const showPersonal = shouldShowPersonalGameweekCta(phase, hasAnyPicks)
+  const splitLayout = showPersonal && showTable
+  const flexBtn = splitLayout ? `flex-1 min-w-0 ${CTA_SPLIT_TEXT}` : 'w-full'
 
   const tableButton = (
     <Link
       href={tableHref}
       className={`${flexBtn} flex items-center justify-center ${CTA_MIN_H} rounded-[12px] border-2 border-lime-yellow/40 bg-lime-yellow/10 hover:bg-lime-yellow/20 hover:border-lime-yellow/70 transition-all duration-200 hover:scale-[1.01] active:scale-95 group`}
-      aria-label={t('viewTable')}
+      aria-label={t('leaderboard')}
     >
       <span className="font-black italic tracking-wide text-lime-yellow text-center px-1 group-hover:brightness-110">
-        {t('viewTable')} →
+        {t('leaderboard')}
       </span>
     </Link>
   )
 
-  const wrapSplit = (picksNode: ReactNode) => {
-    if (!showSplit) return picksNode
-    return (
-      <div className="flex w-full gap-2 gameweek-card-cta-split">
-        <div className="flex flex-1 min-w-0">{picksNode}</div>
-        {tableButton}
-      </div>
-    )
+  const layoutCTAs = (picksNode: ReactNode | null) => {
+    if (showPersonal && showTable && picksNode) {
+      return (
+        <div className="flex w-full gap-2 gameweek-card-cta-split">
+          <div className="flex flex-1 min-w-0">{picksNode}</div>
+          {tableButton}
+        </div>
+      )
+    }
+    if (showTable) return tableButton
+    if (showPersonal && picksNode) return picksNode
+    return null
   }
 
   if (phase === 'UPCOMING') {
@@ -216,21 +234,23 @@ function GameweekCardCTAs({
     )
   }
 
+  const personalKey = personalGameweekCtaMessageKey(phase, hasAnyPicks)
+  const personalLabel = t(personalKey)
+
   if (phase === 'PICKS_LOCKED' || phase === 'LIVE') {
-    const label = t('viewGameweek')
     const picksButton = (
       <Link
         href={picksHref}
         onClick={onClick}
         className={`${flexBtn} flex items-center justify-center ${CTA_MIN_H} rounded-[12px] border-2 border-cinnabar/50 bg-cinnabar/10 hover:bg-cinnabar/20 hover:border-cinnabar/70 transition-all duration-200 hover:scale-[1.01] active:scale-95 group`}
-        aria-label={label}
+        aria-label={personalLabel}
       >
         <span className="font-black italic tracking-wide text-cinnabar transition-colors duration-200 group-hover:brightness-110 text-center px-1">
-          {label} →
+          {personalLabel}
         </span>
       </Link>
     )
-    return wrapSplit(picksButton)
+    return layoutCTAs(showPersonal ? picksButton : null)
   }
 
   if (phase === 'FINAL' || phase === 'COMPLETED') {
@@ -239,14 +259,14 @@ function GameweekCardCTAs({
         href={picksHref}
         onClick={onClick}
         className={`${flexBtn} flex items-center justify-center ${CTA_MIN_H} rounded-[12px] border-2 border-ivory/30 bg-ivory/5 hover:bg-ivory/10 hover:border-ivory/50 transition-all duration-200 hover:scale-[1.01] active:scale-95 group`}
-        aria-label={t('viewResults')}
+        aria-label={personalLabel}
       >
         <span className="font-black italic tracking-wide text-ivory/70 group-hover:text-ivory transition-colors duration-200 text-center px-1">
-          {t('viewResults')} →
+          {personalLabel}
         </span>
       </Link>
     )
-    return wrapSplit(picksButton)
+    return layoutCTAs(showPersonal ? picksButton : null)
   }
 
   const isCritical = urgencyLevel === 'critical'
@@ -264,28 +284,30 @@ function GameweekCardCTAs({
       ? 'shadow-[0_0_20px_rgba(251,191,36,0.4)] hover:shadow-[0_0_30px_rgba(251,191,36,0.6)]'
       : 'shadow-[0_0_20px_rgba(218,255,0,0.35)] hover:shadow-[0_0_32px_rgba(218,255,0,0.55)]'
 
-  const label = hasAnyPicks ? t('viewPicks') : t('makePicks')
-
   const picksButton = (
     <Link
       href={picksHref}
       onClick={onClick}
       className={`${flexBtn} flex items-center justify-center ${CTA_MIN_H} rounded-[12px] ${ctaBg} ${ctaGlow} transition-all duration-200 hover:scale-[1.02] active:scale-95 group`}
-      aria-label={`${label} — gameweek is open`}
+      aria-label={personalLabel}
     >
       <span className="font-black italic tracking-wide text-midnight-violet select-none text-center px-1">
-        {label} →
+        {personalLabel}
       </span>
     </Link>
   )
-  return wrapSplit(picksButton)
+  return layoutCTAs(picksButton)
 }
 
 function gameweekNoteForPhase(
   t: (key: string) => string,
   phase: GameweekDisplayPhase,
-  hasAnyPicks: boolean
+  hasAnyPicks: boolean,
+  playerCount: number
 ): string {
+  const override = gameweekCardNoteOverrideKey(phase, hasAnyPicks, playerCount)
+  if (override) return t(override)
+
   if (phase === 'OPEN' || phase === 'CLOSING_SOON') {
     return hasAnyPicks ? t('gameweekNoteHasPicks') : t('gameweekNoteNoPicks')
   }
@@ -306,9 +328,13 @@ export function GameweekCard({
   showMatchPreviews = false,
   fixtureMatches,
   competition,
+  showLeagueActions = false,
+  pendingLeaveGameweekId,
+  onLeagueMembershipChange,
 }: GameweekCardProps) {
   const { locale } = useLanguage()
   const t = useTranslations('dashboard')
+  const [leagueSheetOpen, setLeagueSheetOpen] = useState(false)
   const picksWindowOpen = isGameweekPicksWindowOpen(gameweek)
 
   const loadFixturesFromHook = showMatchPreviews && fixtureMatches === undefined
@@ -324,10 +350,10 @@ export function GameweekCard({
   )
 
   const usePhaseFromFixtures = showMatchPreviews || fixtureMatches !== undefined
-  const picksFromHook = useGameweekHasPicks(
-    gameweek.gameweekId,
-    isInteractive && showMatchPreviews && hasAnyPicksProp === undefined
-  )
+  const picksLoadEnabled = isInteractive && showMatchPreviews && hasAnyPicksProp === undefined
+  const picksFromHook = useGameweekHasPicks(gameweek.gameweekId, picksLoadEnabled)
+  const picksKnown =
+    hasAnyPicksProp !== undefined || !picksLoadEnabled || picksFromHook !== undefined
   const hasAnyPicks = hasAnyPicksProp ?? picksFromHook ?? false
 
   const { time, formatted: deadlineCountdown } = useCountdown(
@@ -387,7 +413,7 @@ export function GameweekCard({
     [phase, urgencyLevel]
   )
 
-  const noteMessage = gameweekNoteForPhase(t, phase, hasAnyPicks)
+  const noteMessage = gameweekNoteForPhase(t, phase, picksKnown ? hasAnyPicks : false, playerCount)
 
   const targetHref = href ?? `/picks/?id=${gameweek.gameweekId}`
 
@@ -399,6 +425,11 @@ export function GameweekCard({
         headerClassName={phaseChrome.headerAnimation}
         leagueBrand={headerLeagueBrand}
         icon={branding.icon}
+        onOpenLeagueActions={
+          showLeagueActions && competition
+            ? () => setLeagueSheetOpen(true)
+            : undefined
+        }
       />
 
       <div
@@ -421,7 +452,7 @@ export function GameweekCard({
 
         {showMatchPreviews && <GameweekMatchPreviewPills previews={previews} />}
 
-        {isInteractive && (
+        {isInteractive && picksKnown ? (
           <GameweekCardCTAs
             phase={phase}
             picksHref={targetHref}
@@ -429,11 +460,34 @@ export function GameweekCard({
             onClick={onTimerClick}
             urgencyLevel={urgencyLevel}
             hasAnyPicks={hasAnyPicks}
+            playerCount={playerCount}
           />
-        )}
+        ) : isInteractive ? (
+          <div
+            className={`w-full ${CTA_MIN_H} rounded-[12px] bg-ivory/5 border border-ivory/10 animate-pulse`}
+            aria-busy="true"
+            aria-label={t('gameweekPersonalLoading')}
+          />
+        ) : null}
+
+        {pendingLeaveGameweekId === gameweek.gameweekId ? (
+          <p className="text-center text-xs font-semibold text-amber-glow">{t('leavingAfterWeek')}</p>
+        ) : null}
 
         <p className="text-center text-xs text-ivory/60 italic">{noteMessage}</p>
       </div>
+
+      {competition && showLeagueActions ? (
+        <LeagueActionsSheet
+          isOpen={leagueSheetOpen}
+          onClose={() => setLeagueSheetOpen(false)}
+          competitionId={competition.competitionId}
+          competitionName={competition.displayName}
+          gameweekId={gameweek.gameweekId}
+          picksHref={targetHref}
+          onLeaveComplete={() => onLeagueMembershipChange?.()}
+        />
+      ) : null}
     </div>
   )
 }

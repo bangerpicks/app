@@ -16,7 +16,7 @@ export interface WeeklyStandingsEntry {
   correct: number
   rank: number
   isBot?: boolean
-  /** Only present once picks are public (after lock, D3): fixtureId -> { p: pick, c: correct } */
+  /** FixtureId -> { p: pick, c: correct } (omitted from weeklyStandings while forceOpenForTesting) */
   picks?: Record<string, { p: string; c: boolean | null }>
 }
 
@@ -199,23 +199,22 @@ function timestampMs(value: unknown): number | null {
 }
 
 /**
- * Picks become public once the round locks (D3), or when it is finished.
- * forceOpenForTesting rounds keep picks private while they can still change.
+ * Whether weeklyStandings should include each player's pick columns for Rankings.
+ * Visible for every round except forceOpenForTesting (picks may still change arbitrarily).
+ * Direct predictions/{fixture}/entries reads stay hidden until lock (Firestore rules).
  */
 export function weeklyPicksVisible(
   gameweek: { status?: string; lockAt?: unknown; deadline?: unknown; forceOpenForTesting?: boolean },
-  nowMs: number
+  _nowMs: number
 ): boolean {
-  if (gameweek.status === 'completed' || gameweek.status === 'archived') return true
   if (gameweek.forceOpenForTesting === true) return false
-  const lockMs = timestampMs(gameweek.lockAt) ?? timestampMs(gameweek.deadline)
-  return lockMs != null && nowMs >= lockMs
+  return true
 }
 
 /**
  * Whether the scheduled pass should rebuild weeklyStandings/{gw}.
  * Rebuild when missing, when a save marked it dirty after the last build, or when
- * the round just locked (so picks become visible).
+ * picks were previously omitted from the snapshot (e.g. after removing forceOpenForTesting).
  */
 export function weeklyStandingsNeedsRefresh(params: {
   exists: boolean
@@ -223,8 +222,14 @@ export function weeklyStandingsNeedsRefresh(params: {
   dirtyAtMs: number | null
   picksVisibleNow: boolean
   docPicksVisible: boolean
+  /** Gameweek.playerCount vs weeklyStandings.entries length — heals an empty stale snapshot. */
+  playerCount?: number
+  entryCount?: number
 }): boolean {
   if (!params.exists || params.builtAtMs == null) return true
+  const players = typeof params.playerCount === 'number' ? params.playerCount : 0
+  const rows = typeof params.entryCount === 'number' ? params.entryCount : 0
+  if (players > 0 && rows === 0) return true
   if (params.picksVisibleNow && !params.docPicksVisible) return true
   if (params.dirtyAtMs != null && params.dirtyAtMs > params.builtAtMs) return true
   return false
@@ -270,12 +275,17 @@ export async function refreshStaleActiveWeeklyStandings(
     const gwDoc = gameweekDocs[i]
     const snap = snaps[i]
     const data = snap.exists ? snap.data() || {} : {}
+    const entryCount = Array.isArray(data.entries) ? data.entries.length : 0
+    const rawPlayerCount = gwDoc.data().playerCount
+    const playerCount = typeof rawPlayerCount === 'number' ? rawPlayerCount : 0
     const needs = weeklyStandingsNeedsRefresh({
       exists: snap.exists && Array.isArray(data.entries),
       builtAtMs: timestampMs(data.builtAt) ?? timestampMs(data.updatedAt),
       dirtyAtMs: timestampMs(data.dirtyAt),
       picksVisibleNow: weeklyPicksVisible(gwDoc.data(), nowMs),
       docPicksVisible: data.picksVisible === true,
+      playerCount,
+      entryCount,
     })
     if (!needs) continue
     try {

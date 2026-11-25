@@ -13,6 +13,8 @@ interface DashboardClientProps {
   gameweeksById?: Map<string, GameweekData>
   comingSoonCompetitions?: CompetitionDocument[]
   username?: string
+  onLeagueMembershipChange?: () => void
+  highlightCompetitionId?: string | null
 }
 
 export function DashboardClient({
@@ -21,6 +23,8 @@ export function DashboardClient({
   gameweeksById,
   comingSoonCompetitions = [],
   username,
+  onLeagueMembershipChange,
+  highlightCompetitionId,
 }: DashboardClientProps) {
   const t = useTranslations('dashboard')
   const isSignedIn = Boolean(username)
@@ -48,6 +52,9 @@ export function DashboardClient({
             headingAs="h2"
             showSectionHeader={!isSignedIn}
             flatGrid
+            showLeagueActions={isSignedIn}
+            onLeagueMembershipChange={onLeagueMembershipChange}
+            highlightCompetitionId={highlightCompetitionId}
           />
         ) : (
           <p className="text-ivory/70 text-sm text-center max-w-md">{t('noActiveCompetitions')}</p>

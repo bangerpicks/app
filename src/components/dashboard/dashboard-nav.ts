@@ -1,14 +1,15 @@
 import type { SVGProps } from 'react'
 import {
-  Squares2X2Icon as DashboardOutlineIcon,
-  TrophyIcon as RankingsOutlineIcon,
+  RectangleStackIcon as CompetitionsOutlineIcon,
+  TableCellsIcon as LeaderboardsOutlineIcon,
   ShoppingBagIcon as ShopOutlineIcon,
 } from '@heroicons/react/24/outline'
 import {
-  Squares2X2Icon as DashboardSolidIcon,
-  TrophyIcon as RankingsSolidIcon,
+  RectangleStackIcon as CompetitionsSolidIcon,
+  TableCellsIcon as LeaderboardsSolidIcon,
   ShoppingBagIcon as ShopSolidIcon,
 } from '@heroicons/react/24/solid'
+import { MY_GAMES_HOME_PATH } from '@/lib/app-routes'
 
 export type DashboardNavIcon = React.ComponentType<SVGProps<SVGSVGElement>>
 
@@ -23,14 +24,14 @@ export interface DashboardNavItem {
 // `/route/index.txt` instead of a missing `/route.txt` (stuck soft-nav).
 export const dashboardNavItems: DashboardNavItem[] = [
   {
-    iconOutline: DashboardOutlineIcon,
-    iconSolid: DashboardSolidIcon,
-    labelKey: 'navigation.dashboard',
-    href: '/dashboard/',
+    iconOutline: CompetitionsOutlineIcon,
+    iconSolid: CompetitionsSolidIcon,
+    labelKey: 'navigation.leagues',
+    href: MY_GAMES_HOME_PATH,
   },
   {
-    iconOutline: RankingsOutlineIcon,
-    iconSolid: RankingsSolidIcon,
+    iconOutline: LeaderboardsOutlineIcon,
+    iconSolid: LeaderboardsSolidIcon,
     labelKey: 'navigation.rankings',
     href: '/rankings/',
   },
@@ -57,7 +58,7 @@ export function isPicksRoute(pathname: string): boolean {
   return normalizePath(pathname) === '/picks'
 }
 
-/** Sub-routes where the Dashboard nav tab acts as a back control (mobile + desktop header). */
+/** Sub-routes where the Leagues nav tab acts as a back control (mobile + desktop header). */
 export function isDashboardBackNavRoute(pathname: string): boolean {
   const path = normalizePath(pathname)
   return path === '/picks' || path === '/discover'

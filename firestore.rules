@@ -557,22 +557,70 @@ service cloud.firestore {
         allow delete: if false;
       }
 
+      function validMembershipCreate() {
+        return request.resource.data.role == 'member'
+          && request.resource.data.joinedAt is timestamp
+          && (
+            request.resource.data.keys().hasOnly(['role', 'joinedAt', 'competitionId'])
+            || request.resource.data.keys().hasOnly(['role', 'joinedAt', 'competitionId', 'joinedVia'])
+            || (
+              request.resource.data.keys().hasOnly([
+                'role', 'joinedAt', 'competitionId', 'joinedVia', 'pendingLeaveGameweekId'
+              ])
+              && request.resource.data.pendingLeaveGameweekId == null
+            )
+          )
+          && (
+            !request.resource.data.keys().hasAny(['joinedVia'])
+            || request.resource.data.joinedVia == 'default'
+            || request.resource.data.joinedVia == 'discover'
+            || request.resource.data.joinedVia == 'code'
+          );
+      }
+
+      function validMembershipOwnerUpdate() {
+        return isOwner(userId)
+          && request.resource.data.role == resource.data.role
+          && request.resource.data.joinedAt == resource.data.joinedAt
+          && changedKeys().hasOnly(['joinedVia', 'pendingLeaveGameweekId'])
+          && (
+            !changedKeys().hasAny(['pendingLeaveGameweekId'])
+            || !request.resource.data.keys().hasAny(['pendingLeaveGameweekId'])
+            || request.resource.data.pendingLeaveGameweekId == null
+          );
+      }
+
+      function validHomeMembershipSummary() {
+        return docId == 'summary'
+          && request.resource.data.competitionIds is list
+          && request.resource.data.competitionIds.size() <= 50
+          && request.resource.data.updatedAt is timestamp
+          && (
+            !request.resource.data.keys().hasAny(['dismissedCompetitionIds'])
+            || (
+              request.resource.data.dismissedCompetitionIds is list
+              && request.resource.data.dismissedCompetitionIds.size() <= 50
+            )
+          )
+          && request.resource.data.keys().hasOnly([
+            'competitionIds',
+            'updatedAt',
+            'dismissedCompetitionIds'
+          ]);
+      }
+
       match /competitions/{competitionId} {
         allow read: if isOwner(userId) || isAdmin();
         allow create: if isOwner(userId)
-          && request.resource.data.role == 'member'
+          && validMembershipCreate()
           && !exists(/databases/$(database)/documents/users/$(userId)/competitions/$(competitionId));
-        allow update, delete: if isAdmin() || isOwner(userId);
+        allow update: if isAdmin() || validMembershipOwnerUpdate();
+        allow delete: if isAdmin() || isOwner(userId);
       }
 
       match /homeMembership/{docId} {
         allow read: if isOwner(userId);
-        allow create, update: if isOwner(userId)
-          && docId == 'summary'
-          && request.resource.data.keys().hasOnly(['competitionIds', 'updatedAt'])
-          && request.resource.data.competitionIds is list
-          && request.resource.data.competitionIds.size() <= 50
-          && request.resource.data.updatedAt is timestamp;
+        allow create, update: if isOwner(userId) && validHomeMembershipSummary();
         allow delete: if false;
       }
     }
@@ -600,7 +648,7 @@ service cloud.firestore {
       return /databases/$(database)/documents/predictions/$(fixtureId)/entries/$(request.auth.uid);
     }
 
-    // Hide opponents' picks until the gameweek/fixture is locked (rankings use weeklyStandings meanwhile).
+    // Hide opponents' raw entry docs until lock; Rankings pick columns use weeklyStandings (always built server-side).
     function predictionEntryReadable(entryUid, fixtureId) {
       return isAdmin()
         || isOwner(entryUid)

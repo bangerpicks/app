@@ -27,6 +27,7 @@ import { GafferDisplayPrefsProvider } from '@/lib/gaffer-display-prefs'
 import { useCrowdPickStats } from '@/hooks/useCrowdPickStats'
 import { useLanguage } from '@/lib/LanguageProvider'
 import { patchDashboardSessionGameweekPlayerCount } from '@/lib/dashboard-cache'
+import { COMPETITIONS_HOME_PATH } from '@/lib/app-routes'
 import { playerCountAfterFirstJoinSave } from '@/lib/player-count-display.mjs'
 import { PicksBackNav } from './PicksBackNav'
 import { PicksFixtureRail } from './PicksFixtureRail'
@@ -236,7 +237,7 @@ export function PicksClient({
           setFirstJoinSaveSucceeded(true)
           expectFirstJoinFlowRef.current = false
           window.setTimeout(() => {
-            router.push('/dashboard/')
+            router.push(COMPETITIONS_HOME_PATH)
           }, 1000)
         } else if (firstJoinConfirmActiveRef.current) {
           setFirstJoinConfirmActive(false)
@@ -427,7 +428,7 @@ export function PicksClient({
       containerRef={containerRef}
       username={username}
       banner={
-        <PicksBackNav href="/dashboard/">{tPicks('backToDashboard')}</PicksBackNav>
+        <PicksBackNav href={COMPETITIONS_HOME_PATH}>{tPicks('backToDashboard')}</PicksBackNav>
       }
       mainClassName={
         mobileScrollPad

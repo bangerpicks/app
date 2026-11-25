@@ -20,10 +20,15 @@ import {
 } from '@/lib/rankings'
 import { fetchPrecomputedWeeklyRankingsForRankings } from '@/lib/seasons-rankings-read'
 import { hasWeeklyRankingsTableRows } from '@/lib/weekly-rankings-merge.mjs'
-import { resolveWeeklyRankingsSliceStatus } from '@/lib/rankings-load-state.mjs'
+import {
+  resolveWeeklyRankingsSliceStatus,
+  shouldShowWeeklyRankingsError,
+  shouldShowWeeklyStandingsEmptyCopy,
+} from '@/lib/rankings-load-state.mjs'
 import { LoadBudget } from '@/lib/gameweek-selection'
 import type { GameweekRankingData, RankingEntry } from '@/types/dashboard'
 import { pickPluralKey } from '@/lib/i18n-plural.mjs'
+import { COMPETITIONS_HOME_PATH } from '@/lib/app-routes'
 
 function RankingsGameweekPageContent() {
   const { user, loading: authLoading } = useAuth()
@@ -154,7 +159,7 @@ function RankingsGameweekPageContent() {
       <AppShell username={username} mainClassName="flex-1 px-4 py-12 flex flex-col items-center gap-4">
         <p className="text-ivory/80 text-center max-w-sm">{tDashboard('gameweekMissingId')}</p>
         <Link
-          href="/dashboard/"
+          href={COMPETITIONS_HOME_PATH}
           className="bg-lime-yellow text-midnight-violet py-2 px-5 rounded-lg font-semibold text-sm"
         >
           {tPicks('backToDashboard')}
@@ -165,13 +170,24 @@ function RankingsGameweekPageContent() {
 
   const showTable = hasWeeklyRankingsTableRows(weeklyRankings)
   const playerCount = gameweekData?.gameweek.playerCount ?? 0
+  const weeklyBoardStatus = gameweekData ? 'ready' : loadError ? 'error' : 'no-week'
+  const showWeeklyError = shouldShowWeeklyRankingsError(
+    playerCount,
+    sliceStatus,
+    weeklyBoardStatus
+  )
+  const showWeeklyEmptyCopy = shouldShowWeeklyStandingsEmptyCopy(
+    weeklyBoardStatus,
+    sliceStatus,
+    playerCount
+  )
   const lockViewport = Boolean(gameweekData) && showTable
 
   return (
     <AppShell
       username={username}
       banner={
-        <PicksBackNav href="/dashboard/">{tPicks('backToDashboard')}</PicksBackNav>
+        <PicksBackNav href={COMPETITIONS_HOME_PATH}>{tPicks('backToDashboard')}</PicksBackNav>
       }
       shellClassName={lockViewport ? 'h-[100dvh] max-h-[100dvh] overflow-hidden' : undefined}
       mainClassName={`flex-1 min-h-0 px-4 sm:px-5 pb-bottom-nav flex flex-col items-center gap-3 py-2 ${
@@ -203,7 +219,7 @@ function RankingsGameweekPageContent() {
           <div className="rankings-table-bordered-host rankings-this-week-shell w-full min-h-0 flex-1 border-2 border-ivory/20 bg-midnight-violet sm:rounded-lg">
             <RankingsTable rankings={weeklyRankings!} gameweekData={gameweekData} fillViewport />
           </div>
-        ) : loadError || sliceStatus === 'error' ? (
+        ) : loadError || sliceStatus === 'error' || showWeeklyError ? (
           <div className="w-full rounded-lg border-2 border-ivory/20 bg-midnight-violet px-4 py-10 flex flex-col items-center gap-3">
             <p className="text-ivory/80 text-sm text-center max-w-sm">{tRankings('loadFailed')}</p>
             <button
@@ -214,7 +230,7 @@ function RankingsGameweekPageContent() {
               {tRankings('tryAgain')}
             </button>
           </div>
-        ) : sliceStatus === 'empty' ? (
+        ) : showWeeklyEmptyCopy ? (
           <div className="w-full rounded-lg border-2 border-ivory/20 bg-midnight-violet px-4 py-10 text-center">
             <p className="text-ivory/70 text-sm max-w-sm mx-auto">{tRankings('weeklyStandingsEmpty')}</p>
           </div>

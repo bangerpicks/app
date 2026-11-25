@@ -91,7 +91,7 @@ export function UserBadge({ username, userPhotoUrl }: UserBadgeProps) {
   if (authLoading) {
     return (
       <span
-        className="flex h-[25px] min-w-[4.5rem] items-center justify-center rounded-[10px] bg-lime-yellow/40 px-2.5 text-midnight-violet/60"
+        className="flex h-8 min-w-[4.5rem] items-center justify-center rounded-[10px] bg-lime-yellow/40 px-2.5 text-midnight-violet/60"
         aria-busy="true"
         aria-label={tCommon('loadingAccount')}
       />
@@ -102,7 +102,7 @@ export function UserBadge({ username, userPhotoUrl }: UserBadgeProps) {
     return (
       <Link
         href="/profile/"
-        className="relative z-[101] flex h-8 max-w-[9.5rem] items-center gap-1.5 rounded-[10px] bg-lime-yellow py-0.5 pl-1 pr-2.5 text-midnight-violet hover:opacity-90 touch-manipulation sm:max-w-[11rem]"
+        className="relative z-[101] flex h-8 max-w-[9.5rem] items-center gap-1.5 rounded-[10px] bg-lime-yellow py-0 pl-1 pr-2.5 text-midnight-violet hover:opacity-90 touch-manipulation sm:max-w-[11rem]"
       >
         {avatar}
         <span className="truncate text-sm font-bold leading-normal tracking-[0.28px]">
@@ -117,7 +117,7 @@ export function UserBadge({ username, userPhotoUrl }: UserBadgeProps) {
       <button
         type="button"
         onClick={() => setIsModalOpen(true)}
-        className="flex h-[25px] items-center justify-center rounded-[10px] bg-lime-yellow px-2.5 text-midnight-violet hover:opacity-90"
+        className="flex h-8 items-center justify-center rounded-[10px] bg-lime-yellow px-2.5 text-sm font-bold leading-none text-midnight-violet hover:opacity-90 touch-manipulation"
       >
         <span className="text-sm font-bold leading-normal tracking-[0.28px]">
           Sign In

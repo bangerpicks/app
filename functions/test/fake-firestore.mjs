@@ -56,6 +56,9 @@ export function createFakeDb(seed = {}) {
     writes,
     collection: (name) => colRef(name),
     doc: (path) => docRef(path),
+    async getAll(...refs) {
+      return refs.map((ref) => snap(ref.path))
+    },
     async runTransaction(fn) {
       const pending = []
       const tx = {

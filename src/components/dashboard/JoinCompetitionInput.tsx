@@ -33,7 +33,7 @@ export function JoinCompetitionInput() {
         setError(t(`joinCodeError_${result.reason}` as 'joinCodeError_invalid'))
         return
       }
-      router.push(`/dashboard/?joined=${result.competitionId}`)
+      router.push(`/my-games/?joined=${result.competitionId}`)
     } catch {
       setError(t('joinCodeError_invalid'))
     } finally {

@@ -38,10 +38,21 @@ export interface CompetitionDocument {
   updatedAt?: Timestamp
 }
 
+export type CompetitionJoinVia = 'default' | 'discover' | 'code'
+
 export interface CompetitionMembership {
   competitionId: string
   joinedAt: Timestamp
   role: 'member' | 'owner'
+  joinedVia?: CompetitionJoinVia
+  /** Set when user leaves during locked/live; finalized when GW completes. */
+  pendingLeaveGameweekId?: string | null
+}
+
+export interface HomeMembershipSummary {
+  competitionIds: string[]
+  dismissedCompetitionIds?: string[]
+  updatedAt?: Timestamp
 }
 
 /** Card-ready row: competition + resolved gameweek for picks CTA. */
@@ -49,4 +60,6 @@ export interface CompetitionPlayCard {
   competition: CompetitionDocument
   gameweekId: string
   playerCount: number
+  /** Matches active GW when leave is deferred until week ends. */
+  pendingLeaveGameweekId?: string | null
 }

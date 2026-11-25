@@ -11,6 +11,7 @@ import {
   joinCompetitionByCode,
   resolveJoinCodeToCompetitionId,
 } from '@/lib/competitions'
+import { COMPETITIONS_HOME_PATH } from '@/lib/app-routes'
 
 function JoinByCodeContent() {
   const searchParams = useSearchParams()
@@ -56,7 +57,7 @@ function JoinByCodeContent() {
         if (gw) {
           router.replace(`/picks/?id=${gw}`)
         } else {
-          router.replace('/dashboard/')
+          router.replace(COMPETITIONS_HOME_PATH)
         }
       } catch {
         setStatus('error')

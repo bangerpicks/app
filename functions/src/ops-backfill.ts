@@ -2,8 +2,17 @@ import * as functions from 'firebase-functions'
 import * as admin from 'firebase-admin'
 import { isUserAdmin } from './admin-auth'
 import { slimApiFootballFixture } from './slim-fixture'
+import { refreshWeeklyStandingsForGameweek } from './standings-update'
+import { provisionDefaultLeaguesForUser } from './provision-default-leagues'
 
-type BackfillTask = 'slimFixtures' | 'displayNames' | 'crowdCounters' | 'standingsMeta' | 'all'
+type BackfillTask =
+  | 'slimFixtures'
+  | 'displayNames'
+  | 'crowdCounters'
+  | 'standingsMeta'
+  | 'weeklyStandings'
+  | 'defaultLeagues'
+  | 'all'
 
 export type BackfillResult = {
   task: BackfillTask
@@ -142,6 +151,42 @@ async function runStandingsMeta(db: admin.firestore.Firestore, dryRun: boolean):
   return { task: 'standingsMeta', updated, skipped }
 }
 
+async function runDefaultLeagues(db: admin.firestore.Firestore, dryRun: boolean): Promise<BackfillResult> {
+  let updated = 0
+  let skipped = 0
+  const users = await db.collection('users').limit(500).get()
+  for (const user of users.docs) {
+    if (dryRun) {
+      const mem = await user.ref.collection('competitions').limit(1).get()
+      if (mem.empty) updated++
+      else skipped++
+      continue
+    }
+    const { joined } = await provisionDefaultLeaguesForUser(db, user.id)
+    if (joined.length > 0) updated++
+    else skipped++
+  }
+  return { task: 'defaultLeagues', updated, skipped }
+}
+
+async function runWeeklyStandings(db: admin.firestore.Firestore, dryRun: boolean): Promise<BackfillResult> {
+  let updated = 0
+  let skipped = 0
+  const gameweeks = await db.collection('gameweeks').where('status', '==', 'active').get()
+  for (const gw of gameweeks.docs) {
+    const playerCount = typeof gw.data().playerCount === 'number' ? gw.data().playerCount : 0
+    if (playerCount === 0) {
+      skipped++
+      continue
+    }
+    if (!dryRun) {
+      await refreshWeeklyStandingsForGameweek(db, gw.id)
+    }
+    updated++
+  }
+  return { task: 'weeklyStandings', updated, skipped }
+}
+
 async function runTasks(
   tasks: BackfillTask[],
   dryRun: boolean
@@ -153,6 +198,8 @@ async function runTasks(
   if (want('displayNames')) out.push(await runDisplayNames(db, dryRun))
   if (want('crowdCounters')) out.push(await runCrowdCounters(db, dryRun))
   if (want('standingsMeta')) out.push(await runStandingsMeta(db, dryRun))
+  if (want('weeklyStandings')) out.push(await runWeeklyStandings(db, dryRun))
+  if (want('defaultLeagues')) out.push(await runDefaultLeagues(db, dryRun))
   return out
 }
 

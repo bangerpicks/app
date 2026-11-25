@@ -32,7 +32,7 @@ export function OpsBackfillPanel() {
     <div className="rounded-lg border border-ivory/20 p-4 space-y-3">
       <h3 className="text-sm font-bold text-ivory">Ops backfills</h3>
       <p className="text-xs text-ivory/60">
-        Slim fixtures, displayNames claims, crowd counters, standings → meta/standings.
+        Slim fixtures, displayNames claims, crowd counters, standings meta, weeklyStandings rebuild.
       </p>
       <div className="flex gap-2 flex-wrap">
         <button

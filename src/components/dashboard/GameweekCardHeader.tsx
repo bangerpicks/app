@@ -1,3 +1,4 @@
+import { Cog6ToothIcon } from '@heroicons/react/24/outline'
 import { Globe, Medal, Trophy } from 'lucide-react'
 import type { ReactNode } from 'react'
 import type { GameweekCardBranding, GameweekCardIcon } from '@/lib/gameweek-card-branding'
@@ -20,6 +21,7 @@ export interface GameweekCardHeaderProps {
   /** Overrides the type icon (e.g. hourglass on coming-soon). */
   markFallback?: ReactNode
   headingLevel?: 'h2' | 'h3'
+  onOpenLeagueActions?: () => void
 }
 
 /** Shared header shell for dashboard gameweek / competition cards. */
@@ -31,6 +33,7 @@ export function GameweekCardHeader({
   icon,
   markFallback,
   headingLevel = 'h2',
+  onOpenLeagueActions,
 }: GameweekCardHeaderProps) {
   const HeaderIcon = CARD_ICONS[icon]
   const fallback =
@@ -59,6 +62,20 @@ export function GameweekCardHeader({
           </p>
         ) : null}
       </div>
+      {onOpenLeagueActions ? (
+        <button
+          type="button"
+          className="shrink-0 rounded-lg p-2 text-current opacity-80 hover:opacity-100 hover:bg-black/10 transition-opacity"
+          onClick={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            onOpenLeagueActions()
+          }}
+          aria-label="League options"
+        >
+          <Cog6ToothIcon className="h-6 w-6" strokeWidth={2} />
+        </button>
+      ) : null}
     </div>
   )
 }

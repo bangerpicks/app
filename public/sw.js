@@ -1,5 +1,5 @@
-const CACHE = 'banger-picks-shell-v3'
-const PRECACHE = ['/', '/dashboard/', '/picks/', '/rankings/', '/discover/', '/shop/', '/manifest.json']
+const CACHE = 'banger-picks-shell-v6'
+const PRECACHE = ['/', '/my-games/', '/picks/', '/rankings/', '/discover/', '/shop/', '/manifest.json']
 const NAV_PATHS = new Set(PRECACHE)
 
 self.addEventListener('install', (event) => {
@@ -11,13 +11,15 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))
+      Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))
     ).then(() => self.clients.claim())
   )
 })
 
 function normalizePath(pathname) {
-  if (pathname === '/' || pathname === '') return '/dashboard/'
+  if (pathname === '/' || pathname === '') return '/my-games/'
+  if (pathname === '/dashboard' || pathname === '/dashboard/') return '/my-games/'
+  if (pathname === '/competitions' || pathname === '/competitions/') return '/my-games/'
   if (!pathname.endsWith('/')) return `${pathname}/`
   return pathname
 }
@@ -58,7 +60,7 @@ self.addEventListener('fetch', (event) => {
         }
         const fresh = await network
         if (fresh) return fresh
-        return cache.match('/dashboard/') || Response.error()
+        return cache.match('/my-games/') || Response.error()
       })
     )
   }

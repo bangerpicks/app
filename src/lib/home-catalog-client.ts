@@ -135,9 +135,27 @@ export function playCardFromCompetitionDoc(
   }
 }
 
+export type HomeMembershipSnapshot = {
+  competitionIds: string[]
+  dismissedCompetitionIds: string[]
+}
+
 export async function fetchHomeMembershipIds(uid: string): Promise<string[]> {
+  const summary = await fetchHomeMembershipSummary(uid)
+  return summary.competitionIds
+}
+
+export async function fetchHomeMembershipSummary(uid: string): Promise<HomeMembershipSnapshot> {
   const snap = await getDoc(doc(db, 'users', uid, 'homeMembership', 'summary'))
-  if (!snap.exists()) return []
-  const ids = snap.data()?.competitionIds
-  return Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string') : []
+  if (!snap.exists()) {
+    return { competitionIds: [], dismissedCompetitionIds: [] }
+  }
+  const data = snap.data()
+  const competitionIds = Array.isArray(data?.competitionIds)
+    ? data.competitionIds.filter((id): id is string => typeof id === 'string')
+    : []
+  const dismissedCompetitionIds = Array.isArray(data?.dismissedCompetitionIds)
+    ? data.dismissedCompetitionIds.filter((id): id is string => typeof id === 'string')
+    : []
+  return { competitionIds, dismissedCompetitionIds }
 }

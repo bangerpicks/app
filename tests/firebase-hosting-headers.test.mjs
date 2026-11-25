@@ -11,6 +11,16 @@ function headerRules() {
   return firebaseJson.hosting?.headers ?? []
 }
 
+test('firebase hosting redirects root and legacy paths to my-games', () => {
+  const redirects = firebaseJson.hosting?.redirects ?? []
+  const root = redirects.find((r) => r.source === '/')
+  assert.equal(root?.destination, '/my-games/')
+  const legacyDashboard = redirects.find((r) => r.source === '/dashboard')
+  assert.equal(legacyDashboard?.destination, '/my-games/')
+  const legacyCompetitions = redirects.find((r) => r.source === '/competitions')
+  assert.equal(legacyCompetitions?.destination, '/my-games/')
+})
+
 test('firebase hosting long-caches hashed static assets', () => {
   const assetRule = headerRules().find((r) =>
     r.source?.includes('@(js|css')

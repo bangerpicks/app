@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react'
 import { usePathname } from 'next/navigation'
+import { isCompetitionsHomePath } from '@/lib/app-routes'
 
 /** On client navigations, clear modal scroll locks and stray full-screen overlays. */
 export function RouteChromeReset() {
@@ -15,8 +16,7 @@ export function RouteChromeReset() {
     body.style.removeProperty('overflow')
     body.style.removeProperty('padding-right')
 
-    const onDashboard = pathname === '/dashboard' || pathname === '/dashboard/'
-    if (!onDashboard) {
+    if (!isCompetitionsHomePath(pathname)) {
       document.querySelectorAll('body > div[aria-labelledby="onboarding-title"]').forEach((node) => {
         node.remove()
       })

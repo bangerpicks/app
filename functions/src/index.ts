@@ -35,6 +35,9 @@ import {
 } from './standings-update'
 import { saveGameweekPicksHandler } from './save-gameweek-picks'
 import { rebuildHomePlayCatalog } from './home-catalog'
+import { provisionDefaultLeaguesForUser } from './provision-default-leagues'
+import { leaveLeagueHandler } from './leave-league'
+import { finalizePendingLeavesForGameweek } from './leave-league-finalize'
 
 admin.initializeApp()
 
@@ -618,6 +621,14 @@ export const onGameweekUpdate = functions.firestore
 
       const becameCompleted = prevStatus !== 'completed' && newStatus === 'completed'
 
+      if (becameCompleted) {
+        try {
+          await finalizePendingLeavesForGameweek(db, gameweekId)
+        } catch (finalizeError) {
+          console.error(`[onGameweekUpdate] finalize pending leaves failed for ${gameweekId}:`, finalizeError)
+        }
+      }
+
       if (
         !shouldAwardPodiumBonuses(prevStatus, newStatus, after?.podiumAwardedAt)
       ) {
@@ -741,6 +752,22 @@ type AdminApiFootballRequest =
  */
 export { syncCrowdPickCounters } from './crowd-counters'
 export { adminRunBackfills } from './ops-backfill'
+
+export const onUserDocumentCreate = functions.firestore
+  .document('users/{userId}')
+  .onCreate(async (_snap, context) => {
+    const uid = context.params.userId as string
+    const db = admin.firestore()
+    try {
+      const { joined, skipped } = await provisionDefaultLeaguesForUser(db, uid)
+      console.log(`[onUserDocumentCreate] default leagues uid=${uid} joined=${joined.join(',')} skipped=${skipped.join(',')}`)
+    } catch (error) {
+      console.error(`[onUserDocumentCreate] default leagues failed uid=${uid}:`, error)
+    }
+    return null
+  })
+
+export const leaveLeague = functions.https.onCall(leaveLeagueHandler)
 
 export const saveGameweekPicks = functions
   .runWith({ minInstances: 1 })

@@ -11,6 +11,7 @@ import {
   mergePlayerCountDisplay,
   shouldSkipGameweekPlayerCountRefetch,
 } from '@/lib/player-count-display.mjs'
+import { COMPETITIONS_HOME_PATH } from '@/lib/app-routes'
 import { PicksClient } from '@/components/dashboard/PicksClient'
 import { NotSignedIn } from '@/components/dashboard/NotSignedIn'
 import { AppShell } from '@/components/dashboard/AppShell'
@@ -450,7 +451,7 @@ function PicksPageContent() {
       <NotSignedIn
         title={tAuth('picksSignInRequired')}
         description={tAuth('picksSignInDescription')}
-        backHref="/dashboard/"
+        backHref={COMPETITIONS_HOME_PATH}
         backLabel={tPicks('backToDashboard')}
       />
     )
@@ -485,7 +486,7 @@ function PicksPageContent() {
           {t('loadErrorRetry')}
         </button>
         <Link
-          href="/dashboard/"
+          href={COMPETITIONS_HOME_PATH}
           className="text-lime-yellow underline text-sm mt-3"
         >
           {tPicks('backToDashboard')}
@@ -504,7 +505,7 @@ function PicksPageContent() {
         <p className="text-ivory text-lg font-semibold">{tPicks('gameweekNotFound')}</p>
         <p className="text-ivory/70 text-sm max-w-md">{tPicks('gameweekNotFoundDesc')}</p>
         <Link
-          href="/dashboard/"
+          href={COMPETITIONS_HOME_PATH}
           className="mt-4 inline-block bg-lime-yellow text-midnight-violet py-3 px-6 rounded-lg font-semibold hover:bg-opacity-90 transition-colors"
         >
           {tPicks('returnToDashboard')}

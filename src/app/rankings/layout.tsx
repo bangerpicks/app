@@ -3,7 +3,7 @@ import { pageMetadata } from '@/lib/page-metadata'
 
 export const metadata: Metadata = pageMetadata(
   '/rankings/',
-  'Rankings | Banger Picks',
+  'Leaderboards | Banger Picks',
   'Weekly and season leaderboards'
 )
 

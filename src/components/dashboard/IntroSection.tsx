@@ -34,14 +34,17 @@ export function IntroSection({ isSignedIn = false, username }: IntroSectionProps
             </div>
             <div className="min-w-0">
               <p className="text-sm font-black text-ivory leading-tight truncate">
+                {t('leaguesPageTitle')}
+              </p>
+              <p className="text-xs font-normal text-ivory/80 leading-snug mt-0.5 truncate">
                 {username ? (
                   <>
                     <span className="text-lime-yellow">{username}</span>
-                    {' '}
-                    <span className="font-normal text-ivory/80">{t('signedInSubtitle')}</span>
+                    {' · '}
+                    {t('signedInSubtitle')}
                   </>
                 ) : (
-                  <span className="font-normal text-ivory/80">{t('signedInSubtitle')}</span>
+                  t('signedInSubtitle')
                 )}
               </p>
             </div>

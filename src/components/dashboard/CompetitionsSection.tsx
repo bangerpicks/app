@@ -19,6 +19,10 @@ interface CompetitionsSectionProps {
   showSectionHeader?: boolean
   /** One grid for all tracks (no flagship/league/cup stacks). */
   flatGrid?: boolean
+  showLeagueActions?: boolean
+  onLeagueMembershipChange?: () => void
+  /** Competition id to briefly highlight (after join). */
+  highlightCompetitionId?: string | null
 }
 
 type GroupKey = 'flagship' | 'league' | 'cup'
@@ -40,6 +44,9 @@ export function CompetitionsSection({
   headingAs: HeadingTag = 'h2',
   showSectionHeader = true,
   flatGrid = false,
+  showLeagueActions = false,
+  onLeagueMembershipChange,
+  highlightCompetitionId,
 }: CompetitionsSectionProps) {
   const t = useTranslations('dashboard')
 
@@ -51,12 +58,18 @@ export function CompetitionsSection({
           gameweeksById?.get(row.gameweekId) ??
           gameweeks.find((g) => g.gameweekId === row.gameweekId)
         if (!gw) return null
-        return { competition: row.competition, gameweek: gw, playerCount: row.playerCount }
+        return {
+          competition: row.competition,
+          gameweek: gw,
+          playerCount: row.playerCount,
+          pendingLeaveGameweekId: row.pendingLeaveGameweekId,
+        }
       })
       .filter(Boolean) as Array<{
       competition: CompetitionPlayCard['competition']
       gameweek: GameweekData
       playerCount: number
+      pendingLeaveGameweekId?: string | null
     }>
   }, [competitionCards, gameweeksById, gameweeks])
 
@@ -124,11 +137,22 @@ export function CompetitionsSection({
           }`}
         >
           {(cardRows ?? []).map((row) => (
-            <div key={row.competition.competitionId} className="w-full flex flex-col">
+            <div
+              key={row.competition.competitionId}
+              id={`competition-card-${row.competition.competitionId}`}
+              className={`w-full flex flex-col rounded-xl transition-shadow duration-500 ${
+                highlightCompetitionId === row.competition.competitionId
+                  ? 'ring-2 ring-lime-yellow/80 shadow-[0_0_24px_rgba(212,255,63,0.25)]'
+                  : ''
+              }`}
+            >
               <CompetitionCard
                 competition={row.competition}
                 gameweek={row.gameweek}
                 playerCount={row.playerCount}
+                showLeagueActions={showLeagueActions}
+                pendingLeaveGameweekId={row.pendingLeaveGameweekId}
+                onLeagueMembershipChange={onLeagueMembershipChange}
               />
             </div>
           ))}

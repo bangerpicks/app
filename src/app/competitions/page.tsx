@@ -1,14 +1,15 @@
-'use client'
+﻿'use client'
 
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { MY_GAMES_HOME_PATH } from '@/lib/app-routes'
 
-/** Unified Home — legacy Play route redirects to dashboard. */
-export default function CompetitionsRedirectPage() {
+/** Legacy URL — canonical home is /my-games/. */
+export default function LegacyCompetitionsRedirectPage() {
   const router = useRouter()
 
   useEffect(() => {
-    router.replace('/dashboard/')
+    router.replace(MY_GAMES_HOME_PATH)
   }, [router])
 
   return (

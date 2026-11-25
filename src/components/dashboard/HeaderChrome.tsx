@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import Image from 'next/image'
+import { COMPETITIONS_HOME_PATH } from '@/lib/app-routes'
 import { HeaderActions } from './HeaderActions'
 import { DesktopHeaderNav } from './DesktopHeaderNav'
 
@@ -37,14 +38,22 @@ export function HeaderChrome({
         paddingTop: 'calc(0.5rem + env(safe-area-inset-top, 0px))',
       }}
     >
-      <Link href="/dashboard/" className="flex items-center flex-shrink-0 touch-manipulation">
+      <Link href={COMPETITIONS_HOME_PATH} className="flex items-center flex-shrink-0 touch-manipulation">
+        <Image
+          src="/app-logo.svg"
+          alt="Banger Picks"
+          width={32}
+          height={32}
+          priority
+          className="object-contain w-8 h-8 sm:hidden"
+        />
         <Image
           src={logoUrl}
           alt="Banger Picks Logo"
           width={156}
           height={40}
           priority
-          className="object-contain w-[108px] h-[27.7px] sm:w-[140px] sm:h-[36px]"
+          className="hidden object-contain w-[140px] h-9 sm:block"
         />
       </Link>
       <DesktopHeaderNav />

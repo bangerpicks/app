@@ -57,7 +57,7 @@ const run = (db, picks, extra = {}) =>
   executeSaveGameweekPicks(db, UID, { gameweekId: OPEN_GW, picks, ...extra }, NOW)
 
 describe('saveGameweekPicks (server-trusted slate, v1.2.11)', () => {
-  it('saves a complete card, joins once, and marks weeklyStandings dirty', async () => {
+  it('saves a complete card, joins once, and refreshes weeklyStandings with picks', async () => {
     const db = seed()
     const res = await run(db, [{ fixtureId: 101, pick: 'H' }, { fixtureId: 102, pick: 'D' }])
     assert.equal(res.joinedGameweek, true)
@@ -68,7 +68,12 @@ describe('saveGameweekPicks (server-trusted slate, v1.2.11)', () => {
     assert.equal(e.homeTeam.name, 'Home 101') // from the server fixture, not the client
     assert.equal(e.status, 'NS')
     assert.equal(db.store.get(`users/${UID}/gameweek_predictions/${OPEN_GW}`).joinedFixtureId, '101')
-    assert.ok(db.store.get(`weeklyStandings/${OPEN_GW}`).dirtyAt)
+    const standings = db.store.get(`weeklyStandings/${OPEN_GW}`)
+    assert.ok(standings)
+    assert.equal(standings.picksVisible, true)
+    assert.equal(standings.entries.length, 1)
+    assert.deepEqual(standings.entries[0].picks['101'], { p: 'H', c: null })
+    assert.deepEqual(standings.entries[0].picks['102'], { p: 'D', c: null })
   })
 
   it('rejects a crafted pick on a finished fixture from another round (and leaves the scored entry alone)', async () => {

@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { ChevronLeftIcon } from '@heroicons/react/24/solid'
+import { MY_GAMES_HOME_PATH } from '@/lib/app-routes'
 import {
   dashboardNavItems,
   isDashboardNavItemActive,
@@ -23,7 +24,7 @@ export function DesktopHeaderNav() {
     >
       {dashboardNavItems.map((item) => {
         const dashboardAsBack =
-          dashboardTabAsBack && item.href === '/dashboard/'
+          dashboardTabAsBack && item.href === MY_GAMES_HOME_PATH
         const isActive =
           !dashboardAsBack && isDashboardNavItemActive(pathname, item.href)
         const Icon = dashboardAsBack ? ChevronLeftIcon : isActive ? item.iconSolid : item.iconOutline
