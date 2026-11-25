@@ -350,6 +350,7 @@ service cloud.firestore {
 
     function validPredictionWrite(entryUid, fixtureId) {
       return isOwner(entryUid)
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
         && fixtureId.matches('^[0-9]+$')
         && request.resource.data.keys().hasOnly([
           'uid',
@@ -563,6 +564,17 @@ service cloud.firestore {
           && !exists(/databases/$(database)/documents/users/$(userId)/competitions/$(competitionId));
         allow update, delete: if isAdmin() || isOwner(userId);
       }
+
+      match /homeMembership/{docId} {
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId)
+          && docId == 'summary'
+          && request.resource.data.keys().hasOnly(['competitionIds', 'updatedAt'])
+          && request.resource.data.competitionIds is list
+          && request.resource.data.competitionIds.size() <= 50
+          && request.resource.data.updatedAt is timestamp;
+        allow delete: if false;
+      }
     }
 
     function cacheCreateOk(userId) {
@@ -655,19 +667,14 @@ service cloud.firestore {
     // be evaluated first on the player save path — || short-circuits on the left.
     match /predictions/{fixtureId} {
       allow read: if true;
-      allow create: if (parentCreateWithCount(fixtureId) && !maintenanceOn()) || isAdmin();
-      allow update: if ((parentCountBump(fixtureId) || parentTouch(fixtureId)) && !maintenanceOn()) || isAdmin();
+      // Picks are written only by saveGameweekPicks (Admin SDK). Clients must not
+      // create parents or entries (closes invite-gate bypass and rollback path).
+      allow create, update: if isAdmin();
       allow delete: if false;
 
       match /entries/{entryUid} {
         allow read: if isSignedIn() && predictionEntryReadable(entryUid, fixtureId);
-        allow create: if (validPredictionWrite(entryUid, fixtureId) && !maintenanceOn()) || isAdmin();
-        allow update: if (
-          resource != null
-          && validPredictionWrite(entryUid, fixtureId)
-          && !maintenanceOn()
-          && resource.data.get('awarded', false) != true
-        ) || isAdmin();
+        allow create, update: if isAdmin();
         allow delete: if false;
       }
     }
@@ -715,6 +722,11 @@ service cloud.firestore {
           && resource.data.get('status', 'active') in ['active', 'paused']
         )
         || isCompetitionMember(competitionId);
+    }
+
+    match /catalog/{docId} {
+      allow read: if docId == 'homePlay';
+      allow create, update, delete: if isAdmin();
     }
 
     match /competitions/{competitionId} {

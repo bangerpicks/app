@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { useTranslations } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 import { useAuth } from '@/lib/AuthProvider'
 import { loadUserDocument } from '@/lib/users'
 import { needsCustomDisplayNamePrompt } from '@/lib/display-name-claim.mjs'
@@ -27,6 +27,7 @@ import {
   shouldShowDashboardStaleBanner,
   staleBannerShowsRetry,
 } from '@/lib/dashboard-load-state'
+import { readHomeListSessionCache, writeHomeListSessionCache } from '@/lib/dashboard-cache'
 
 function DashboardShell({
   children,
@@ -46,7 +47,8 @@ function DashboardShell({
 }
 
 export default function DashboardPage() {
-  const { user, loading: authLoading } = useAuth()
+  const { user } = useAuth()
+  const locale = useLocale()
   const t = useTranslations('dashboard')
   const [username, setUsername] = useState<string | undefined>(undefined)
   const [gameweeks, setGameweeks] = useState<GameweekData[]>([])
@@ -110,6 +112,19 @@ export default function DashboardPage() {
   const hasRenderedDataRef = useRef(false)
 
   useEffect(() => {
+    const cached = readHomeListSessionCache(user?.uid ?? null, locale)
+    if (cached && cached.cards.length > 0) {
+      setCompetitionCards(cached.cards)
+      setComingSoonCompetitions(cached.comingSoon)
+      setGameweeksById(cached.gameweeksById)
+      setGameweeks([...cached.gameweeksById.values()])
+      setLoadingGameweeks(false)
+      hasRenderedDataRef.current = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
     const abortController = new AbortController()
     const isCancelled = () => abortController.signal.aborted
 
@@ -137,10 +152,10 @@ export default function DashboardPage() {
       setRefreshFailed(meta.stale)
       setLoadingGameweeks(false)
       hasRenderedDataRef.current = true
+      writeHomeListSessionCache(user?.uid ?? null, locale, data)
     }
 
     async function fetchAvailableGameweeks() {
-      if (authLoading) return
       // Background refreshes keep the current cards on screen; only the first load shows Loading.
       const silent = backgroundRefreshKey > 0 && hasRenderedDataRef.current
       loadInFlightRef.current = true
@@ -197,17 +212,16 @@ export default function DashboardPage() {
       abortController.abort()
       loadInFlightRef.current = false
     }
-  }, [loadGeneration, backgroundRefreshKey, user?.uid, authLoading])
+  }, [loadGeneration, backgroundRefreshKey, user?.uid, locale])
 
   const requestBackgroundRefresh = useCallback(() => {
     setBackgroundRefreshKey((k) => k + 1)
   }, [])
 
-  // Live: a publish, close-out, or activeGameweekId change re-runs the server load.
+  // Live: catalog/homePlay change re-runs the server load.
   useEffect(() => {
-    if (authLoading) return
     return subscribeHomeCatalogChanges(requestBackgroundRefresh)
-  }, [authLoading, user?.uid, requestBackgroundRefresh])
+  }, [requestBackgroundRefresh])
 
   // Foreground: returning to the tab / app refetches (throttled).
   useEffect(() => {
@@ -275,7 +289,7 @@ export default function DashboardPage() {
     />
   )
 
-  if (authLoading || loadingGameweeks) {
+  if (loadingGameweeks && competitionCards.length === 0 && gameweeks.length === 0) {
     return (
       <>
         <DashboardShell username={username}>

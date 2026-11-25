@@ -223,7 +223,15 @@ export function ShopClient({ items, userPoints, username }: ShopClientProps) {
                         : 'bg-gray-800/30 border-gray-700 text-ivory/50 cursor-not-allowed'
                     }`}
                   >
-                    <img src={player.photo} alt={player.name} className="w-12 h-12 rounded-full object-cover flex-shrink-0" />
+                    <img
+                      src={player.photo}
+                      alt={player.name}
+                      width={48}
+                      height={48}
+                      loading="lazy"
+                      decoding="async"
+                      className="w-12 h-12 rounded-full object-cover flex-shrink-0"
+                    />
                     <span className="flex-1 text-left font-medium">{player.name}</span>
                     <span className={`font-bold ${canAfford ? 'text-lime-yellow' : 'text-ivory/50'}`}>
                       {player.pointsCost} {t('pts')}

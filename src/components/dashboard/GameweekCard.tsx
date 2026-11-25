@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import { useLanguage } from '@/lib/LanguageProvider'
 import { GameweekData, MatchCardData } from '@/types/dashboard'
-import { useCountdown } from '@/hooks/useCountdown'
+import { useCountdown, type CountdownTime } from '@/hooks/useCountdown'
 import { useMemo, type ReactNode } from 'react'
 import { GameweekMatchPreviewPills } from './GameweekMatchPreviewPills'
 import {
@@ -77,21 +77,22 @@ function legacyPhaseFromStatus(status: GameweekData['status']): GameweekDisplayP
 
 interface StatusBadgeProps {
   phase: GameweekDisplayPhase
-  deadline?: Date
   urgencyLevel: UrgencyLevel
   picksWindowOpen: boolean
+  time: CountdownTime
+  formatted: string
   compact?: boolean
 }
 
 function StatusBadge({
   phase,
-  deadline,
   urgencyLevel,
   picksWindowOpen,
+  time,
+  formatted,
   compact = false,
 }: StatusBadgeProps) {
   const t = useTranslations('dashboard')
-  const { time, formatted } = useCountdown(picksWindowOpen ? deadline : null)
 
   const getBadgeColor = () => {
     if (phase === 'CLOSING_SOON' && urgencyLevel === 'critical') {
@@ -329,7 +330,9 @@ export function GameweekCard({
   )
   const hasAnyPicks = hasAnyPicksProp ?? picksFromHook ?? false
 
-  const { time } = useCountdown(picksWindowOpen ? gameweek.deadline : null)
+  const { time, formatted: deadlineCountdown } = useCountdown(
+    picksWindowOpen ? gameweek.deadline : null
+  )
   const urgencyLevel = useMemo<UrgencyLevel>(() => {
     if (!time || time.isExpired || time.total <= 0) return 'expired'
     const mins = time.total / (1000 * 60)
@@ -407,9 +410,10 @@ export function GameweekCard({
           statusBadge={
             <StatusBadge
               phase={phase}
-              deadline={gameweek.deadline}
               urgencyLevel={urgencyLevel}
               picksWindowOpen={picksWindowOpen}
+              time={time}
+              formatted={deadlineCountdown}
               compact
             />
           }

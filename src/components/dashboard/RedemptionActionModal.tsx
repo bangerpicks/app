@@ -195,6 +195,10 @@ export function RedemptionActionModal({
               <img
                 src={selectedPlayer.photo}
                 alt={selectedPlayer.name}
+                width={80}
+                height={80}
+                loading="lazy"
+                decoding="async"
                 className="w-20 h-20 rounded-full object-cover mb-4 border-2 border-lime-yellow"
               />
               <h3 className="text-ivory font-bold text-xl mb-2">{t('favoritePlayerAdded')}</h3>
@@ -231,6 +235,10 @@ export function RedemptionActionModal({
             <img
               src={selectedPlayer.photo}
               alt={selectedPlayer.name}
+              width={96}
+              height={96}
+              loading="lazy"
+              decoding="async"
               className="w-24 h-24 rounded-full object-cover mb-3 border-2 border-lime-yellow"
             />
             <p className="text-ivory font-semibold text-lg">{selectedPlayer.name}</p>

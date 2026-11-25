@@ -1,5 +1,6 @@
-const CACHE = 'banger-picks-shell-v2'
-const PRECACHE = ['/', '/dashboard/', '/manifest.json']
+const CACHE = 'banger-picks-shell-v3'
+const PRECACHE = ['/', '/dashboard/', '/picks/', '/rankings/', '/discover/', '/shop/', '/manifest.json']
+const NAV_PATHS = new Set(PRECACHE)
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -10,10 +11,16 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))
+      Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))
     ).then(() => self.clients.claim())
   )
 })
+
+function normalizePath(pathname) {
+  if (pathname === '/' || pathname === '') return '/dashboard/'
+  if (!pathname.endsWith('/')) return `${pathname}/`
+  return pathname
+}
 
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url)
@@ -33,8 +40,26 @@ self.addEventListener('fetch', (event) => {
   }
 
   if (event.request.mode === 'navigate') {
+    const path = normalizePath(url.pathname)
     event.respondWith(
-      fetch(event.request).catch(() => caches.match('/dashboard/'))
+      caches.open(CACHE).then(async (cache) => {
+        const cached = await cache.match(path)
+        const network = fetch(event.request)
+          .then((response) => {
+            if (response.ok && NAV_PATHS.has(path)) {
+              cache.put(path, response.clone())
+            }
+            return response
+          })
+          .catch(() => null)
+        if (cached) {
+          event.waitUntil(network)
+          return cached
+        }
+        const fresh = await network
+        if (fresh) return fresh
+        return cache.match('/dashboard/') || Response.error()
+      })
     )
   }
 })

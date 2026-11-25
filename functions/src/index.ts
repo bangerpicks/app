@@ -34,6 +34,7 @@ import {
   refreshStaleActiveWeeklyStandings,
 } from './standings-update'
 import { saveGameweekPicksHandler } from './save-gameweek-picks'
+import { rebuildHomePlayCatalog } from './home-catalog'
 
 admin.initializeApp()
 
@@ -508,6 +509,12 @@ export const autoScoring = functions
         console.error('[autoScoring] weeklyStandings pass failed:', weeklyError)
       }
 
+      try {
+        await rebuildHomePlayCatalog(db)
+      } catch (catalogError: unknown) {
+        console.error('[autoScoring] homePlay catalog rebuild failed:', catalogError)
+      }
+
       return null
     } catch (error: unknown) {
       if (error instanceof ApiFootballRateLimitError) {
@@ -690,30 +697,28 @@ export const trackReferralSignup = functions.https.onCall(async (data: { referra
       )
     }
 
-    const existingSnapshot = await db
-      .collection('referrals')
-      .where('referrerUid', '==', referrerUid)
-      .where('referredUid', '==', newUserUid)
-      .limit(1)
-      .get()
+    const referralId = `${referrerUid}_${newUserUid}`
+    const referralRef = db.collection('referrals').doc(referralId)
+    const referrerRef = db.collection('users').doc(referrerUid)
 
-    if (!existingSnapshot.empty) {
-      throw new functions.https.HttpsError('already-exists', 'Referral already exists')
-    }
-
-    await db.collection('referrals').add({
-      referrerUid,
-      referredUid: newUserUid,
-      referralCode: trimmedCode,
-      status: 'completed',
-      pointsAwarded: 5,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      completedAt: admin.firestore.FieldValue.serverTimestamp(),
-    })
-
-    await db.collection('users').doc(referrerUid).update({
-      referralPoints: admin.firestore.FieldValue.increment(5),
-      lastUpdated: admin.firestore.FieldValue.serverTimestamp(),
+    await db.runTransaction(async (tx) => {
+      const existing = await tx.get(referralRef)
+      if (existing.exists) {
+        throw new functions.https.HttpsError('already-exists', 'Referral already exists')
+      }
+      tx.set(referralRef, {
+        referrerUid,
+        referredUid: newUserUid,
+        referralCode: trimmedCode,
+        status: 'completed',
+        pointsAwarded: 5,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        completedAt: admin.firestore.FieldValue.serverTimestamp(),
+      })
+      tx.update(referrerRef, {
+        referralPoints: admin.firestore.FieldValue.increment(5),
+        lastUpdated: admin.firestore.FieldValue.serverTimestamp(),
+      })
     })
 
     return { success: true }
@@ -737,7 +742,9 @@ type AdminApiFootballRequest =
 export { syncCrowdPickCounters } from './crowd-counters'
 export { adminRunBackfills } from './ops-backfill'
 
-export const saveGameweekPicks = functions.https.onCall(saveGameweekPicksHandler)
+export const saveGameweekPicks = functions
+  .runWith({ minInstances: 1 })
+  .https.onCall(saveGameweekPicksHandler)
 
 export const adminApiFootball = functions
   .runWith(scheduledOpts)

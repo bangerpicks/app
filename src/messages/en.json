@@ -12,7 +12,10 @@
     "signOut": "Sign Out",
     "signingOut": "Signing Out...",
     "error": "Error",
-    "success": "Success"
+    "success": "Success",
+    "loadingAccount": "Loading account",
+    "mainNavAria": "Main navigation",
+    "redirecting": "Redirecting..."
   },
   "settings": {
     "title": "Settings",

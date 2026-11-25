@@ -112,7 +112,13 @@ export async function buildWeeklyStandingsEntries(
   }
 
   const weeklyPointsByUid = buildWeeklyPointsByUid(entryGroups)
-  const uids = Array.from(weeklyPointsByUid.keys())
+  const uidsWithPicks = new Set<string>()
+  for (const group of entryGroups) {
+    for (const entry of group) {
+      if (entry.uid) uidsWithPicks.add(entry.uid)
+    }
+  }
+  const uids = Array.from(uidsWithPicks)
   if (uids.length === 0) {
     return []
   }
@@ -120,7 +126,8 @@ export async function buildWeeklyStandingsEntries(
   const userSnaps = await loadUserSnapshots(db, uids)
   const rows: AggregatedPlayer[] = []
 
-  weeklyPointsByUid.forEach((weeklyPoints, uid) => {
+  for (const uid of uids) {
+    const weeklyPoints = weeklyPointsByUid.get(uid) ?? 0
     const snap = userSnaps.get(uid)
     const data = snap?.data()
     const createdAt = data?.createdAt
@@ -142,7 +149,7 @@ export async function buildWeeklyStandingsEntries(
       isBot: userIsBot(uid, data),
       joinMs,
     })
-  })
+  }
 
   rows.sort((a, b) => {
     if (b.weeklyPoints !== a.weeklyPoints) {

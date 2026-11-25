@@ -12,7 +12,10 @@
     "signOut": "Cerrar sesión",
     "signingOut": "Cerrando sesión...",
     "error": "Error",
-    "success": "Éxito"
+    "success": "Éxito",
+    "loadingAccount": "Cargando cuenta",
+    "mainNavAria": "Navegación principal",
+    "redirecting": "Redirigiendo..."
   },
   "settings": {
     "title": "Configuración",

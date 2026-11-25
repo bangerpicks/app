@@ -27,6 +27,13 @@ export interface CompetitionDocument {
   tagline_esMX?: string
   /** When set, card header uses this league badge (e.g. Liga MX = 262). */
   primaryLeagueId?: number
+  /** Denormalized round card (written by catalog rebuild). */
+  playCard?: {
+    gameweekId: string
+    playerCount: number
+    gameweek?: Record<string, unknown>
+    updatedAt?: Timestamp
+  }
   createdAt?: Timestamp
   updatedAt?: Timestamp
 }

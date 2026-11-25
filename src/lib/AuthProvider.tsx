@@ -6,6 +6,7 @@ import { auth } from './firebase-auth'
 
 interface AuthContextType {
   user: User | null
+  /** False until the first onAuthStateChanged callback (no 5s page-blocking wait). */
   loading: boolean
 }
 
@@ -15,33 +16,15 @@ const AuthContext = createContext<AuthContextType>({
 })
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null)
+  const [user, setUser] = useState<User | null>(() => auth.currentUser)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    let timeoutId: NodeJS.Timeout | null = null
-    
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      if (timeoutId) {
-        clearTimeout(timeoutId)
-        timeoutId = null
-      }
       setUser(currentUser)
       setLoading(false)
     })
-    
-    // Timeout after 5 seconds if auth state doesn't resolve — still keep the
-    // listener so a late Firebase callback can update the user afterward.
-    timeoutId = setTimeout(() => {
-      console.warn('Auth state check timed out - assuming unauthenticated')
-      setUser(null)
-      setLoading(false)
-    }, 5000)
-    
-    return () => {
-      if (timeoutId) clearTimeout(timeoutId)
-      unsubscribe()
-    }
+    return () => unsubscribe()
   }, [])
 
   const value = useMemo(() => ({ user, loading }), [user, loading])

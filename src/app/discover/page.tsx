@@ -7,18 +7,48 @@ import { PicksBackNav } from '@/components/dashboard/PicksBackNav'
 import { discoverPublicCompetitions } from '@/lib/competitions'
 import type { CompetitionDocument } from '@/types/competition'
 import type { QueryDocumentSnapshot, DocumentData } from 'firebase/firestore'
-import { getGameweekById } from '@/lib/admin'
-import { convertAdminGameweekToGameweekData } from '@/lib/convert-gameweek-data'
 import { CompetitionCard } from '@/components/dashboard/CompetitionCard'
 import { ComingSoonCompetitionCard } from '@/components/dashboard/ComingSoonCompetitionCard'
 import { isCompetitionComingSoon } from '@/lib/competition-catalog'
 import type { GameweekData } from '@/types/dashboard'
 import { JoinCompetitionInput } from '@/components/dashboard/JoinCompetitionInput'
+import { playCardFromCompetitionDoc } from '@/lib/home-catalog-client'
 
 type DiscoverRow = {
   competition: CompetitionDocument
   gameweek: GameweekData
   playerCount: number
+}
+
+function rowFromPlayCard(competition: CompetitionDocument): DiscoverRow | null {
+  const play = competition.playCard
+  if (!play?.gameweekId || !play.gameweek) return null
+  const parsed = playCardFromCompetitionDoc(
+    competition,
+    play as Parameters<typeof playCardFromCompetitionDoc>[1]
+  )
+  if (!parsed) return null
+  return {
+    competition,
+    gameweek: parsed.gameweek,
+    playerCount: parsed.card.playerCount,
+  }
+}
+
+function DiscoverSkeletonGrid() {
+  return (
+    <div
+      className="grid gap-5 grid-cols-1 md:grid-cols-2 w-full min-h-[320px]"
+      aria-hidden
+    >
+      {Array.from({ length: 4 }, (_, i) => (
+        <div
+          key={i}
+          className="h-[220px] rounded-[10px] border border-ivory/10 bg-midnight-violet/40 animate-pulse"
+        />
+      ))}
+    </div>
+  )
 }
 
 export default function DiscoverPage() {
@@ -55,39 +85,18 @@ export default function DiscoverPage() {
   }, [])
 
   useEffect(() => {
-    async function hydrate() {
-      const upcoming: CompetitionDocument[] = []
-      const withGw = items.filter((comp) => {
-        const gwId = comp.activeGameweekId
-        if (!gwId) {
-          if (isCompetitionComingSoon(comp)) upcoming.push(comp)
-          return false
-        }
-        return true
-      })
-
-      const settled = await Promise.all(
-        withGw.map(async (comp) => {
-          const gwId = comp.activeGameweekId!
-          try {
-            const gw = await getGameweekById(gwId)
-            if (!gw) return null
-            const data = convertAdminGameweekToGameweekData(gw)
-            return {
-              competition: comp,
-              gameweek: data,
-              playerCount: data.playerCount ?? 0,
-            } satisfies DiscoverRow
-          } catch {
-            return null
-          }
-        })
-      )
-
-      setRows(settled.filter((row): row is DiscoverRow => row !== null))
-      setComingSoon(upcoming)
+    const upcoming: CompetitionDocument[] = []
+    const hydrated: DiscoverRow[] = []
+    for (const comp of items) {
+      const row = rowFromPlayCard(comp)
+      if (row) {
+        hydrated.push(row)
+        continue
+      }
+      if (isCompetitionComingSoon(comp)) upcoming.push(comp)
     }
-    void hydrate()
+    setRows(hydrated)
+    setComingSoon(upcoming)
   }, [items])
 
   function onSearch(e: FormEvent) {
@@ -95,6 +104,8 @@ export default function DiscoverPage() {
     setCursor(null)
     void loadPage({ reset: true, query: search, after: null })
   }
+
+  const showSkeleton = loading && rows.length === 0 && comingSoon.length === 0
 
   return (
     <AppShell
@@ -131,21 +142,25 @@ export default function DiscoverPage() {
           </button>
         </form>
 
-        <div className="grid gap-5 grid-cols-1 md:grid-cols-2">
-          {rows.map((row) => (
-            <CompetitionCard
-              key={row.competition.competitionId}
-              competition={row.competition}
-              gameweek={row.gameweek}
-              playerCount={row.playerCount}
-            />
-          ))}
-          {comingSoon.map((comp) => (
-            <ComingSoonCompetitionCard key={comp.competitionId} competition={comp} />
-          ))}
-        </div>
+        {showSkeleton ? (
+          <DiscoverSkeletonGrid />
+        ) : (
+          <div className="grid gap-5 grid-cols-1 md:grid-cols-2 min-h-[120px]">
+            {rows.map((row) => (
+              <CompetitionCard
+                key={row.competition.competitionId}
+                competition={row.competition}
+                gameweek={row.gameweek}
+                playerCount={row.playerCount}
+              />
+            ))}
+            {comingSoon.map((comp) => (
+              <ComingSoonCompetitionCard key={comp.competitionId} competition={comp} />
+            ))}
+          </div>
+        )}
 
-        {loading ? (
+        {loading && rows.length > 0 ? (
           <p className="text-center text-ivory/60 text-sm">{t('discoverLoading')}</p>
         ) : null}
 

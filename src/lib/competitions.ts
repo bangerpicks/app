@@ -19,6 +19,7 @@ import {
   type QueryDocumentSnapshot,
   type DocumentData,
   increment,
+  arrayUnion,
 } from 'firebase/firestore'
 import { db } from './firebase'
 import { normalizeJoinCode } from './join-code.mjs'
@@ -53,6 +54,11 @@ import {
   isCompetitionComingSoon,
 } from './competition-catalog.mjs'
 import { resolveCompetitionDisplayName } from './competition-display'
+import {
+  fetchHomePlayCatalog,
+  fetchHomeMembershipIds,
+  playCardFromCompetitionDoc,
+} from './home-catalog-client'
 
 export type CreateCompetitionInput = {
   competitionId: string
@@ -93,6 +99,7 @@ function mapCompetitionDoc(
     tagline: data.tagline as string | undefined,
     tagline_esMX: data.tagline_esMX as string | undefined,
     primaryLeagueId: data.primaryLeagueId as number | undefined,
+    playCard: data.playCard as CompetitionDocument['playCard'],
     createdAt: data.createdAt as CompetitionDocument['createdAt'],
     updatedAt: data.updatedAt as CompetitionDocument['updatedAt'],
   }
@@ -311,6 +318,12 @@ export async function joinCompetition(
     }).catch(() => {
       /* rules may deny memberCount bump for non-admin */
     })
+    const homeMemRef = doc(db, 'users', uid, 'homeMembership', 'summary')
+    await setDoc(
+      homeMemRef,
+      { competitionIds: arrayUnion(competitionId), updatedAt: Timestamp.now() },
+      { merge: true }
+    ).catch(() => {})
   }
 
   return { ok: true }
@@ -443,6 +456,53 @@ export async function loadHomeCompetitionPlayCards(
   comingSoon: CompetitionDocument[]
   gameweeksById: Map<string, GameweekData>
 }> {
+  try {
+    const [catalog, memberIds] = await Promise.all([
+      fetchHomePlayCatalog(),
+      uid ? fetchHomeMembershipIds(uid) : Promise.resolve([] as string[]),
+    ])
+    if (catalog && catalog.cards.length > 0) {
+      const byCompId = new Map(catalog.cards.map((c) => [c.competition.competitionId, c]))
+      const mergedCards = [...catalog.cards]
+      for (const id of memberIds) {
+        if (!byCompId.has(id)) {
+          const comp = await safeGetCompetitionById(id)
+          if (!comp || comp.status === 'archived') continue
+          const snapPlay = (await getDoc(doc(db, 'competitions', id))).data()?.playCard as
+            | { gameweekId: string; playerCount: number; gameweek?: Record<string, unknown> }
+            | undefined
+          if (snapPlay?.gameweekId && snapPlay.gameweek) {
+            const fromCatalog = playCardFromCompetitionDoc(
+              comp,
+              snapPlay as Parameters<typeof playCardFromCompetitionDoc>[1]
+            )
+            if (fromCatalog) mergedCards.push(fromCatalog.card)
+          }
+        }
+      }
+      const deduped = new Map(mergedCards.map((c) => [c.competition.competitionId, c]))
+      const gameweeksById = new Map(catalog.gameweeksById)
+      for (const card of deduped.values()) {
+        const gwId = card.gameweekId
+        if (gwId && !gameweeksById.has(gwId)) {
+          gameweeksById.set(gwId, {
+            gameweekId: gwId,
+            name: card.competition.displayName,
+            playerCount: card.playerCount,
+            status: 'OPEN',
+          } as GameweekData)
+        }
+      }
+      return {
+        cards: [...deduped.values()],
+        comingSoon: catalog.comingSoon,
+        gameweeksById,
+      }
+    }
+  } catch {
+    /* fall through to legacy loader */
+  }
+
   const [rawGameweeks, featured, mine] = await Promise.all([
     loadActiveGameweeksForHome(opts),
     getFeaturedCompetitions(12, opts).catch(() => [] as CompetitionDocument[]),

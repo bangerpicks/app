@@ -3,12 +3,14 @@
  */
 
 import { GameweekData, MatchCardData } from '@/types/dashboard'
-import type { CompetitionDocument } from '@/types/competition'
+import type { CompetitionDocument, CompetitionPlayCard } from '@/types/competition'
 import { refreshPicksStatusFromDeadline } from '@/lib/gameweek-selection'
 
 export const DASHBOARD_SESSION_CACHE_TTL_MS = 10 * 60 * 1000
 export const DASHBOARD_SESSION_CACHE_KEY_PREFIX = 'banger-picks-dashboard-cache:v1'
+export const HOME_LIST_SESSION_CACHE_KEY_PREFIX = 'banger-picks-home-list:v1'
 const CACHE_VERSION = 2
+const HOME_LIST_CACHE_VERSION = 1
 
 type SerializedGameweekData = Omit<GameweekData, 'deadline' | 'startDate' | 'endDate'> & {
   deadline?: string
@@ -187,6 +189,95 @@ export function patchDashboardSessionGameweekPlayerCount(
   }
 }
 
+export type HomeListSessionCache = {
+  version: typeof HOME_LIST_CACHE_VERSION
+  savedAt: number
+  cards: Array<{
+    competition: CompetitionDocument
+    gameweekId: string
+    playerCount: number
+    gameweek: SerializedGameweekData
+  }>
+  comingSoon: CompetitionDocument[]
+  locale: string
+  uid: string | null
+}
+
+export function homeListSessionCacheKey(uid: string | null, locale: string): string {
+  return `${HOME_LIST_SESSION_CACHE_KEY_PREFIX}:${uid ?? 'anon'}:${locale}`
+}
+
+export function readHomeListSessionCache(uid: string | null, locale: string): {
+  cards: CompetitionPlayCard[]
+  comingSoon: CompetitionDocument[]
+  gameweeksById: Map<string, GameweekData>
+} | null {
+  if (typeof sessionStorage === 'undefined') return null
+  try {
+    const raw = sessionStorage.getItem(homeListSessionCacheKey(uid, locale))
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as HomeListSessionCache
+    if (parsed.version !== HOME_LIST_CACHE_VERSION || !isCacheEntryFresh(parsed.savedAt)) {
+      sessionStorage.removeItem(homeListSessionCacheKey(uid, locale))
+      return null
+    }
+    const gameweeksById = new Map<string, GameweekData>()
+    const cards: CompetitionPlayCard[] = parsed.cards.map((row) => {
+      const gameweek = deserializeGameweek(row.gameweek)
+      gameweeksById.set(gameweek.gameweekId, gameweek)
+      return {
+        competition: row.competition,
+        gameweekId: row.gameweekId,
+        playerCount: row.playerCount,
+      }
+    })
+    return { cards, comingSoon: parsed.comingSoon, gameweeksById }
+  } catch {
+    return null
+  }
+}
+
+export function writeHomeListSessionCache(
+  uid: string | null,
+  locale: string,
+  payload: {
+    cards: CompetitionPlayCard[]
+    comingSoon: CompetitionDocument[]
+    gameweeksById: Map<string, GameweekData>
+  }
+): void {
+  if (typeof sessionStorage === 'undefined') return
+  try {
+    const cards = payload.cards.map((c) => {
+      const gw =
+        payload.gameweeksById.get(c.gameweekId) ??
+        ({
+          gameweekId: c.gameweekId,
+          name: c.competition.displayName,
+          playerCount: c.playerCount,
+          status: 'OPEN',
+        } as GameweekData)
+      return {
+        competition: c.competition,
+        gameweekId: c.gameweekId,
+        playerCount: c.playerCount,
+        gameweek: serializeGameweek(gw),
+      }
+    })
+    const body: HomeListSessionCache = {
+      version: HOME_LIST_CACHE_VERSION,
+      savedAt: Date.now(),
+      cards,
+      comingSoon: payload.comingSoon,
+      locale,
+      uid,
+    }
+    sessionStorage.setItem(homeListSessionCacheKey(uid, locale), JSON.stringify(body))
+  } catch {
+    /* ignore */
+  }
+}
+
 export function clearAllDashboardSessionCaches(): void {
   if (typeof sessionStorage === 'undefined') {
     return
@@ -195,7 +286,10 @@ export function clearAllDashboardSessionCaches(): void {
     const keysToRemove: string[] = []
     for (let i = 0; i < sessionStorage.length; i++) {
       const key = sessionStorage.key(i)
-      if (key?.startsWith(`${DASHBOARD_SESSION_CACHE_KEY_PREFIX}:`)) {
+      if (
+        key?.startsWith(`${DASHBOARD_SESSION_CACHE_KEY_PREFIX}:`) ||
+        key?.startsWith(`${HOME_LIST_SESSION_CACHE_KEY_PREFIX}:`)
+      ) {
         keysToRemove.push(key)
       }
     }

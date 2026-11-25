@@ -227,6 +227,12 @@ npm run format
 
 # Type check
 npm run type-check
+
+# Unit tests (root)
+npm run test:unit
+
+# Firestore/Storage rules + migration scripts (emulator; installs functions deps first)
+npm run test:rules
 ```
 
 ### Firebase Emulators

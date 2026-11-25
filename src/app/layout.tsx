@@ -10,6 +10,7 @@ import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { QueryProvider } from '@/lib/QueryProvider'
 import { ServiceWorkerRegistration } from '@/components/ServiceWorkerRegistration'
 import { RouteChromeReset } from '@/components/dashboard/RouteChromeReset'
+import { LegacyHostingRedirect } from '@/components/LegacyHostingRedirect'
 import { getSiteOrigin } from '@/lib/site-url'
 
 const siteOrigin = getSiteOrigin()
@@ -18,13 +19,10 @@ export const metadata: Metadata = {
   metadataBase: new URL(siteOrigin),
   title: 'Banger Picks - Football Predictions',
   description: 'Predict football matches and compete for the top spot',
-  alternates: {
-    canonical: '/',
-  },
   openGraph: {
     title: 'Banger Picks - Football Predictions',
     description: 'Predict football matches and compete for the top spot',
-    url: '/',
+    url: '/dashboard/',
     siteName: 'Banger Picks',
     type: 'website',
   },
@@ -78,6 +76,7 @@ export default function RootLayout({
               <QueryProvider>
                 <IntlProvider>
                   <RouteChromeReset />
+                  <LegacyHostingRedirect />
                   <ServiceWorkerRegistration />
                   {children}
                 </IntlProvider>

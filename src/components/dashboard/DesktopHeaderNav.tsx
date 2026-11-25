@@ -19,7 +19,7 @@ export function DesktopHeaderNav() {
   return (
     <nav
       className="hidden lg:flex items-center justify-center gap-1 flex-1 min-w-0 px-4"
-      aria-label="Main"
+      aria-label={t('common.mainNavAria')}
     >
       {dashboardNavItems.map((item) => {
         const dashboardAsBack =

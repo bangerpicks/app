@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { UserAvatar } from './UserAvatar'
 import { useAuth } from '@/lib/AuthProvider'
+import { useTranslations } from 'next-intl'
 import { getUserHeaderPhotoURL, loadUserDocument } from '@/lib/users'
 import dynamic from 'next/dynamic'
 
@@ -19,6 +20,7 @@ interface UserBadgeProps {
 
 export function UserBadge({ username, userPhotoUrl }: UserBadgeProps) {
   const { user, loading: authLoading } = useAuth()
+  const tCommon = useTranslations('common')
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [resolvedUsername, setResolvedUsername] = useState<string | undefined>(username)
   const [resolvedPhotoUrl, setResolvedPhotoUrl] = useState<string | undefined>(
@@ -91,7 +93,7 @@ export function UserBadge({ username, userPhotoUrl }: UserBadgeProps) {
       <span
         className="flex h-[25px] min-w-[4.5rem] items-center justify-center rounded-[10px] bg-lime-yellow/40 px-2.5 text-midnight-violet/60"
         aria-busy="true"
-        aria-label="Loading account"
+        aria-label={tCommon('loadingAccount')}
       />
     )
   }

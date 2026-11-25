@@ -434,11 +434,14 @@ describe('gameweek prediction cache', () => {
 })
 
 describe('predictions', () => {
-  it('allows a pick before the deadline when the fixture is NS and in the gameweek', async () => {
+  it('denies client pick writes; players read own entries when seeded server-side', async () => {
     await seedPlayableFixture()
-    await assertSucceeds(savePick(dbAs(USER), USER, 'H'))
-    await assertSucceeds(savePick(dbAs(OTHER), OTHER, 'D'))
-    await assertSucceeds(savePick(dbAs(USER), USER, 'A', {}, FIXTURE_ID, GAMEWEEK_ID, false))
+    await assertDenied(savePick(dbAs(USER), USER, 'H'))
+    await seed(async (db) => {
+      await setDoc(doc(db, 'predictions', String(FIXTURE_ID)), { exists: true, playerCount: 2 })
+      await setDoc(entryRef(db, USER), predictionEntry(USER, FIXTURE_ID, GAMEWEEK_ID, 'H'))
+      await setDoc(entryRef(db, OTHER), predictionEntry(OTHER, FIXTURE_ID, GAMEWEEK_ID, 'D'))
+    })
     await assertDenied(getDocs(collection(dbAnon(), 'predictions', String(FIXTURE_ID), 'entries')))
     // v1.2.11: entry *lists* are denied for players (picks are private before lock and
     // rankings now read server-written weeklyStandings instead of listing entries).
@@ -447,15 +450,12 @@ describe('predictions', () => {
     await assertSucceeds(getDoc(doc(dbAs(USER), 'predictions', String(FIXTURE_ID), 'entries', USER)))
   })
 
-  it('allows a pick after the deadline when forceOpenForTesting is set and the fixture is still NS', async () => {
+  it('denies client picks when forceOpenForTesting is set (server callable only)', async () => {
     await seedPlayableFixture({ deadlineMs: -60 * 60 * 1000, forceOpenForTesting: true })
-    await assertSucceeds(savePick(dbAs(USER), USER, 'H'))
+    await assertDenied(savePick(dbAs(USER), USER, 'H'))
   })
 
-  // Emulator allows large batches that exceed production's 20 security-rule access cap
-  // (and per-op 10). Client savePredictions chunks (join=1, follow-up=2); rules evaluate
-  // the player path before isAdmin() so saves stay under the cap. Green here ≠ prod caps.
-  it('lets a fresh user onboard and save ten picks in one batch (no pre-seeded profile)', async () => {
+  it('denies client batch pick save after onboarding (use saveGameweekPicks)', async () => {
     const FRESH = 'fresh-phone-user'
     const fixtureIds = Array.from({ length: 10 }, (_, i) => FIXTURE_ID + i)
     await seed(async (db) => {
@@ -510,10 +510,15 @@ describe('predictions', () => {
       joinedFixtureId: String(fixtureIds[0]),
     })
     batch.update(doc(freshDb, 'gameweeks', GAMEWEEK_ID), { playerCount: increment(1) })
-    await assertSucceeds(batch.commit())
+    await assertDenied(batch.commit())
+  })
 
-    const gameweek = await getDoc(doc(dbAnon(), 'gameweeks', GAMEWEEK_ID))
-    assert.equal(gameweek.data().playerCount, 1)
+  it('allows admin to write prediction entries (saveGameweekPicks uses Admin SDK)', async () => {
+    await seedAdmins()
+    await seedPlayableFixture()
+    await assertSucceeds(savePick(dbAs(ADMIN), USER, 'H'))
+    const snap = await getDoc(entryRef(dbAs(USER)))
+    assert.equal(snap.data().pick, 'H')
   })
 
   it('publishes a player count without listing entries', async () => {
@@ -521,21 +526,14 @@ describe('predictions', () => {
     await seed(async (db) => {
       await setDoc(
         doc(db, 'gameweeks', GAMEWEEK_ID),
-        { playerCount: 0 },
+        { playerCount: 1 },
         { merge: true }
       )
+      await setDoc(doc(db, 'predictions', String(FIXTURE_ID)), { exists: true, playerCount: 1 })
+      await setDoc(entryRef(db), predictionEntry(USER, FIXTURE_ID, GAMEWEEK_ID, 'H'))
     })
     const database = dbAs(USER)
-    const batch = writeBatch(database)
-    batch.set(doc(database, 'predictions', String(FIXTURE_ID)), { exists: true, playerCount: increment(1) })
-    batch.set(entryRef(database), predictionEntry(USER, FIXTURE_ID, GAMEWEEK_ID, 'H'))
-    batch.set(doc(database, 'users', USER, 'gameweek_predictions', GAMEWEEK_ID), {
-      predictions: { [String(FIXTURE_ID)]: 'H' },
-      updatedAt: serverTimestamp(),
-      joinedFixtureId: String(FIXTURE_ID),
-    })
-    batch.update(doc(database, 'gameweeks', GAMEWEEK_ID), { playerCount: increment(1) })
-    await assertSucceeds(batch.commit())
+    await assertDenied(savePick(database, USER, 'A'))
 
     const gameweek = await getDoc(doc(dbAnon(), 'gameweeks', GAMEWEEK_ID))
     const parent = await getDoc(doc(dbAnon(), 'predictions', String(FIXTURE_ID)))
@@ -661,7 +659,7 @@ describe('predictions', () => {
     await assertDenied(savePick(dbAs(USER), USER, 'H'))
   })
 
-  it('allows a merge save that keeps a legacy ts field', async () => {
+  it('denies client merge save on entries (legacy ts preserved server-side)', async () => {
     await seedPlayableFixture()
     await seed(async (db) => {
       await setDoc(doc(db, 'predictions', String(FIXTURE_ID)), { exists: true })
@@ -672,9 +670,9 @@ describe('predictions', () => {
         ts: Timestamp.fromDate(new Date('2024-01-01T00:00:00Z')),
       })
     })
-    await assertSucceeds(savePick(dbAs(USER), USER, 'A', {}, FIXTURE_ID, GAMEWEEK_ID, false))
+    await assertDenied(savePick(dbAs(USER), USER, 'A', {}, FIXTURE_ID, GAMEWEEK_ID, false))
     const snap = await getDoc(entryRef(dbAs(USER)))
-    assert.equal(snap.data().pick, 'A')
+    assert.equal(snap.data().pick, 'H')
     assert.ok(snap.data().ts)
   })
 
@@ -702,7 +700,7 @@ describe('predictions', () => {
   it('denies unauthenticated writes, cross-user writes, extra fields, and scoring writes', async () => {
     await seedPlayableFixture()
     await assertDenied(savePick(dbAnon(), USER, 'H'))
-    await assertSucceeds(savePick(dbAs(USER), USER, 'H'))
+    await assertDenied(savePick(dbAs(USER), USER, 'H'))
     await assertDenied(setDoc(entryRef(dbAs(OTHER)), predictionEntry(USER, FIXTURE_ID, GAMEWEEK_ID, 'A')))
     await assertDenied(deleteDoc(entryRef(dbAs(USER))))
     await assertDenied(

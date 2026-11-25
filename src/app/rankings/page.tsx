@@ -678,16 +678,16 @@ function RankingsPageContent() {
   )
 
   const initialWeeklyLoading = weeklyLoading && weeklyBoardStatus === 'loading'
-  if (authLoading || initialWeeklyLoading) {
+  if (!authLoading && !user) {
+    return <NotSignedIn />
+  }
+
+  if (initialWeeklyLoading && weeklyBoardStatus === 'loading' && !gameweekData) {
     return (
       <div className="min-h-[100dvh] min-h-screen bg-midnight-violet flex items-center justify-center">
         <div className="text-ivory">{tCommon('loading')}</div>
       </div>
     )
-  }
-
-  if (!user) {
-    return <NotSignedIn />
   }
 
   if (rankingsError) {

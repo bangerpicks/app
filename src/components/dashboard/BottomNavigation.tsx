@@ -31,7 +31,7 @@ export function BottomNavigation() {
   const nav = (
     <nav
       data-bottom-nav
-      aria-label="Main"
+      aria-label={t('common.mainNavAria')}
       className="fixed bottom-0 left-0 right-0 z-[120] h-[84px] bg-lime-yellow rounded-t-[10px] px-2 sm:px-5 py-2 flex items-center justify-between lg:hidden pointer-events-auto"
       style={{
         bottom: viewportBottomInset,
